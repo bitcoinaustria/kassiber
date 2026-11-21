@@ -134,6 +134,9 @@ fn reason(reason: &str) -> Info {
         | "at_swap_price_required"
         | "price_currency_mismatch" => info("missing_price", &["set_price"]),
         "split_payout_requires_review" => info("needs_decision", &["pair_transfer"]),
+        // A Bisq trade the importer could not shape; a custody review of
+        // each named transaction resolves it.
+        "bisq_trade_review_required" => info("needs_decision", &["pair_transfer"]),
         "insufficient_lots" => info(
             "missing_acquisition_history",
             &["import_history", "connect_wallet"],
@@ -741,6 +744,14 @@ fn evidence(
     }
     if let Some(reason) = field(detail, "blocked_by_reason").filter(|v| py_truthy(v)) {
         put("blocked_by_reason", s(py_str(reason).as_str()));
+    }
+    if py_str(&py(row.get("reason"))) == "bisq_trade_review_required" {
+        // Which trade is held and why.
+        for key in ["trade_id", "trade_status", "hold_reason", "txid"] {
+            if let Some(value) = field(detail, key).filter(|v| py_truthy(v)) {
+                put(&format!("bisq_{key}"), s(py_str(value).as_str()));
+            }
+        }
     }
     if py_str(&py(row.get("reason"))) == "synthetic_import_duplicate_review_required" {
         // Why the import group is held, and any excluded copy a newer row refilled.

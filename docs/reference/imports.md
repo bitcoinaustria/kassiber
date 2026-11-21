@@ -24,6 +24,7 @@ written.
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
+- Bisq 1 trade history and Funds > Transactions CSV exports (escrow ledger)
 - CoinTracking transaction CSV exports with complete history (Bitcoin rows)
 - Blockpit transaction CSV exports with filters cleared (Bitcoin rows)
 - prior tax-report files preserved as external evidence
@@ -42,6 +43,7 @@ Format references used by the dedicated importers:
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
+- Bisq 1 Portfolio > History and Funds > Transactions CSV exports, pinned from the source: <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/portfolio/closedtrades/ClosedTradesView.java> and <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/funds/transactions/TransactionsListItem.java> ([spec](../exchanges/bisq.md))
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
@@ -1790,6 +1792,31 @@ Behavior:
 - `BTC Price` is used as the exact CSV rate when present; fiat amount columns
   and buy-row cost basis can fill pricing when Strike does not export a price
 - fiat-only deposit and reversal rows are ignored by the importer
+
+## Bisq
+
+Kassiber reads Bisq 1 trades as an escrow ledger: each completed BTC/fiat
+trade becomes `bisq:<trade id>:deposit|trade|payout` rows in a `bisq` wallet
+that net to zero, with only the trade row priced (exact contract volume and
+price). Sync the watch-only Bisq wallet first (xpubs under Account > Wallet
+info), then import both exports with the exporting computer's time zone:
+
+```bash
+kassiber wallets import-bisq \
+  --file /path/to/tradeHistory.csv \
+  --transactions /path/to/transactions.csv \
+  --timezone Europe/Vienna
+```
+
+Escrow rows are dated by the deposit and payout transactions and paired with
+the wallet rows whose txids Bisq names (`bisq_pairs_created`); the deposit's
+miner fees book as a reviewed network fee. Mediated, arbitrated and
+inconsistent trades are held (`bisq_review_required`) and quarantine their
+transactions as `bisq_trade_review_required`; altcoin markets, inexact rows and
+exports that contradict stored legs refuse the import by trade id. A file
+wallet can import on sync with `source_file`, `source_format` `bisq_csv`,
+`source_companion_file` and `source_timezone`. The
+[Bisq spec](../exchanges/bisq.md) has the rules, holds and refusals.
 
 ## Ledger Live
 

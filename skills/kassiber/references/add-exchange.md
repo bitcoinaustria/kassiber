@@ -229,6 +229,7 @@ writing the parser. Mirror the closest existing importer — read its module in
 | `21bitcoin` | custodial ledger | `full`/`relevant` | withdrawals that pair out to a receiving wallet |
 | `pocketbitcoin` | non-custodial broker | `relevant` | matching when the export has no on-chain txid |
 | `bullbitcoin` / `coinfinity` | non-custodial broker | `relevant` | order/execution evidence enriching existing rows |
+| `bisq` | non-custodial escrow (2-of-2) | `full` | per-trade escrow legs that pair with the user's on-chain wallet; a second export for txids and dates |
 
 Touch these places, in order. Each is required for the connection to work
 end-to-end and to pass the drift tests. Search for the closest existing

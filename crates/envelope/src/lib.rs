@@ -430,6 +430,7 @@ pub const KIND_SUBCOMMAND_ATTRS: &[&str] = &[
     "reports_command",
     "rates_command",
     "diagnostics_command",
+    "replay_bundle_command",
     "ai_command",
     "ai_providers_command",
 ];

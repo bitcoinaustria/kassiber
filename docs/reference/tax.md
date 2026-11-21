@@ -549,6 +549,11 @@ Quarantine causes typically include:
   and flags what it cannot prove; the group is then held only when some legs
   were resolved and others were not, so an unsupported same-`txid` receipt
   cannot hold a graph-proven external payment.
+- `bisq_trade_review_required` — the [Bisq](../exchanges/bisq.md) import held a trade it
+  cannot shape (mediated, arbitrated, or inconsistent with the wallet's
+  observations). Every live
+  transaction its exports name is held until a custody review covers it or it
+  is excluded, so a security deposit never books as a disposal.
 - `unscoped_transfer_review` — outbound and inbound rows in different own
   wallets share a non-blank import/provider id but have no canonical Bitcoin
   `(chain, network, txid)` scope, and no pair or component covers them. Import

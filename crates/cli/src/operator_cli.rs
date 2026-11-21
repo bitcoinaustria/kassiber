@@ -346,7 +346,7 @@ pub(crate) fn route_brokered<H: Host>(
         }
         return Ok(None);
     }
-    if DIRECT_COMMANDS.contains(&command) {
+    if DIRECT_COMMANDS.contains(&command) || routed.path == crate::run::REPLAY_VERIFY {
         return Ok(None);
     }
     if command == "mcp" && routed.args.text("mcp_command") != Some("call") {

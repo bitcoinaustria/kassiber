@@ -52,6 +52,8 @@ fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, A
             file: file.to_str().unwrap().into(),
             format,
             mode: None,
+            companion: None,
+            timezone: None,
         },
         None,
     );
@@ -1129,6 +1131,8 @@ fn bull(conn: &Connection, mode: &str) -> Py {
         file: "bull.csv".into(),
         format: Format::Bull,
         mode: Some(mode.into()),
+        companion: None,
+        timezone: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1342,6 +1346,8 @@ fn bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation()
                 file: file.to_string_lossy().into_owned(),
                 format: Format::Bull,
                 mode: Some("full".into()),
+                companion: None,
+                timezone: None,
             },
             None,
         );
@@ -1420,6 +1426,8 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
         file: "bull.csv".into(),
         format: Format::Bull,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     let error = exchange::enrich(&conn, &request, &rows).unwrap_err();
     assert_eq!(error.code, "validation");
@@ -1485,6 +1493,8 @@ fn bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read()
             .into_owned(),
         format: Format::Bull,
         mode: Some("full".into()),
+        companion: None,
+        timezone: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -1544,6 +1554,8 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
             file: file.to_string_lossy().into_owned(),
             format: Format::Bull,
             mode: Some("relevant".into()),
+            companion: None,
+            timezone: None,
         },
         None,
     )
@@ -1578,6 +1590,8 @@ fn coinfinity(conn: &Connection, mode: &str) -> Py {
         file: "coinfinity.csv".into(),
         format: Format::Coinfinity,
         mode: Some(mode.into()),
+        companion: None,
+        timezone: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1695,6 +1709,8 @@ fn coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalida
                 file: file.to_string_lossy().into_owned(),
                 format: Format::Coinfinity,
                 mode: Some("full".into()),
+                companion: None,
+                timezone: None,
             },
             None,
         );
@@ -1788,6 +1804,8 @@ fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
         file: "coinfinity.csv".into(),
         format: Format::Coinfinity,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -1827,6 +1845,8 @@ fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_
             .into_owned(),
         format: Format::Coinfinity,
         mode: Some("full".into()),
+        companion: None,
+        timezone: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -1940,6 +1960,8 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         file: "coinfinity.csv".into(),
         format: Format::Coinfinity,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -2043,6 +2065,8 @@ fn twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_
         file: "missing-21bitcoin-input.csv".into(),
         format: Format::TwentyOne,
         mode,
+        companion: None,
+        timezone: None,
     };
     let error = execute(
         &conn,
@@ -2145,6 +2169,8 @@ fn twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions()
         file: "unused".into(),
         format: Format::TwentyOne,
         mode: None,
+        companion: None,
+        timezone: None,
     };
     let wallet = resolve(&conn, "p", "Source").unwrap();
     let mut outcome = Vec::new();
@@ -2221,6 +2247,8 @@ fn pocket(conn: &Connection, mode: &str) -> Py {
         file: "pocket.csv".into(),
         format: Format::Pocket,
         mode: Some(mode.into()),
+        companion: None,
+        timezone: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -2328,6 +2356,8 @@ fn pocket_default_wallet_admission_precedes_entropy_and_file_access() {
             .into(),
         format: Format::Pocket,
         mode: Some("full".into()),
+        companion: None,
+        timezone: None,
     };
     let identity = Identity {
         ids: vec!["provider".into()],
@@ -2366,6 +2396,8 @@ fn pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation() {
             file: file.to_string_lossy().into(),
             format: Format::Pocket,
             mode: Some("full".into()),
+            companion: None,
+            timezone: None,
         },
         None,
     );
@@ -2418,6 +2450,8 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
         file: "pocket.csv".into(),
         format: Format::Pocket,
         mode: Some("full".into()),
+        companion: None,
+        timezone: None,
     };
     let result = apply(
         &conn,
@@ -2540,6 +2574,8 @@ fn ledgerlive_refusals_and_late_failure_leave_the_book_unchanged() {
             file: "missing-ledgerlive.csv".into(),
             format: Format::LedgerLive,
             mode: None,
+            companion: None,
+            timezone: None,
         },
         None,
     )
@@ -2660,6 +2696,8 @@ fn strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses() {
         file: "missing-strike-input.csv".into(),
         format: Format::Strike,
         mode,
+        companion: None,
+        timezone: None,
     };
     let error = execute(&conn, request(Some("relevant".into())), None).unwrap_err();
     assert_eq!(
@@ -2947,6 +2985,8 @@ fn cointracking_admission_and_late_failure_leave_every_write_uncommitted() {
             file: "missing.csv".into(),
             format: Format::CoinTracking,
             mode: None,
+            companion: None,
+            timezone: None,
         },
         None,
     )
@@ -3176,6 +3216,8 @@ fn blockpit_admission_and_late_failure_leave_every_write_uncommitted() {
             file: "missing.csv".into(),
             format: Format::Blockpit,
             mode: None,
+            companion: None,
+            timezone: None,
         },
         None,
     )
@@ -3380,6 +3422,8 @@ fn binance_import(
             file: file.to_str().unwrap().into(),
             format: Format::Binance,
             mode: Some(mode.into()),
+            companion: None,
+            timezone: None,
         },
         None,
     );
@@ -3739,6 +3783,8 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
                     file: path.to_string_lossy().into_owned(),
                     format: Format::Ledger,
                     mode: None,
+                    companion: None,
+                    timezone: None,
                 },
                 Some(&mapping),
                 None,
@@ -4446,6 +4492,8 @@ fn wasabi_missing_file_refusal_is_atomic() {
                 file: file.to_string_lossy().into_owned(),
                 format: Format::Wasabi,
                 mode: None,
+                companion: None,
+                timezone: None,
             },
             None,
         )
@@ -5215,4 +5263,795 @@ fn bull_wallet_lightning_row_never_inserts_beside_a_differently_shaped_holding()
         Some(&Py::from(0))
     );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+}
+
+const BISQ_TRADES: &str = include_str!("../../../../docs/exchanges/samples/bisq/tradeHistory.csv");
+const BISQ_TRANSACTIONS: &str =
+    include_str!("../../../../docs/exchanges/samples/bisq/transactions.csv");
+const BISQ_HEADER: &str = "Trade ID,Date/Time,Market,Price,Deviation,Amount in BTC,Amount,Currency,Transaction Fee,Trade Fee BTC,Trade Fee BSQ,Buyer Deposit,Seller Deposit,Offer type,Status\n";
+const BISQ_TX_HEADER: &str =
+    "Date/Time,Trade ID,Details,Address,Transaction ID,Amount in BTC,Memo,Confirmations\n";
+/// The sample deposits as Bisq dates them, with a separate fee.
+const BISQ_DEPOSITS: &str = "a1 2024-03-15T14:41:10Z outbound 0.006 0.00005
+c2 2024-04-02T09:15:00Z outbound 0.0575 0.00004";
+
+fn bisq_txid(byte: &str) -> String {
+    byte.repeat(32)
+}
+fn bisq_book() -> Connection {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'; INSERT OR IGNORE INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    conn
+}
+/// Rows the watch-only wallet observed, one per line: txid byte, time,
+/// direction, BTC, fee.
+fn bisq_onchain(conn: &Connection, rows: &str) {
+    let mut content = "txid,occurred_at,direction,asset,amount,fee\n".to_owned();
+    for line in rows.lines() {
+        let f = line.split_whitespace().collect::<Vec<_>>();
+        content += &format!(
+            "{},{},{},BTC,{},{}\n",
+            bisq_txid(f[0]),
+            f[1],
+            f[2],
+            f[3],
+            f[4]
+        );
+    }
+    import_kind(conn, &content, Format::Csv).unwrap();
+}
+/// A Funds > Transactions export, one row per line: trade|date|details|txid byte|BTC.
+fn bisq_tx(rows: &str) -> String {
+    let mut csv = BISQ_TX_HEADER.to_owned();
+    for line in rows.lines() {
+        let f = line.trim().split('|').collect::<Vec<_>>();
+        csv += &format!(
+            "\"{}\",{},{},,{},{},,1\n",
+            f[1],
+            f[0],
+            f[2],
+            bisq_txid(f[3]),
+            f[4]
+        );
+    }
+    csv
+}
+fn import_bisq_files(
+    conn: &Connection,
+    trades: &str,
+    transactions: Option<&str>,
+) -> Result<Py, AppError> {
+    import_bisq_in(conn, trades, transactions, Some("UTC"))
+}
+fn import_bisq_in(
+    conn: &Connection,
+    trades: &str,
+    transactions: Option<&str>,
+    timezone: Option<&str>,
+) -> Result<Py, AppError> {
+    let id = std::thread::current().id();
+    let dir = std::env::temp_dir().join(format!("kassiber-bisq-{}-{id:?}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (file, companion) = (dir.join("tradeHistory.csv"), dir.join("transactions.csv"));
+    std::fs::write(&file, trades).unwrap();
+    if let Some(content) = transactions {
+        std::fs::write(&companion, content).unwrap();
+    }
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: String::new(),
+        file: file.to_str().unwrap().into(),
+        format: Format::Bisq,
+        mode: None,
+        companion: transactions.map(|_| companion.to_str().unwrap().into()),
+        timezone: timezone.map(str::to_owned),
+    };
+    let result = execute(conn, request, None);
+    std::fs::remove_dir_all(&dir).unwrap();
+    result
+}
+fn import_bisq(conn: &Connection, trades: &str) -> Result<Py, AppError> {
+    import_bisq_files(conn, trades, Some(BISQ_TRANSACTIONS))
+}
+/// Escrow legs, one per line: external id, direction, kind, msat, date.
+fn bisq_legs(conn: &Connection) -> String {
+    let sql = "SELECT group_concat(external_id||' '||direction||' '||kind||' '||amount||' '||occurred_at, char(10)) FROM (SELECT * FROM transactions WHERE external_id LIKE 'bisq:%' ORDER BY occurred_at,external_id)";
+    conn.query_row(sql, [], |r| r.get::<_, Option<String>>(0))
+        .unwrap()
+        .unwrap_or_default()
+}
+fn bisq_count(conn: &Connection) -> i64 {
+    scalar(
+        conn,
+        "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%'",
+    )
+}
+/// A response field as compact JSON.
+fn bisq_get(result: &Py, key: &str) -> String {
+    let value = kassiber_envelope::get(result, key).unwrap();
+    kassiber_pyjson::dumps(value, &kassiber_pyjson::Options::new()).unwrap()
+}
+/// `field` of each item of the response list `key`, joined by spaces.
+fn bisq_items(result: &Py, key: &str, fields: &[&str]) -> Vec<String> {
+    let Some(Py::List(items)) = kassiber_envelope::get(result, key) else {
+        panic!("{key}");
+    };
+    let field = |item, f| kassiber_envelope::py_str(kassiber_envelope::get(item, f).unwrap());
+    let joined = |item| {
+        fields
+            .iter()
+            .map(|f| field(item, f))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    items.iter().map(joined).collect()
+}
+fn held(result: &Py) -> Vec<String> {
+    bisq_items(result, "bisq_review_required", &["trade_id", "reason"])
+}
+fn bisq_transfers(conn: &Connection, op: &str, args: &[(&str, Py)]) -> Result<Py, AppError> {
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    kassiber_transfers::execute(conn, &scope, op, &dict(args.to_vec()))
+}
+/// Pairs as `out in` external ids, sorted, and their ids in that order.
+fn bisq_pairs(conn: &Connection) -> (Vec<String>, Vec<Py>) {
+    let Py::List(pairs) = bisq_transfers(conn, "transfers.list", &[]).unwrap() else {
+        panic!("pairs");
+    };
+    let external = |p: &Py, key| {
+        let id = kassiber_envelope::py_str(kassiber_envelope::get(p, key).unwrap());
+        let sql = "SELECT external_id FROM transactions WHERE id=?";
+        conn.query_row(sql, [id], |r| r.get::<_, String>(0))
+            .unwrap()
+    };
+    let mut named = pairs
+        .iter()
+        .map(|p| {
+            let ends = format!(
+                "{} {}",
+                external(p, "out_transaction_id"),
+                external(p, "in_transaction_id")
+            );
+            (ends, kassiber_envelope::get(p, "id").unwrap().clone())
+        })
+        .collect::<Vec<_>>();
+    named.sort_by(|a, b| a.0.cmp(&b.0));
+    named.into_iter().unzip()
+}
+
+#[test]
+fn bisq_completed_trades_become_priced_escrow_ledgers_that_net_to_zero() {
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    assert_eq!(bisq_get(&result, "mode"), "\"full\"");
+    assert_eq!(bisq_get(&result, "imported"), "6");
+    assert_eq!(bisq_get(&result, "bisq_canceled_skipped"), "1");
+    assert_eq!(held(&result), ["d15e0001 not_completed"]);
+    let wallets = "SELECT count(*) FROM wallets WHERE label='Bisq' AND kind='bisq'";
+    assert_eq!(scalar(&conn, wallets), 1);
+    // Deposit at the deposit tx, trade one second later, payout at the
+    // payout tx; each trade's legs net to exactly zero.
+    assert_eq!(
+        bisq_legs(&conn),
+        "bisq:a1b2c3d4:deposit inbound deposit 600000000 2024-03-15T14:41:10Z
+bisq:a1b2c3d4:trade inbound buy 2500000000 2024-03-15T14:41:11Z
+bisq:a1b2c3d4:payout outbound withdrawal 3100000000 2024-03-16T10:00:00Z
+bisq:e5f6a7b8:deposit inbound deposit 5750000000 2024-04-02T09:15:00Z
+bisq:e5f6a7b8:trade outbound sell 5000000000 2024-04-02T09:15:01Z
+bisq:e5f6a7b8:payout outbound withdrawal 750000000 2024-04-03T08:00:00Z"
+    );
+    // Only the trade leg is priced, exactly; fees stay provenance.
+    let sql = "SELECT fiat_value_exact||' '||fiat_rate_exact||' '||pricing_quality||' '||pricing_timestamp||' '||raw_json FROM transactions WHERE external_id='bisq:e5f6a7b8:trade'";
+    let priced: String = conn.query_row(sql, [], |r| r.get(0)).unwrap();
+    let (head, raw) = priced.split_at(priced.find('{').unwrap());
+    assert_eq!(head, "3100 62000.0000 exact 2024-04-02T09:05:10Z ");
+    let raw: Json = serde_json::from_str(raw).unwrap();
+    assert_eq!(raw["bisq_contract_time"], json!("2024-04-02T09:05:10Z"));
+    assert_eq!(raw["bisq_deposit_txid"], json!(bisq_txid("c2")));
+    assert_eq!(raw["bisq_fees"]["trade_fee_bsq"], json!("12.34"));
+    let wrong = "SELECT count(*) FROM transactions WHERE external_id LIKE 'bisq:%' AND ((kind IN ('buy','sell'))=(pricing_quality='missing') OR fee!=0)";
+    assert_eq!(scalar(&conn, wrong), 0);
+    // A re-export dedupes by the stable ids.
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    assert_eq!(bisq_get(&result, "imported"), "0");
+    assert_eq!(bisq_count(&conn), 6);
+}
+
+/// The deposit pair books Bisq's stated miner fee as a network fee, never
+/// suspense; later observations date the legs; the owner's unpair holds; a
+/// stated-fee pair refuses revision and grouping.
+#[test]
+fn bisq_pairs_legs_by_txid_with_the_stated_miner_fee_and_respects_the_owner() {
+    let conn = bisq_book();
+    // Native observations: each deposit as the whole debit with no fee, the
+    // seller's later than Bisq dated it, and both payouts.
+    bisq_onchain(
+        &conn,
+        "a1 2024-03-15T14:45:00Z outbound 0.00605 0
+c2 2024-04-02T09:20:00Z outbound 0.05754 0
+b1 2024-03-16T10:00:00Z inbound 0.031 0
+d2 2024-04-03T08:00:05Z inbound 0.0075 0
+ee 2024-04-05T08:00:00Z outbound 0.01 0",
+    );
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    let created = bisq_items(&result, "bisq_pairs_created", &["trade_id", "leg"]);
+    let legs = [
+        "a1b2c3d4 deposit",
+        "a1b2c3d4 payout",
+        "e5f6a7b8 deposit",
+        "e5f6a7b8 payout",
+    ];
+    assert_eq!(created, legs);
+    assert_eq!(bisq_get(&result, "journal_invalidated"), "true");
+    assert!(bisq_legs(&conn)
+        .contains("bisq:e5f6a7b8:trade outbound sell 5000000000 2024-04-02T09:20:01Z"));
+    assert!(bisq_legs(&conn)
+        .contains("bisq:e5f6a7b8:payout outbound withdrawal 750000000 2024-04-03T08:00:00Z"));
+    let (ends, ids) = bisq_pairs(&conn);
+    let (a1, b1, c2, d2) = (
+        bisq_txid("a1"),
+        bisq_txid("b1"),
+        bisq_txid("c2"),
+        bisq_txid("d2"),
+    );
+    assert_eq!(
+        ends,
+        [
+            format!("{a1} bisq:a1b2c3d4:deposit"),
+            format!("bisq:a1b2c3d4:payout {b1}"),
+            format!("bisq:e5f6a7b8:payout {d2}"),
+            format!("{c2} bisq:e5f6a7b8:deposit"),
+        ]
+    );
+    let sql = "SELECT group_concat(role||' '||amount_msat||' '||authored_source||' '||review_source, ', ') FROM (SELECT l.role,l.amount_msat,c.authored_source,t.review_source FROM custody_component_legs l JOIN custody_components c ON c.id=l.component_id JOIN custody_component_economic_terms t ON t.component_id=c.id JOIN custody_component_transaction_memberships m ON m.component_id=c.id JOIN transactions x ON x.id=m.transaction_id WHERE c.state='active' AND x.external_id=? ORDER BY l.role)";
+    let component: String = conn.query_row(sql, [&a1], |r| r.get(0)).unwrap();
+    assert_eq!(component, "destination 600000000 import provider_txid, fee 5000000 import provider_txid, source 605000000 import provider_txid");
+    let suspense = "SELECT count(*) FROM custody_component_legs WHERE role='suspense'";
+    assert_eq!(scalar(&conn, suspense), 0);
+    // A stated-fee pair keeps its shape: revising or grouping it refuses.
+    let deposit = ids[0].clone();
+    let note = [("pair_id", deposit.clone()), ("notes", s("mine"))];
+    let grouped = [
+        ("tx_out", s(bisq_txid("ee"))),
+        ("tx_in", s("bisq:a1b2c3d4:deposit")),
+    ];
+    for (op, args) in [("transfers.update", &note), ("transfers.pair", &grouped)] {
+        let refused = bisq_transfers(&conn, op, args).unwrap_err().message;
+        assert!(
+            refused.contains("books the miner fee its provider stated"),
+            "{refused}"
+        );
+    }
+    // An unpaired leg is never paired again; reviewed legs are left alone.
+    bisq_transfers(&conn, "transfers.unpair", &[("pair_id", deposit)]).unwrap();
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    assert_eq!(bisq_pairs(&conn).0.len(), 3);
+    let mut reasons = bisq_items(&result, "bisq_pairs_skipped", &["reason"]);
+    reasons.sort();
+    let expected = [
+        "already_reviewed",
+        "already_reviewed",
+        "already_reviewed",
+        "declined_by_owner",
+    ];
+    assert_eq!(reasons, expected);
+}
+
+#[test]
+fn bisq_refuses_altcoin_markets_and_non_fiat_quotes_by_trade() {
+    let conn = bisq_book();
+    for (row, needle) in [
+        (
+            "aa11bb22,\"Mar 15, 2024 2:30:45 PM\",XMR/BTC,0.0025,0.00%,0.1,40,XMR,0.00005,0.0001,,0.006,0.006,Buy XMR,Completed",
+            "Bisq trade aa11bb22 trades XMR (XMR/BTC): altcoin-market trades are not supported yet",
+        ),
+        (
+            "cc33dd44,\"Mar 15, 2024 2:30:45 PM\",BSQ/BTC,0.00002,N/A,0.01,500,BSQ,0.00005,,1.00,N/A,N/A,Sell BSQ,Confirmed",
+            "Bisq trade cc33dd44 trades BSQ (BSQ/BTC): altcoin-market trades are not supported yet",
+        ),
+        (
+            "ee55ff66,\"Mar 15, 2024 2:30:45 PM\",BTC/USDT,60000,N/A,0.01,600,USDT,0.00005,0.0001,,0.006,0.006,Buy BTC,Completed",
+            "Bisq trade ee55ff66 has market 'BTC/USDT' (currency 'USDT'), not Bitcoin against a fiat currency Kassiber knows",
+        ),
+    ] {
+        let content = format!("{BISQ_HEADER}{}\n{row}\n", BISQ_TRADES.lines().nth(1).unwrap());
+        let error = import_bisq(&conn, &content).unwrap_err();
+        assert_eq!((error.code.as_str(), error.message.as_str()), ("validation", needle));
+        assert!(error.hint.as_deref().unwrap().contains("generic ledger"));
+        assert_eq!(bisq_count(&conn), 0);
+    }
+    // A canceled altcoin offer never traded, so it is skipped, not refused.
+    let canceled = format!("{BISQ_HEADER}aa11bb22,\"Mar 15, 2024 2:30:45 PM\",XMR/BTC,0.0025,0.00%,0.1,40,XMR,0.00005,0.0001,,0.006,0.006,Buy XMR,Canceled\n");
+    let result = import_bisq(&conn, &canceled).unwrap();
+    assert_eq!(bisq_get(&result, "bisq_canceled_skipped"), "1");
+}
+
+#[test]
+fn bisq_holds_unshapeable_trades_and_refuses_inexact_rows() {
+    let conn = bisq_book();
+    bisq_onchain(
+        &conn,
+        "03 2025-01-01T00:05:00Z outbound 0.006 0.0001
+0d 2024-03-15T14:45:00Z outbound 0.0062 0",
+    );
+    let trades = "ab12cd34 Frobnicated|ab12cd35 Arbitrated|ab12cd36|ab12cd37|ab12cd38|ab12cd3a|ab12cd3b|ab12cd39";
+    let trades = trades.split('|').map(|spec| {
+        let (id, status) = spec.split_once(' ').unwrap_or((spec, "Completed"));
+        let date = if id == "ab12cd38" { "Dec 31, 2024 11:58:00 PM" } else { "Mar 15, 2024 2:30:45 PM" };
+        format!("{id},\"{date}\",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,{status}\n")
+    });
+    let transactions = bisq_tx(
+        "ab12cd37-x|Mar 15, 2024 2:40:00 PM|Multisig deposit|01|-0.0061
+        ab12cd37-x|Mar 16, 2024 2:40:00 PM|Multisig payout|02|0.0309
+        ab12cd38-x|Jan 1, 2025 12:05:00 AM|Multisig deposit|03|-0.0061
+        ab12cd38-x|Jan 2, 2025 12:05:00 AM|Multisig payout|04|0.031
+        ab12cd3a-x|Mar 15, 2024 2:40:00 PM|Multisig deposit|08|-0.0061
+        ab12cd3a-x|Mar 16, 2024 2:40:00 PM|Multisig payout|09|0.031
+        ab12cd3b-x|Mar 15, 2024 2:40:00 PM|Multisig deposit|0d|-0.0061
+        ab12cd3b-x|Mar 16, 2024 2:40:00 PM|Multisig payout|0e|0.031
+        ab12cd39-x|Mar 15, 2024 2:41:10 PM|Multisig deposit|05|-0.00605",
+    );
+    let trades = BISQ_HEADER.to_owned() + &trades.collect::<String>();
+    let result = import_bisq_files(&conn, &trades, Some(&transactions)).unwrap();
+    assert_eq!(bisq_get(&result, "imported"), "0");
+    // Unknown and arbitrated states; no escrow rows; a payout that is not
+    // the contract's; a deposit in the next tax year; an unobserved deposit;
+    // an observed debit that is not Bisq's; a missing payout.
+    let reasons = [
+        "ab12cd34 not_completed",
+        "ab12cd35 not_completed",
+        "ab12cd36 missing_deposit_tx",
+        "ab12cd37 payout_amount_mismatch",
+        "ab12cd38 tax_year_boundary",
+        "ab12cd3a deposit_not_in_book",
+        "ab12cd3b deposit_debit_mismatch",
+        "ab12cd39 missing_payout_tx",
+    ];
+    assert_eq!(held(&result), reasons);
+    // A completed trade without exact deposits, amount, price, side or date
+    // is refused by trade id; nothing is written for its file.
+    for (row, message) in [
+        ("ab12cd36,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,N/A,0.006,Buy BTC,Completed", "Bisq trade ab12cd36 has no exact buyer security deposit ('N/A')"),
+        ("ab12cd37,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,60000.0000,1.00%,0,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed", "Bisq trade ab12cd37 has no positive BTC amount"),
+        ("ab12cd38,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed", "Bisq trade ab12cd38 has no exact price ('')"),
+        ("ab12cd39,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Swap BTC,Completed", "Bisq trade ab12cd39 has an unrecognized offer type 'Swap BTC'"),
+        ("ab12cd40,15/03/2024 14:30:45,BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed", "Bisq trade ab12cd40 has an unreadable date '15/03/2024 14:30:45'"),
+    ] {
+        let error = import_bisq(&conn, &format!("{BISQ_TRADES}{row}\n")).unwrap_err();
+        assert_eq!(error.message, message);
+        assert_eq!(bisq_count(&conn), 0);
+    }
+    let error = import_bisq(&conn, "Trade ID,Date/Time\nx,y\n").unwrap_err();
+    let columns = "Bisq trade history CSV is missing required columns: Market, Price";
+    assert!(error.message.starts_with(columns), "{}", error.message);
+    let error = import_bisq_files(&conn, BISQ_TRADES, None).unwrap_err();
+    assert_eq!(
+        error.message,
+        "A Bisq import needs the Funds > Transactions export as well"
+    );
+    let broken = format!("{BISQ_TX_HEADER}\"Mar 15, 2024 2:41:10 PM\",a1b2c3d4-1,Multisig deposit,,not-a-txid,-0.00605,,1\n");
+    let error = import_bisq_files(&conn, BISQ_TRADES, Some(&broken)).unwrap_err();
+    assert!(error
+        .message
+        .contains("unreadable transaction id 'not-a-txid'"));
+    assert_eq!(bisq_count(&conn), 0);
+}
+
+#[test]
+fn bisq_reads_german_exports_and_zero_deposits() {
+    let conn = bisq_book();
+    bisq_onchain(&conn, "aa 2024-03-15T14:40:00Z outbound 0 0.0001");
+    let trades = "Handels-ID,Datum/Zeit,Markt,Preis,Abweichung,Betrag in BTC,Betrag,Währung,Transaktionsgebühr,Handelsgebühr BTC,Handelsgebühr BSQ,Käufer-Kaution,Verkäufer-Kaution,Angebotstyp,Status\n\
+        0a0b0c0d,15.03.2024 14:30:45,BTC/EUR,60000.0000,1.00%,0.01,600,EUR,0.00005,0.00007,,0,0.006,BTC kaufen,Abgeschlossen\n\
+        0a0b0c0e,16.03.2024 08:00:00,BTC/EUR,60000.0000,1.00%,0.01,600,EUR,0.00005,0.00007,,0.006,0.006,BTC verkaufen,Abgebrochen\n";
+    let (aa, bb) = (bisq_txid("aa"), bisq_txid("bb"));
+    let transactions = format!(
+        "Datum/Zeit,Handels-ID,Details,Adresse,Transaktions-ID,Betrag in BTC,Notiz,Bestätigungen\n\
+        15.03.2024 14:40:00,0a0b0c0d-1,Multisig deposit,,{aa},-0.0001,,1\n\
+        16.03.2024 09:00:00,0a0b0c0d-1,Multisig payout,,{bb},0.01,,1\n"
+    );
+    let result = import_bisq_files(&conn, trades, Some(&transactions)).unwrap();
+    assert_eq!(bisq_get(&result, "bisq_canceled_skipped"), "1");
+    // A zero buyer deposit writes no deposit leg.
+    assert_eq!(
+        bisq_legs(&conn),
+        "bisq:0a0b0c0d:trade inbound buy 1000000000 2024-03-15T14:40:01Z
+bisq:0a0b0c0d:payout outbound withdrawal 1000000000 2024-03-16T09:00:00Z"
+    );
+}
+
+/// Every hold as `trade reason state txids`.
+fn bisq_hold_rows(conn: &Connection) -> String {
+    let sql = "SELECT group_concat(trade_id||' '||reason||' '||state||' '||txids_json, char(10)) FROM (SELECT * FROM provider_trade_holds ORDER BY trade_id)";
+    conn.query_row(sql, [], |r| r.get(0)).unwrap()
+}
+
+/// The first hold creates the opt-in table; holds quarantine the
+/// transactions they name, invalidate journals when written, keep every txid
+/// any export named, and clear only when a completed trade explains them all.
+#[test]
+fn bisq_held_trades_persist_quarantine_and_clear_only_on_proof() {
+    let f4_deposit = BISQ_TRANSACTIONS
+        .lines()
+        .find(|l| l.contains("f4f4"))
+        .unwrap()
+        .to_owned()
+        + "\n";
+    let stray = f4_deposit
+        .replace("f4f4", "f6f6")
+        .replace("11:20:00", "11:21:00");
+    let payout = bisq_tx("d15e0001-2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e-199|May 3, 2024 9:00:00 AM|Multisig payout|f5|0.026");
+    let payout = payout.trim_start_matches(BISQ_TX_HEADER);
+    let completed = BISQ_TRADES.replace(",Buy BTC,Mediated", ",Buy BTC,Completed");
+    let only_first = BISQ_TRADES.lines().take(2).collect::<Vec<_>>().join("\n") + "\n";
+    let held_only = format!("{BISQ_HEADER}{}\n", BISQ_TRADES.lines().last().unwrap());
+    let (f4, f6) = (bisq_txid("f4"), bisq_txid("f6"));
+    for with_stray in [false, true] {
+        let conn = bisq_book();
+        bisq_onchain(
+            &conn,
+            "a1 2024-03-15T14:41:10Z outbound 0.00605 0
+c2 2024-04-02T09:15:00Z outbound 0.05754 0
+f4 2024-05-01T11:25:00Z outbound 0.00605 0",
+        );
+        let table = "SELECT count(*) FROM sqlite_master WHERE name='provider_trade_holds'";
+        import_bisq(&conn, &only_first).unwrap();
+        assert_eq!(scalar(&conn, table), 0);
+        // Only the held trade: the hold alone writes and invalidates.
+        let version = "SELECT journal_input_version FROM profiles WHERE id='p'";
+        let before = scalar(&conn, version);
+        let result = import_bisq(&conn, &held_only).unwrap();
+        assert_eq!(bisq_get(&result, "journal_invalidated"), "true");
+        assert!(scalar(&conn, version) > before);
+        assert_eq!(scalar(&conn, table), 1);
+        assert_eq!(
+            bisq_hold_rows(&conn),
+            format!("d15e0001 not_completed held [\"{f4}\"]")
+        );
+        let quarantines = bisq_hold_quarantines(&conn, "p").unwrap();
+        let deposit_sql = "SELECT id FROM transactions WHERE external_id=?";
+        let deposit: String = conn.query_row(deposit_sql, [&f4], |r| r.get(0)).unwrap();
+        assert_eq!(quarantines.len(), 1);
+        let quarantine =
+            kassiber_pyjson::dumps(&quarantines[0], &kassiber_pyjson::Options::new()).unwrap();
+        assert!(quarantine.contains(&format!("\"transaction_id\": \"{deposit}\"")));
+        assert!(quarantine.contains(&format!("\"reason\": \"{BISQ_HOLD_REASON}\"")));
+        assert!(
+            quarantine.contains(r#"\"hold_reason\": \"not_completed\""#),
+            "{quarantine}"
+        );
+        // An unchanged hold writes nothing; a less complete export or one
+        // that leaves the trade out never drops a txid.
+        let result = import_bisq(&conn, &held_only).unwrap();
+        assert_eq!(bisq_get(&result, "journal_invalidated"), "false");
+        let without_f4 = BISQ_TRANSACTIONS.replace(&f4_deposit, "");
+        import_bisq_files(&conn, BISQ_TRADES, Some(&without_f4)).unwrap();
+        import_bisq(&conn, &only_first).unwrap();
+        assert!(bisq_hold_rows(&conn).ends_with(&format!("held [\"{f4}\"]")));
+        let mut transactions = BISQ_TRANSACTIONS.to_owned();
+        if with_stray {
+            import_bisq_files(&conn, BISQ_TRADES, Some(&(transactions.clone() + &stray))).unwrap();
+            assert!(bisq_hold_rows(&conn).ends_with(&format!("[\"{f4}\", \"{f6}\"]")));
+        }
+        transactions += payout;
+        let result = import_bisq_files(&conn, &completed, Some(&transactions)).unwrap();
+        if with_stray {
+            // The completed export does not explain the second deposit.
+            assert_eq!(held(&result), ["d15e0001 conflicting_escrow_txs"]);
+            assert!(!bisq_legs(&conn).contains("bisq:d15e0001:"));
+            // Excluding the row (the owner's decision) ends its quarantine.
+            conn.execute("UPDATE transactions SET excluded=1 WHERE id=?", [&deposit])
+                .unwrap();
+            assert!(bisq_hold_quarantines(&conn, "p").unwrap().is_empty());
+        } else {
+            assert!(held(&result).is_empty(), "{result:?}");
+            assert!(bisq_hold_rows(&conn).starts_with("d15e0001 not_completed cleared"));
+            assert!(bisq_hold_quarantines(&conn, "p").unwrap().is_empty());
+            // Rolling the completing import back (imports rollback deletes
+            // its legs) leaves no settlement evidence: the hold is open again
+            // once the pair's component, now one-sided (it blocks reports
+            // until repaired), is superseded too.
+            let legs = "DELETE FROM transactions WHERE external_id LIKE 'bisq:d15e0001:%'";
+            assert_eq!(conn.execute(legs, []).unwrap(), 3);
+            let pair = "UPDATE custody_components SET state='superseded' WHERE id IN (SELECT component_id FROM custody_component_transaction_memberships WHERE transaction_id=?)";
+            assert_eq!(conn.execute(pair, [&deposit]).unwrap(), 1);
+            let reopened = bisq_hold_quarantines(&conn, "p").unwrap();
+            assert_eq!(reopened.len(), 1);
+            assert_eq!(
+                kassiber_envelope::get(&reopened[0], "transaction_id"),
+                Some(&Py::Str(deposit.clone().into()))
+            );
+            // Importing the completed export again settles it once more.
+            let result = import_bisq_files(&conn, &completed, Some(&transactions)).unwrap();
+            assert!(held(&result).is_empty(), "{result:?}");
+            assert!(bisq_hold_quarantines(&conn, "p").unwrap().is_empty());
+        }
+    }
+}
+
+/// Bisq writes local time; the import reads it in the named zone, exactly,
+/// and refuses a wall time the zone skipped or showed twice.
+#[test]
+fn bisq_reads_local_time_in_the_named_zone() {
+    let trades = format!(
+        "{BISQ_HEADER}0b0c0d0e,\"Dec 31, 2024 11:10:00 PM\",BTC/EUR,90000.0000,1.00%,0.01,900,EUR,0.00005,0.00007,,0.006,0.006,Buy BTC,Completed\n"
+    );
+    let transactions = bisq_tx(
+        "0b0c0d0e-1|Dec 31, 2024 11:20:00 PM|Multisig deposit|0b|-0.0061
+        0b0c0d0e-1|Jan 2, 2025 9:00:00 AM|Multisig payout|0c|0.016",
+    );
+    let conn = bisq_book();
+    bisq_onchain(&conn, "0b 2024-12-31T22:20:00Z outbound 0.0061 0");
+    let error = import_bisq_in(&conn, &trades, Some(&transactions), None).unwrap_err();
+    assert!(error.hint.unwrap().contains("--timezone"));
+    let mars = import_bisq_in(&conn, &trades, Some(&transactions), Some("Mars/Olympus"));
+    assert_eq!(
+        mars.unwrap_err().message,
+        "Unknown time zone 'Mars/Olympus'"
+    );
+    // Vienna's New Year's Eve 23:10 is 22:10 UTC, still in the old year.
+    let vienna = Some("Europe/Vienna");
+    let result = import_bisq_in(&conn, &trades, Some(&transactions), vienna).unwrap();
+    assert!(held(&result).is_empty());
+    assert_eq!(
+        bisq_legs(&conn),
+        "bisq:0b0c0d0e:deposit inbound deposit 600000000 2024-12-31T22:20:00Z
+bisq:0b0c0d0e:trade inbound buy 1000000000 2024-12-31T22:20:01Z
+bisq:0b0c0d0e:payout outbound withdrawal 1600000000 2025-01-02T08:00:00Z"
+    );
+    let sql = "SELECT raw_json FROM transactions WHERE external_id='bisq:0b0c0d0e:trade'";
+    let raw: String = conn.query_row(sql, [], |r| r.get(0)).unwrap();
+    let raw: Json = serde_json::from_str(&raw).unwrap();
+    assert_eq!(raw["bisq_contract_time"], json!("2024-12-31T22:10:00Z"));
+    assert_eq!(raw["bisq_timezone"], json!("Europe/Vienna"));
+    for (date, needle) in [
+        ("Oct 27, 2024 2:30:00 AM", "showed twice"),
+        ("Mar 31, 2024 2:30:00 AM", "skipped"),
+    ] {
+        let shifted = trades.replace("Dec 31, 2024 11:10:00 PM", date);
+        let error =
+            import_bisq_in(&bisq_book(), &shifted, Some(&transactions), vienna).unwrap_err();
+        assert!(error.message.contains(needle), "{}", error.message);
+    }
+}
+
+/// An export that contradicts legs already in the book refuses atomically,
+/// naming the trade: other amounts, moved escrow dates, another time zone,
+/// a stored trade it would hold, and short-id collisions.
+#[test]
+fn bisq_refuses_exports_that_contradict_stored_legs() {
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    import_bisq(&conn, BISQ_TRADES).unwrap();
+    let before = scalar(&conn, "SELECT count(*) FROM transactions");
+    let refuses = |result: Result<Py, AppError>, trade: &str| {
+        let error = result.unwrap_err();
+        let prefix =
+            format!("Bisq trade {trade} conflicts with its escrow legs already in the book");
+        assert!(error.message.starts_with(&prefix), "{}", error.message);
+        assert!(error.hint.unwrap().contains("imports rollback"));
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+    };
+    let sell = "e5f6a7b8,\"Apr 2, 2024 9:05:10 AM\",BTC/EUR,62000.0000,-0.50%,0.05,3100";
+    let resized = BISQ_TRADES.replace(sell, &sell.replace("0.05,3100", "0.06,3720"));
+    refuses(import_bisq(&conn, &resized), "e5f6a7b8");
+    let mediated = BISQ_TRADES.replace("Sell BTC,Completed", "Sell BTC,Mediated");
+    refuses(import_bisq(&conn, &mediated), "e5f6a7b8");
+    let london = Some("Europe/London");
+    refuses(
+        import_bisq_in(&conn, BISQ_TRADES, Some(BISQ_TRANSACTIONS), london),
+        "a1b2c3d4",
+    );
+    // A later native confirmation of the buyer's deposit moves its leg.
+    let moved = "UPDATE transactions SET occurred_at='2024-03-15T15:30:00Z' WHERE external_id=?";
+    conn.execute(moved, [bisq_txid("a1")]).unwrap();
+    refuses(import_bisq(&conn, BISQ_TRADES), "a1b2c3d4");
+    // Two trades whose full ids share a short id refuse as well.
+    let other = bisq_tx("e5f6a7b8-ffffffff|Apr 2, 2024 9:15:00 AM|Multisig payout|ee|0.0075");
+    let collision = BISQ_TRANSACTIONS.to_owned() + other.trim_start_matches(BISQ_TX_HEADER);
+    let error = import_bisq_files(&conn, BISQ_TRADES, Some(&collision)).unwrap_err();
+    assert!(
+        error.message.contains("names two different Bisq trades"),
+        "{}",
+        error.message
+    );
+}
+
+/// Escrow evidence that does not name one fact is held or refused, never
+/// read from whichever row came first: several owned observations of one
+/// escrow transaction, Funds rows that disagree about one txid, a re-export
+/// that moves a trade to another escrow transaction, and two trades naming
+/// the same escrow transaction.
+#[test]
+fn bisq_holds_or_refuses_ambiguous_escrow_evidence() {
+    // The buyer's deposit observed in two owned wallets.
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('second','ws','p','Second','custom','2025-01-01')").unwrap();
+    let copy = "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at) SELECT 'copy',workspace_id,profile_id,'second','fp-copy',external_id,asset,direction,amount,fee,amount_includes_fee,occurred_at,kind,raw_json,created_at FROM transactions WHERE external_id=?";
+    conn.execute(copy, [bisq_txid("a1")]).unwrap();
+    let result = import_bisq(&conn, BISQ_TRADES).unwrap();
+    assert_eq!(
+        held(&result),
+        ["a1b2c3d4 deposit_debit_mismatch", "d15e0001 not_completed"]
+    );
+    assert!(!bisq_legs(&conn).contains("a1b2c3d4"));
+
+    // A second Funds row for the buyer's payout txid with another amount
+    // holds the trade in either order; an identical second row does not.
+    let payout = "\"Mar 16, 2024 10:00:00 AM\",a1b2c3d4-0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b-199,Multisig payout,Received with: bc1qsyntheticpayout00000000000000000000000,b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,0.031,,3100\n";
+    let other = payout.replace(",0.031,", ",0.0311,");
+    let (header, body) = BISQ_TRANSACTIONS.split_at(BISQ_TX_HEADER.len());
+    for transactions in [
+        format!("{BISQ_TRANSACTIONS}{other}"),
+        format!("{header}{other}{body}"),
+    ] {
+        let conn = bisq_book();
+        bisq_onchain(&conn, BISQ_DEPOSITS);
+        let result = import_bisq_files(&conn, BISQ_TRADES, Some(&transactions)).unwrap();
+        assert_eq!(
+            held(&result),
+            ["a1b2c3d4 conflicting_escrow_txs", "d15e0001 not_completed"]
+        );
+    }
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let doubled = format!("{BISQ_TRANSACTIONS}{payout}");
+    let result = import_bisq_files(&conn, BISQ_TRADES, Some(&doubled)).unwrap();
+    assert_eq!(held(&result), ["d15e0001 not_completed"]);
+
+    // A re-export naming another payout txid for a stored trade refuses.
+    let before = scalar(&conn, "SELECT count(*) FROM transactions");
+    let moved = BISQ_TRANSACTIONS.replace(&bisq_txid("d2"), &bisq_txid("dd"));
+    let error = import_bisq_files(&conn, BISQ_TRADES, Some(&moved)).unwrap_err();
+    assert!(
+        error
+            .message
+            .starts_with("Bisq trade e5f6a7b8 conflicts with its escrow legs already in the book"),
+        "{}",
+        error.message
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+
+    // Another trade naming a stored trade's escrow transactions refuses, and
+    // so do two trades of one export naming the same ones.
+    let twin = "a1b2c3d5,\"Mar 15, 2024 2:30:45 PM\",BTC/EUR,60000.0000,1.00%,0.025,1500,EUR,0.00005,0.000175,,0.006,0.006,Buy BTC,Completed\n";
+    let twin_rows = bisq_tx(
+        "a1b2c3d5-1|Mar 15, 2024 2:41:10 PM|Multisig deposit|a1|-0.00605
+        a1b2c3d5-1|Mar 16, 2024 10:00:00 AM|Multisig payout|b1|0.031",
+    );
+    let twin_rows = twin_rows.trim_start_matches(BISQ_TX_HEADER);
+    let error = import_bisq_files(
+        &conn,
+        &format!("{BISQ_HEADER}{twin}"),
+        Some(&format!("{BISQ_TRANSACTIONS}{twin_rows}")),
+    )
+    .unwrap_err();
+    let claim = format!(
+        "Bisq trade a1b2c3d5 names escrow transaction {}, which trade a1b2c3d4 also names",
+        bisq_txid("a1")
+    );
+    assert_eq!(error.message, claim);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let error = import_bisq_files(
+        &conn,
+        &format!("{BISQ_TRADES}{twin}"),
+        Some(&format!("{BISQ_TRANSACTIONS}{twin_rows}")),
+    )
+    .unwrap_err();
+    assert_eq!(error.message, claim);
+    assert_eq!(bisq_count(&conn), 0);
+}
+
+/// Two imports into different Bisq wallets of one book never both book a
+/// trade: the export is checked against the book under the write lock, so an
+/// import that waited for another's commit sees its legs and refuses.
+#[test]
+fn bisq_checks_the_book_under_the_write_lock() {
+    let dir = std::env::temp_dir().join(format!(
+        "kassiber-bisq-lock-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("book.sqlite3");
+    let open = |path: &std::path::Path| {
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=20000",
+        )
+        .unwrap();
+        conn
+    };
+    let first = open(&path);
+    let creation: Json =
+        serde_json::from_str(include_str!("../../../store/fixtures/creation.json")).unwrap();
+    for sql in creation["statements"].as_array().unwrap() {
+        first.execute_batch(sql.as_str().unwrap()).unwrap();
+    }
+    first.execute_batch("INSERT INTO workspaces(id,label,created_at) VALUES('ws','Workspace','2025-01-01');
+        INSERT INTO profiles(id,workspace_id,label,fiat_currency,created_at) VALUES('p','ws','Book','EUR','2025-01-01');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('wallet','ws','p','Source','custom','{}','2025-01-01'),('second-bisq','ws','p','Bisq Two','bisq','{}','2025-01-01');
+        INSERT OR IGNORE INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','2025-01-01')").unwrap();
+    bisq_onchain(&first, BISQ_DEPOSITS);
+    // The first import holds the write lock until it commits.
+    first.execute_batch("BEGIN IMMEDIATE").unwrap();
+    import_bisq(&first, BISQ_TRADES).unwrap();
+    let files = dir.clone();
+    let second = std::thread::spawn(move || {
+        let conn = open(&files.join("book.sqlite3"));
+        let (trades, companion) = (files.join("history.csv"), files.join("transactions.csv"));
+        std::fs::write(&trades, BISQ_TRADES).unwrap();
+        std::fs::write(&companion, BISQ_TRANSACTIONS).unwrap();
+        execute(
+            &conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Bisq Two".into(),
+                file: trades.to_str().unwrap().into(),
+                format: Format::Bisq,
+                mode: None,
+                companion: Some(companion.to_str().unwrap().into()),
+                timezone: Some("UTC".into()),
+            },
+            None,
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    first.execute_batch("COMMIT").unwrap();
+    let error = second.join().unwrap().unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("conflicts with its escrow legs already in the book"),
+        "{}",
+        error.message
+    );
+    assert_eq!(
+        scalar(
+            &first,
+            "SELECT count(*) FROM transactions WHERE wallet_id='second-bisq'"
+        ),
+        0
+    );
+    drop(first);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The escrow ledger needs a dedicated bisq wallet; a wallet of another kind
+/// is refused before anything is written.
+#[test]
+fn bisq_imports_only_into_a_bisq_wallet() {
+    let conn = bisq_book();
+    bisq_onchain(&conn, BISQ_DEPOSITS);
+    let before = scalar(&conn, "SELECT count(*) FROM transactions");
+    let dir = std::env::temp_dir().join(format!("kassiber-bisq-kind-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (trades, transactions) = (dir.join("t.csv"), dir.join("x.csv"));
+    std::fs::write(&trades, BISQ_TRADES).unwrap();
+    std::fs::write(&transactions, BISQ_TRANSACTIONS).unwrap();
+    let request = |wallet: &str| Request {
+        profile_id: "p".into(),
+        wallet: wallet.into(),
+        file: trades.to_str().unwrap().into(),
+        format: Format::Bisq,
+        mode: None,
+        companion: Some(transactions.to_str().unwrap().into()),
+        timezone: Some("UTC".into()),
+    };
+    let error = execute(&conn, request("Source"), None).unwrap_err();
+    let refusal = "Bisq trades import into a bisq wallet; 'Source' is a custom wallet";
+    assert_eq!(error.message, refusal);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), before);
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('mine','ws','p','My escrow','bisq','{}','2025-01-01')").unwrap();
+    let result = execute(&conn, request("My escrow"), None).unwrap();
+    assert_eq!(bisq_get(&result, "wallet"), "\"My escrow\"");
+    std::fs::remove_dir_all(dir).unwrap();
 }

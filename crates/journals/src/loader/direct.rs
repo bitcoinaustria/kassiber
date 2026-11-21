@@ -88,6 +88,7 @@ impl Gate {
                         "migration_issues",
                         "import_duplicate_quarantines",
                         "reset_hold_quarantines",
+                        "provider_hold_quarantines",
                         "gap_reviews",
                         "pair_dismissals",
                         "gap_worklist",
@@ -535,6 +536,18 @@ pub fn load_read_snapshot(
         );
         snapshot.reset_hold_quarantines = Some(native_rows(holds.clone())?);
         reader.gate.ordered.insert("reset_hold_quarantines", holds);
+    }
+    // Provider trades an importer holds for review (Bisq); only while a
+    // book holds one.
+    let provider_holds = kassiber_wallets::file_import::bisq_hold_quarantines(conn, &profile_id)
+        .map_err(app_refusal)?;
+    if !provider_holds.is_empty() {
+        let holds = Value::List(provider_holds);
+        snapshot.provider_hold_quarantines = Some(native_rows(holds.clone())?);
+        reader
+            .gate
+            .ordered
+            .insert("provider_hold_quarantines", holds);
     }
     snapshot.gap_reviews = gap_reviews;
     snapshot.pair_dismissals = reader.rows(

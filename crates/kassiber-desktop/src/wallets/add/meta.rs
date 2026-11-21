@@ -190,6 +190,14 @@ pub fn meta(id: &str) -> Meta {
             None,
             None,
         ),
+        "bisq" => m(
+            Some(FileWallet),
+            Some("bisq"),
+            None,
+            Some("bisq_csv"),
+            None,
+            None,
+        ),
         "21bitcoin" => m(
             Some(FileWallet),
             Some("21bitcoin"),
