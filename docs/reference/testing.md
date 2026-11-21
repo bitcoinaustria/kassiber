@@ -152,10 +152,18 @@ race on replay. Those sessions get the hold back from the tape
 `crates/session-replay/src/replay.rs`): the first history request waits, the
 test's input goes in once it is held, and the request finishes when the test
 let it. For `test_live_freshness_controls_remain_available_during_fetch` that
-is after the control has answered; for
-`test_live_freshness_eof_joins_the_request_before_exit` the input is EOF and
-the release follows once stdout has been quiet for 100 ms, as the test drained
-the daemon's output before it released the request.
+is after the control has answered. For
+`test_live_freshness_eof_joins_the_request_before_exit` (the input is EOF) and
+`test_live_freshness_encrypted_request_connection_and_lock_cleanup` (a lock)
+the daemon stops and joins the request before it answers or exits: the hold
+is armed with `release-on-revoke` and the tape releases it when the process
+revokes the request's consent, so the answer always arrives after the stop,
+as it did for the test (a quiet-stdout timer released it first under load).
+
+The dataset job fixture (`analysis_ops_fixture`) cancels a job before its
+worker begins, as the recording did: under `test-harness` the job runtime
+holds workers until the fixture's cancel is in
+(`Runtime::hold_workers`), instead of racing the worker thread.
 
 The recorder needed the pytest suite, so no new sessions are recorded. New
 coverage goes into Rust tests. A reviewed, deliberate change re-records the

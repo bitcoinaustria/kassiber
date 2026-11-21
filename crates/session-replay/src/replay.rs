@@ -37,12 +37,11 @@ struct HeldFetch {
 enum Release {
     /// Once the control's answer printed.
     AfterAnswer,
-    /// Once stdout had been quiet for `QUIET` after the input: the test
-    /// drained what the process printed until nothing came for that long.
-    AfterQuiet,
+    /// Once the process stopped the request (revoked its consent): the test
+    /// released it after the product had stopped, which a timer can't
+    /// promise under load (the fetch then outran the stop now and then).
+    OnRevoke,
 }
-
-const QUIET: Duration = Duration::from_millis(100);
 
 const HELD_FETCHES: &[HeldFetch] = &[
     // The sync, a status read, a competing sync, then a freshness control
@@ -54,13 +53,22 @@ const HELD_FETCHES: &[HeldFetch] = &[
         release: Release::AfterAnswer,
     },
     // The sync, then EOF: the daemon cancels and joins the request before it
-    // exits. Released early, the fetch outran the cancellation now and then
-    // (more progress, then a request the tape never had).
+    // exits. Released on a timer, the fetch outran the cancellation now and
+    // then (more progress, then a request the tape never had).
     HeldFetch {
         test: "tests/test_rust_freshness_lifecycle.py::\
                test_live_freshness_eof_joins_the_request_before_exit[",
         control: 1,
-        release: Release::AfterQuiet,
+        release: Release::OnRevoke,
+    },
+    // A locked request, the unlock, the sync, then a lock: the lock stops and
+    // joins the sync before it answers. Unheld, the taped fetch finished
+    // before the lock arrived now and then.
+    HeldFetch {
+        test: "tests/test_rust_freshness_lifecycle.py::\
+               test_live_freshness_encrypted_request_connection_and_lock_cleanup[",
+        control: 3,
+        release: Release::OnRevoke,
     },
 ];
 
@@ -1000,6 +1008,9 @@ pub fn replay(
             let dir = scratch.join("hold");
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             fs::write(dir.join("arm"), pattern).map_err(|e| e.to_string())?;
+            if held.release == Release::OnRevoke {
+                fs::write(dir.join("release-on-revoke"), b"").map_err(|e| e.to_string())?;
+            }
             command.env("KASSIBER_TEST_NET_TAPE_HOLD", &dir);
             Some((held, dir))
         }
@@ -1158,18 +1169,8 @@ pub fn replay(
             // ...and let the request finish when the test did.
             let released = match held.release {
                 Release::AfterAnswer => wait_for(after + 1),
-                Release::AfterQuiet => {
-                    let mut seen = lines.load(Ordering::SeqCst);
-                    let mut since = Instant::now();
-                    while since.elapsed() < QUIET && Instant::now() <= deadline {
-                        std::thread::sleep(Duration::from_millis(2));
-                        let now = lines.load(Ordering::SeqCst);
-                        if now != seen {
-                            (seen, since) = (now, Instant::now());
-                        }
-                    }
-                    Instant::now() <= deadline
-                }
+                // The process releases it itself when it stops the request.
+                Release::OnRevoke => continue,
             };
             if !released {
                 differences.push("timed out waiting to release the held request".into());
@@ -1496,11 +1497,11 @@ mod held_fetch_tests {
         .unwrap()
     }
 
-    /// The EOF test held its history request while it closed stdin and
-    /// released it once the daemon went quiet: its sessions get the same
-    /// hold on the closing input, for either backend.
+    /// The EOF and lock tests held their history request while they stopped
+    /// it: their sessions get the hold on the stopping input, released when
+    /// the process stops the request, for either backend.
     #[test]
-    fn the_eof_join_sessions_hold_their_fetch_until_quiet() {
+    fn the_stop_sessions_hold_their_fetch_until_the_request_stops() {
         let test = "tests/test_rust_freshness_lifecycle.py::\
                     test_live_freshness_eof_joins_the_request_before_exit";
         for (backend, pattern) in [
@@ -1509,9 +1510,13 @@ mod held_fetch_tests {
         ] {
             let (held, armed) =
                 held_request(&session(&format!("{test}[{backend}]"), backend)).unwrap();
-            assert_eq!((held.control, &held.release), (1, &Release::AfterQuiet));
+            assert_eq!((held.control, &held.release), (1, &Release::OnRevoke));
             assert_eq!(armed, pattern);
         }
+        let lock = "tests/test_rust_freshness_lifecycle.py::\
+                    test_live_freshness_encrypted_request_connection_and_lock_cleanup[electrum]";
+        let (held, _) = held_request(&session(lock, "electrum")).unwrap();
+        assert_eq!((held.control, &held.release), (3, &Release::OnRevoke));
         let controls = "tests/test_rust_freshness_lifecycle.py::\
                         test_live_freshness_controls_remain_available_during_fetch[cancel-esplora]";
         let (held, _) = held_request(&session(controls, "esplora")).unwrap();

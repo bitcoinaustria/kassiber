@@ -285,6 +285,8 @@ impl Consent {
     /// Call on feature disable, cancellation, project lock/switch or stale inputs.
     pub fn revoke(&self) {
         self.active.store(false, Ordering::SeqCst);
+        #[cfg(feature = "test-observer")]
+        tape::note_revoked();
     }
 }
 

@@ -284,6 +284,11 @@ pub fn evaluate_jobs(spec: &Value) -> Result<Value> {
                     counter: ids_counter,
                     timestamp: "2026-01-01T00:00:00Z".into(),
                 };
+                // A step that cancels does so before its worker begins, as
+                // the recording did: the worker waits until the cancel is in,
+                // instead of racing it (and finishing first under load).
+                #[cfg(any(test, feature = "test-harness"))]
+                let held = truthy(field(step, "cancel")).then(|| runtime.hold_workers());
                 let outcome = super::jobs::start(
                     &conn,
                     &scope,
@@ -298,6 +303,8 @@ pub fn evaluate_jobs(spec: &Value) -> Result<Value> {
                     if truthy(field(step, "cancel")) {
                         runtime.get(&scope_key(&conn, "p"), &ident, true)?;
                     }
+                    #[cfg(any(test, feature = "test-harness"))]
+                    drop(held);
                     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
                     loop {
                         let current = runtime.get(&scope_key(&conn, "p"), &ident, false)?;
