@@ -197,6 +197,8 @@ pub struct State {
     pub unlinked: Vec<Unlinked>,
     pub set_aside: Vec<Dismissal>,
     // UI.
+    /// The set-aside card is folded (`SetAsideCard`'s `open`, unfolded on its own tab).
+    pub set_aside_folded: bool,
     pub filter: Option<Filter>,
     pub year: Option<i32>,
     pub shown: usize,
@@ -925,6 +927,12 @@ fn link_back(app: &mut App, dismissal_id: Option<String>, mv: Option<(String, St
         "custody.page.undismiss",
         Some(note(NoteKind::LinkedBack, spot)),
     );
+}
+
+/// The set-aside card's header folds or unfolds its list.
+fn toggle_set_aside(app: &mut App) {
+    let s = stm(app);
+    s.set_aside_folded = !s.set_aside_folded;
 }
 
 /// A suggestion set aside comes back to the list; nothing is linked.
@@ -2740,6 +2748,11 @@ fn set_aside_card(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, lw:
     let wide_list = lw >= tk.r(72.0);
     let pending = st(app).undismissing;
     let hidden = app.prefs.hide_sensitive();
+    let open = !st(app).set_aside_folded;
+    // `rotate` takes radians: half a turn points the chevron up while the list shows.
+    let chevron = ic(&I::CHEVRON_DOWN, tk.r(1.0), tk.muted_fg)
+        .a11y_hidden()
+        .rotate(if open { std::f32::consts::PI } else { 0.0 });
     let head = row()
         .key("tp-setaside-toggle")
         .w_full()
@@ -2748,10 +2761,11 @@ fn set_aside_card(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, lw:
         .gap(tk.r(0.5))
         .center_y()
         .role("button")
-        .expanded(true)
+        .expanded(open)
         .label(tc("review:transfersPage.setAside.title", rows.len(), &[]))
         .focusable(true)
         .hover(tk.muted.alpha(0.35))
+        .on_press(toggle_set_aside)
         .child(
             text(tc("review:transfersPage.setAside.title", rows.len(), &[]))
                 .font(tk.tsm(500.0))
@@ -2766,7 +2780,16 @@ fn set_aside_card(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, lw:
                 .shrink(),
         )
         .child(el().grow(1.0))
-        .child(ic(&I::CHEVRON_DOWN, tk.r(1.0), tk.muted_fg).rotate(180.0));
+        .child(chevron);
+    let card = kit::surface(tk)
+        .key("transfers-set-aside")
+        .w_full()
+        .role("region")
+        .label(tc("review:transfersPage.setAside.title", rows.len(), &[]))
+        .child(head);
+    if !open {
+        return card;
+    }
     let mut list = col().w_full();
     for d in rows {
         let route_text = tr(
@@ -2840,13 +2863,7 @@ fn set_aside_card(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, lw:
             tk.r(crate::ui::table::PY),
         ));
     }
-    kit::surface(tk)
-        .key("transfers-set-aside")
-        .w_full()
-        .role("region")
-        .label(tc("review:transfersPage.setAside.title", rows.len(), &[]))
-        .child(head)
-        .child(list)
+    card.child(list)
 }
 
 // ---- Linked transfers -------------------------------------------------------------------------
@@ -3977,5 +3994,22 @@ pub fn inject_note(app: &mut App, linked_tab: bool) {
 pub fn open_first_row_menu(app: &mut App) {
     if let Some(m) = st(app).moves.iter().find(|m| m.pair_id.is_some()) {
         stm(app).popup = Some(Popup::Row(m.key.clone()));
+    }
+}
+
+#[cfg(test)]
+mod set_aside_tests {
+    use super::*;
+
+    /// The set-aside header is a real disclosure: it starts unfolded and its press folds and
+    /// unfolds the list.
+    #[test]
+    fn the_set_aside_header_folds_and_unfolds() {
+        let mut app = crate::app::tests::quiet_app();
+        assert!(!st(&app).set_aside_folded);
+        toggle_set_aside(&mut app);
+        assert!(st(&app).set_aside_folded);
+        toggle_set_aside(&mut app);
+        assert!(!st(&app).set_aside_folded);
     }
 }
