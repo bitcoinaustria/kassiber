@@ -146,10 +146,16 @@ fn fires(dir: &std::path::Path, bytes: &[u8]) -> bool {
 
 /// Wait for the hold's release, at most a minute.
 fn wait_for_release(dir: &std::path::Path) {
+    wait_for_release_or_revoked(dir, &REVOKED);
+}
+
+/// [`wait_for_release`] against a given revocation flag, so unit tests don't
+/// share the process-wide one other tests' `Consent::revoke` calls set.
+fn wait_for_release_or_revoked(dir: &std::path::Path, revoked: &AtomicBool) {
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
     let on_revoke = dir.join("release-on-revoke").exists();
     while !dir.join("release").exists()
-        && !(on_revoke && REVOKED.load(Ordering::SeqCst))
+        && !(on_revoke && revoked.load(Ordering::SeqCst))
         && std::time::Instant::now() < deadline
     {
         std::thread::sleep(Duration::from_millis(5));
@@ -690,17 +696,20 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("kassiber-tape-revoke-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("release-on-revoke"), b"").unwrap();
+        // Other tests revoke consents and set the process-wide flag; use our own.
+        let revoked = std::sync::Arc::new(AtomicBool::new(false));
         let waiting = {
             let dir = dir.clone();
+            let revoked = revoked.clone();
             std::thread::spawn(move || {
                 let began = std::time::Instant::now();
-                wait_for_release(&dir);
+                wait_for_release_or_revoked(&dir, &revoked);
                 began.elapsed()
             })
         };
         std::thread::sleep(Duration::from_millis(50));
         assert!(!waiting.is_finished(), "held until the stop");
-        note_revoked();
+        revoked.store(true, Ordering::SeqCst);
         assert!(waiting.join().unwrap() < Duration::from_secs(30));
         std::fs::remove_dir_all(&dir).unwrap();
     }
