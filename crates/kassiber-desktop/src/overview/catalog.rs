@@ -768,6 +768,28 @@ pub static SOURCES: &[Source] = &[
         docs_href: Some("https://strike.me/"),
     },
     Source {
+        id: "bisq",
+        title: Label::Name("Bisq"),
+        description: "connections:catalog.sources.bisq.description",
+        category: "exchanges",
+        planned: false,
+        dev_only: false,
+        path_label: Some("connections:catalog.paths.csvImport"),
+        format_label: Some(Label::Name("bisq_csv")),
+        details: "connections:catalog.sources.bisq.details",
+        art: Art::File(
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../assets/logos/integrations/bisq.svg"
+            )),
+            "svg",
+            false,
+        ),
+        size: Size::Square(2.0),
+        frame: Frame::Default,
+        docs_href: Some("https://bisq.network/"),
+    },
+    Source {
         id: "21bitcoin",
         title: Label::Name("21bitcoin"),
         description: "connections:catalog.sources.21bitcoin.description",

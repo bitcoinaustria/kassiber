@@ -733,6 +733,7 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.source_funds.bank_lines.suggest",
     "ui.source_funds.bank_lines.accept",
     "ui.source_funds.bank_lines.reject",
+    "ui.diagnostics.replay_bundle.export",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

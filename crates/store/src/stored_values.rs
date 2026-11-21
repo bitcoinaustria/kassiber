@@ -87,7 +87,7 @@ pub(crate) fn layout_pending(conn: &Connection) -> crate::Result<bool> {
         .map_err(map_sqlite_error)?
         .collect::<rusqlite::Result<_>>()
         .map_err(map_sqlite_error)?;
-    // Opt-in objects (bank statements) are known, never pending layout.
+    // Opt-in objects (bank statements, provider trade holds) are known, never pending layout.
     let actual: std::collections::BTreeSet<(String, String)> = actual
         .into_iter()
         .filter(|(kind, name)| {

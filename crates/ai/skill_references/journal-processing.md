@@ -156,6 +156,12 @@ or unpair and pair the reviewed legs again. A simple pair can preview/apply
 `repair_legacy_pair` through the local CLI review workflow. AI cannot author
 that revision; never replace it with exclusion or automatic unpairing.
 
+`bisq_trade_review_required` holds the transactions a held Bisq trade's exports
+name; the case's `bisq_trade` gives the trade id, status and `hold_reason`.
+Ask the user what the trade actually moved (a mediated or arbitrated payout
+differs from the contract) before proposing a `custody_component`; offer
+`exclude` only for a row that is not theirs. Never treat the deposit as a sale.
+
 `synthetic_import_duplicate_review_required` identifies held ID-less CSV rows.
 Every active member is held; Kassiber selects no survivor. The case's
 `import_duplicate.hold_reasons` say why: `cross_import_excess` (rows across

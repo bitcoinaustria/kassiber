@@ -3,7 +3,7 @@
 mod htlc;
 mod matcher;
 mod provider;
-mod service;
+pub(crate) mod service;
 
 pub use matcher::{
     dismissal_is_active, exclusion_counts, finalize, suggest, Candidate, MatchOptions, Population,

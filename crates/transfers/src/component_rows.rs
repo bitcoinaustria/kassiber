@@ -14,7 +14,7 @@ use sql::{bind, error};
 use std::collections::BTreeSet;
 
 pub(super) const TYPES: &[&str] = &["manual_bridge", "swap"];
-pub(super) const SOURCES: &[&str] = &["user", "cli", "gui", "ai_tool", "migration"];
+pub(super) const SOURCES: &[&str] = &["user", "cli", "gui", "ai_tool", "migration", "import"];
 const MODES: &[&str] = &["conversion", "quantity"];
 const ROLES: &[&str] = &[
     "destination",

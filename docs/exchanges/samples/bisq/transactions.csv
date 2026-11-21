@@ -1,0 +1,8 @@
+Date/Time,Trade ID,Details,Address,Transaction ID,Amount in BTC,Memo,Confirmations
+"Mar 1, 2024 12:00:00 PM",,Received funds,Received with: bc1qsyntheticreceive0000000000000000000000,9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f9f,0.2,,4000
+"Mar 15, 2024 2:31:02 PM",a1b2c3d4-0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b-199,Taker and tx fee,Sent to: bc1qsyntheticfeereceiver000000000000000000,e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3,-0.00022,,3200
+"Mar 15, 2024 2:41:10 PM",a1b2c3d4-0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b-199,Multisig deposit,,a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,-0.00605,,3199
+"Mar 16, 2024 10:00:00 AM",a1b2c3d4-0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b-199,Multisig payout,Received with: bc1qsyntheticpayout00000000000000000000000,b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,0.031,,3100
+"Apr 2, 2024 9:15:00 AM",e5f6a7b8-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d-199,Multisig deposit,,c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2,-0.05754,,2900
+"Apr 3, 2024 8:00:00 AM",e5f6a7b8-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d-199,Multisig payout,Received with: bc1qsyntheticpayout11111111111111111111111,d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2,0.0075,,2800
+"May 1, 2024 11:20:00 AM",d15e0001-2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e-199,Multisig deposit,,f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4f4,-0.00605,,2700

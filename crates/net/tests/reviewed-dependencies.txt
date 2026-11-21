@@ -107,6 +107,10 @@ bitcoin_hashes
 
 kassiber-diagnostics test-hooks
 
+# Replay bundles: journal recomputation, keyed pseudonyms and the backups'
+# in-memory age envelope; no transport, file access only for the chosen bundle.
+kassiber-replay
+
 # Pure BDK wallet/index/update types; no protocol client or storage features.
 bdk_wallet std
 bdk_chain std

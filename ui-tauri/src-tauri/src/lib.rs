@@ -299,6 +299,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.ledger_template",
     "ui.journals.snapshot",
     "ui.journals.verify",
+    "ui.diagnostics.replay_bundle.export",
     "ui.journals.events.list",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",

@@ -45,6 +45,7 @@ fn tables_match_python() {
     // carry their siblings' capability; Python has no entry for them.
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
+        ("wallets.import-bisq", "wallets.import-strike"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),
@@ -68,6 +69,8 @@ fn tables_match_python() {
             "source-funds.bank-lines.reject",
             "source-funds.links.review",
         ),
+        ("diagnostics.replay-bundle.verify", "journals.list"),
+        ("diagnostics.replay-bundle.export", "diagnostics.collect"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -124,6 +127,10 @@ fn tables_match_python() {
         (
             "ui.source_funds.bank_lines.reject",
             "ui.source_funds.links.review",
+        ),
+        (
+            "ui.diagnostics.replay_bundle.export",
+            "ui.transactions.export_csv",
         ),
     ];
     for (kind, sibling) in rust_only_kinds {

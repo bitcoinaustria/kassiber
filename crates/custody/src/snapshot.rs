@@ -72,6 +72,10 @@ pub struct StageSnapshot {
     /// records; present only while the book keeps reset records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reset_hold_quarantines: Option<Vec<Record>>,
+    /// Provider trades an importer holds for review (Bisq), as quarantine
+    /// records; present only while a book holds one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_hold_quarantines: Option<Vec<Record>>,
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
@@ -104,6 +108,7 @@ impl StageSnapshot {
             .import_duplicate_quarantines
             .iter_mut()
             .chain(self.reset_hold_quarantines.iter_mut())
+            .chain(self.provider_hold_quarantines.iter_mut())
         {
             rows.iter_mut().for_each(Record::escape_wire_tags);
         }

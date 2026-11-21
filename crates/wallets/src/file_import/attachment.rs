@@ -737,6 +737,8 @@ pub fn plan_or_apply(
                         file: shown.clone(),
                         format: Format::Ledger,
                         mode: None,
+                        companion: None,
+                        timezone: None,
                     },
                     mapping.as_ref(),
                     identities.import,
