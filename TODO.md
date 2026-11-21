@@ -2000,6 +2000,30 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Imports, source evidence, and wallet workflows
 
+- [x] Import bank statements (CAMT.053, bank CSV) as source-of-funds evidence:
+  exact amounts, masked IBANs, deduped re-imports, rollback, exact unique
+  purchase suggestions, accept into a reviewed `fiat_purchase` source, report
+  disclosure, CLI/daemon/desktop/assistant surfaces. See
+  [bank statements](docs/reference/bank-statements.md).
+- [ ] Bank statements follow-ups: localized suggestion reasons in the desktop,
+  a desktop rollback action, and Windows-1252 decoding beyond the Latin-1
+  fallback; the CAMT `EndToEndId` as line identity when `AcctSvcrRef` is
+  absent (two such transfers on one day and amount refuse today as
+  `bank_statement_line_conflict` when imported apart); an explicit CSV
+  delimiter for positional column maps (punctuation in a description can pick
+  the wrong one, which refuses the file); and an accepted-decision filter for
+  `bank-lines list`, so the desktop's accepted evidence does not rest on the
+  newest 5000 outgoing lines.
+- [ ] Bank statement cases now refused, to build only on demand (dropped in
+  the 2026-11-14 size pass): MT940 files; splitting CAMT batch entries into
+  their `TxDtls`; fee-tolerant (within 3 %) and split/merge (one transfer for
+  several purchases or the reverse) suggestions, today listed as
+  `no_exact_amount` and accepted by hand; currency symbols, space/apostrophe
+  grouping, parenthesized negatives and UTF-16 in bank CSV; the column-map
+  `header_row` option; copying the statement file onto the accepted source;
+  masking own non-IBAN account numbers inside bank free text; and network
+  partitions of books holding statements.
+
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
   raw `network` field leaves them unscoped, Coinbase drops the withdrawal fee,

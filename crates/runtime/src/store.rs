@@ -379,6 +379,18 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("documents", "document evidence services"))
     }
+    /// Bank statements as source-of-funds evidence (import, review, rollback).
+    fn bank_statements(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::bank_statements::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented(
+            "bank statements",
+            "bank-statement evidence services",
+        ))
+    }
     fn commercial(
         &mut self,
         _workspace: Option<&Value>,

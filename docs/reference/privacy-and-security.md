@@ -618,6 +618,26 @@ until that process stops. `kassiber status` reports the effective root.
 - Keep backend config out of version control. Prefer `COOKIEFILE` over inline
   `USERNAME` / `PASSWORD`.
 
+### Bank statements
+
+Imported bank statements ([bank statements](bank-statements.md)) are
+personal financial data:
+
+- Kassiber reads only files the user downloaded and never connects to a bank
+  (no FinTS/HBCI, PSD2 or aggregator); importing, matching and reporting
+  open no connection.
+- The statement file is a managed attachment in the attachments directory,
+  outside SQLCipher like every attachment; protect it as you would the
+  statements. Its original file name is never stored or echoed.
+- Counterparty IBANs are stored masked only; the own account is stored in
+  full, like addresses. Outputs show bank free text with every IBAN in it
+  masked; other account numbers inside free text are not recognized.
+- Refusals name a row, column or field and never quote the file. Bank lines
+  never enter diagnostics, logs or support bundles.
+- The assistant sees masked IBANs, a counterparty only as a curated exchange
+  name, and no remittance text or bank reference, in every tool result that
+  can carry bank evidence. Accepting or rejecting a match is consent-gated.
+
 ### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
 Restore installation keeps a private same-filesystem prepared tree and a

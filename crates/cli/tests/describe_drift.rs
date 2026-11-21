@@ -121,7 +121,19 @@ fn python_catalog() -> Value {
             .expect("command group");
         commands.insert(at + 1, entry);
     }
-    let added = kassiber_cli::spec::RUST_ONLY_LEAVES.len();
+    // Commands new in Rust describe themselves, in the Rust tree's order.
+    let mut python_entries = std::mem::take(commands).into_iter();
+    let mut added_new = 0;
+    for leaf in leaves() {
+        if kassiber_cli::spec::rust_only_new(&leaf.dotted()) {
+            commands.push(describe_leaf(&leaf));
+            added_new += 1;
+        } else {
+            commands.push(python_entries.next().expect("python entry"));
+        }
+    }
+    commands.extend(python_entries);
+    let added = kassiber_cli::spec::RUST_ONLY_LEAVES.len() + added_new;
     let Value::Int(count) = field(data, "count") else {
         panic!("count")
     };

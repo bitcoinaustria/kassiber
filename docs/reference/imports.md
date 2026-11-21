@@ -28,6 +28,7 @@ written.
 - CoinTracking transaction CSV exports with complete history (Bitcoin rows)
 - Blockpit transaction CSV exports with filters cleared (Bitcoin rows)
 - prior tax-report files preserved as external evidence
+- bank statements (CAMT.053, bank CSV) preserved as source-of-funds evidence ([bank statements](bank-statements.md))
 - Samourai/Whirlpool descriptor and account-xpub source sets
 - Silent Payments watch-only receiving sources (`silent-payment` wallets)
 - BIP329 JSONL labels

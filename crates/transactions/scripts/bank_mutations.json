@@ -1,0 +1,202 @@
+[
+  {
+    "id": "bank-fiat-only",
+    "file": "crates/transactions/src/bank_statements/mod.rs",
+    "find": "if crate::FIAT_CODES.contains(&code.as_str()) {",
+    "replace": "if code.len() == 3 || crate::FIAT_CODES.contains(&code.as_str()) {",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A currency that is not a known fiat code is refused naming the row."
+  },
+  {
+    "id": "bank-own-account-agrees",
+    "file": "crates/transactions/src/bank_statements/mod.rs",
+    "find": "(Some(found), Some(stated)) if found != stated =>",
+    "replace": "(Some(found), Some(stated)) if found != stated && false =>",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A file's own account must agree with --account."
+  },
+  {
+    "id": "bank-mt940-refused",
+    "file": "crates/transactions/src/bank_statements/mod.rs",
+    "find": "if options.format.is_none() && looks_like_mt940(&text) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "mt940_is_refused_by_name"
+    ],
+    "rule": "MT940 is refused by name, never read as CSV."
+  },
+  {
+    "id": "bank-mask-ibans",
+    "file": "crates/transactions/src/bank_statements/mod.rs",
+    "find": "if boundary && iban_checksum_ok(&compact[..len]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "free_text_shows_every_valid_iban_masked_and_nothing_else"
+    ],
+    "rule": "Outputs mask every valid IBAN in bank free text."
+  },
+  {
+    "id": "bank-ai-drops-text",
+    "file": "crates/transactions/src/bank_statements/mod.rs",
+    "find": ".filter(|(key, _)| !key_is(key, DROPPED))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "the_assistant_sees_masked_ibans_and_exchange_names_only"
+    ],
+    "rule": "The assistant never sees remittance text, bank references or previews."
+  },
+  {
+    "id": "bank-decimal-undecided",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "1 if after == 3 => None,",
+    "replace": "1 if after == 4 => None,",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "An amount like 1.000 with no row deciding the decimal mark is refused."
+  },
+  {
+    "id": "bank-grouping-checked",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "let grouped = groups.len() == 1",
+    "replace": "let grouped = true || groups.len() == 1",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "Thousands grouping must be groups of three; anything else is refused."
+  },
+  {
+    "id": "bank-match-exact-amount",
+    "file": "crates/transactions/src/bank_statements/matching.rs",
+    "find": "l.amount == b.value",
+    "replace": "l.amount >= b.value",
+    "expect_failing": [
+      "only_an_exact_unique_pair_in_the_window_is_suggested"
+    ],
+    "rule": "Only a bank amount equal to the purchase value is suggested."
+  },
+  {
+    "id": "bank-match-currency",
+    "file": "crates/transactions/src/bank_statements/matching.rs",
+    "find": "l.currency == b.currency",
+    "replace": "!l.currency.is_empty()",
+    "expect_failing": [
+      "only_an_exact_unique_pair_in_the_window_is_suggested"
+    ],
+    "rule": "A suggestion needs the same fiat currency on both sides."
+  },
+  {
+    "id": "bank-match-window",
+    "file": "crates/transactions/src/bank_statements/matching.rs",
+    "find": "(-DAYS_AFTER..=DAYS_BEFORE)",
+    "replace": "(-DAYS_AFTER - 1..=DAYS_BEFORE + 1)",
+    "expect_failing": [
+      "only_an_exact_unique_pair_in_the_window_is_suggested"
+    ],
+    "rule": "The bank line is booked from 10 days before to 1 day after the purchase."
+  },
+  {
+    "id": "bank-match-unique",
+    "file": "crates/transactions/src/bank_statements/matching.rs",
+    "find": "[l] if for_line(l) == 1 =>",
+    "replace": "[l] =>",
+    "expect_failing": [
+      "two_candidates_or_a_split_are_left_unmatched_by_name"
+    ],
+    "rule": "A line that fits two purchases is left unmatched as ambiguous."
+  },
+  {
+    "id": "bank-match-rejected",
+    "file": "crates/transactions/src/bank_statements/matching.rs",
+    "find": "let open = !decisions.rejected.contains",
+    "replace": "let open = true || !decisions.rejected.contains",
+    "expect_failing": [
+      "decisions_remove_decided_lines_purchases_and_rejected_pairs"
+    ],
+    "rule": "A rejected pair is never suggested again."
+  },
+  {
+    "id": "bank-duplicate-needs-reference",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "if line.bank_reference.is_some() || line.end_to_end_id.is_some() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "lines_kassiber_cannot_place_are_refused_by_name"
+    ],
+    "rule": "A reference-free line equal to a stored one is refused as ambiguous, never skipped."
+  },
+  {
+    "id": "bank-reparse-refused",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "if tables && existing.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "lines_kassiber_cannot_place_are_refused_by_name"
+    ],
+    "rule": "The same bytes read with another configuration are refused naming the earlier import."
+  },
+  {
+    "id": "bank-rollback-blocked",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "if accepted > 0 {",
+    "replace": "if accepted > 1 {",
+    "expect_failing": [
+      "accepted_evidence_blocks_rollback"
+    ],
+    "rule": "Rollback refuses while a line is accepted evidence."
+  },
+  {
+    "id": "bank-iban-stored-masked",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "line.counterparty_iban.as_deref().map(mask_account),",
+    "replace": "line.counterparty_iban.clone(),",
+    "expect_failing": [
+      "imports_dedupe_by_reference_and_roll_back_exactly_what_they_added"
+    ],
+    "rule": "Counterparty IBANs are stored masked only."
+  },
+  {
+    "id": "bank-csv-open-quote",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "                if open {",
+    "replace": "                if false && open {",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A quoted field left open at the end of the file is refused; it would swallow the rows after it."
+  },
+  {
+    "id": "bank-csv-malformed-date",
+    "file": "crates/transactions/src/bank_statements/csv.rs",
+    "find": "                && (parts(&date_cell).is_some() || date_like(&date_cell))",
+    "replace": "                && parts(&date_cell).is_some()",
+    "expect_failing": [
+      "csv_refuses_what_it_cannot_read_by_name"
+    ],
+    "rule": "A date-shaped cell that is not a date, with an amount, is refused, never skipped as a footer."
+  },
+  {
+    "id": "bank-money-round-once",
+    "file": "crates/transactions/src/bank_statements/money.rs",
+    "find": "        let away = remainder.unsigned_abs() * 2 >= divisor.unsigned_abs();",
+    "replace": "        let away = remainder.unsigned_abs() % 10 * 2 >= 10;",
+    "expect_failing": [
+      "money_is_exact_decimal_text"
+    ],
+    "rule": "Products past 18 digits round once on the whole remainder."
+  },
+  {
+    "id": "bank-referenced-repeat-in-file",
+    "file": "crates/transactions/src/bank_statements/store.rs",
+    "find": "        if line.bank_reference.is_some() {\n            match referenced.get(group) {",
+    "replace": "        if false {\n            match referenced.get(group) {",
+    "expect_failing": [
+      "a_referenced_booking_repeated_in_one_file_is_one_line"
+    ],
+    "rule": "A referenced booking repeated in one file is one line; two versions of it are refused."
+  }
+]

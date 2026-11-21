@@ -33,7 +33,7 @@ const ARGUMENTLESS: [&str; 12] = [
 ];
 
 /// `_SOURCE_FUNDS_READ_AI_DAEMON_KINDS`.
-const SOURCE_FUNDS_READS: [&str; 8] = [
+const SOURCE_FUNDS_READS: [&str; 9] = [
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
     "ui.source_funds.request_input",
@@ -42,6 +42,7 @@ const SOURCE_FUNDS_READS: [&str; 8] = [
     "ui.source_funds.evidence.list",
     "ui.source_funds.coverage",
     "ui.source_funds.cases.list",
+    "ui.source_funds.bank_lines.suggest",
 ];
 
 /// The commercial reads whose payloads pass the evidence filter.
