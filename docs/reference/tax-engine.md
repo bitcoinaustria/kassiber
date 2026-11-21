@@ -725,26 +725,35 @@ policy, not a defect. The linked sections own each rule.
   instants ([countries and pool scopes](#countries-and-pool-scopes)). The
   anniversary rule (long-term only once the disposal date is after the
   acquisition date's anniversary) is what `us` and a rules country's
-  `more_than_one_year` apply. On these boundary days the generic rule says
-  long-term and the anniversary rule short-term: exactly 365 days in a
-  common year, 365 days across 29 February (2023-03-01 to 2024-02-29), 366
-  days ending on the anniversary (2023-03-01 to 2024-03-01), and 29
-  February to the next 28 February.
-- **Holding period under the moving average.** A disposal's cost is the
-  running average, but its fragments take lots FIFO, so the oldest open
-  lots date its holding period, in the global and the wallet scope
-  ([matching methods](#matching-methods)). Some tools split the holding period pro rata across every open
-  lot; cost basis is the same, the long-term and short-term split is not.
+  `more_than_one_year` apply. With the default 365 days and both instants
+  at 00:00 UTC, the generic rule says long-term and the anniversary rule
+  short-term on these boundary cases: exactly 365 days in a common year,
+  365 days across 29 February (2023-03-01 to 2024-02-29), 366 days ending
+  on the anniversary (2023-03-01 to 2024-03-01), and 29 February to the
+  next 28 February. Later times of day can drop the generic count below
+  365. The `us` rule compares UTC dates; a rules country compares dates in
+  its configured local time.
+- **Holding period under the moving average.** Under the plain
+  `moving_average` method a disposal's cost is the running average, but
+  its fragments take lots FIFO, so the oldest open lots date its holding
+  period, in the global and the wallet scope
+  ([matching methods](#matching-methods)). Some tools split the holding
+  period pro rata across every open lot; cost basis is the same, the
+  long-term and short-term split is not.
 - **Holds fail closed.** A hold is never booked with a guessed basis while
   the rest of the book is marked non-final. A hold that leaves an asset's
   lots uncertain, such as an unpriced receipt or a non-sale disposal, holds
   the asset's later disposals (`basis_provenance_incomplete`). An
-  unresolved custody quantity issue holds every later event of its exposure
-  pool (`custody_basis_barrier`) and blocks every report
-  ([why a transaction is quarantined](custody-resolution.md#why-a-transaction-is-quarantined)).
-  Unconfirmed and conflicting transactions are held explicitly
-  (`pending_onchain_confirmation`, `conflicting_spend`), not ignored
-  ([quarantines](tax.md#quarantines)).
+  unresolved custody quantity issue holds its exposure pool's later source
+  decisions and standalone receipts (`custody_basis_barrier`), and the
+  journal-backed tax and portfolio reports refuse to run until it is
+  resolved (`custody_quantity_unresolved`;
+  [why a transaction is quarantined](custody-resolution.md#why-a-transaction-is-quarantined)).
+  Transactions with an explicit unconfirmed status are held as
+  `pending_onchain_confirmation`, and competing spends of the same input
+  that are not the single confirmed winner as `conflicting_spend`
+  ([quarantines](tax.md#quarantines)). These two holds are transient: they
+  wait for chain evidence and do not raise the custody barrier.
 
 ## Schema 1: the fixture API
 
