@@ -472,6 +472,9 @@ pub fn emit_with_meta(
             }
         }
         Format::Plain => {
+            // Human formats say "unconfirmed" instead of the stored
+            // placeholder time; JSON and CSV keep the stored value.
+            let payload = kassiber_envelope::occurred_at::humanize(payload);
             let text = match &payload {
                 Value::List(items) if items.is_empty() => "(no rows)".to_owned(),
                 Value::List(items) => items
@@ -491,6 +494,7 @@ pub fn emit_with_meta(
             sink.write_text(&text).map_err(io)
         }
         Format::Table => {
+            let payload = kassiber_envelope::occurred_at::humanize(payload);
             let text = match &payload {
                 Value::List(_) => table_text(&rows_of(&payload, "items")?),
                 Value::Dict(pairs) => {

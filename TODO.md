@@ -2082,6 +2082,22 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Desktop and handoffs
 
+- [ ] Finish hiding the stored placeholder transaction time
+  (`1970-01-01T00:00:00Z`) on the remaining surfaces. The CLI table/plain
+  output, the desktop transactions table, overview recent activity, wallet
+  transaction list, transaction header, search, review case rows, the assistant
+  focus label and the activity chart already say "Unconfirmed"/"Unknown"
+  (`kassiber_envelope::occurred_at`, desktop `format::tx_date`). Still dated
+  1970: the tax narrative and missing-fiat banner sentences in tx detail (they
+  need sentence variants without "on {date}"), custody link/unlink cards, held
+  and linked-move lists and the 1970 year chip (`custody/`), transfer
+  suggestions in review (`out_occurred_at`), SoF target/bank/disclosure rows,
+  assistant transaction visuals, flagged-transaction lists in report and export
+  views, journal entry lists, and minutes-apart/relative times computed from the
+  placeholder. AI tool results still carry the raw value with `conf`/
+  `confirmed_at`; recorded sessions pin those reads and the skill references, so
+  a model-facing hint needs the opt-in projection route.
+
 - [x] Adopt the Rune desktop as the desktop app: moved to
   `crates/kassiber-desktop` (own workspace and lockfile, excluded from the root
   workspace), translations and integration logos shared with `ui-tauri/` from

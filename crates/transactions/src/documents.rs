@@ -170,7 +170,7 @@ pub(crate) fn timestamp(v: &Value) -> Result<Option<String>> {
         return Err(AppError::new("internal_error", "date value out of range"));
     }
     let normalized = crate::metadata::time::format_timestamp(us / 1_000_000 * 1_000_000)?;
-    Ok((normalized != "1970-01-01T00:00:00Z").then_some(normalized))
+    Ok((normalized != kassiber_envelope::occurred_at::UNKNOWN).then_some(normalized))
 }
 pub(crate) fn expanded(path: &str) -> Result<PathBuf> {
     kassiber_paths::Context::from_env()

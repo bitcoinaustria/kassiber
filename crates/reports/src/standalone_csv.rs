@@ -164,7 +164,7 @@ pub(super) fn project(
             };
             if contains {
                 included.push(row);
-            } else if raw.is_empty() || raw == "1970-01-01T00:00:00Z" {
+            } else if raw.is_empty() || raw == kassiber_envelope::occurred_at::UNKNOWN {
                 undated += 1;
             }
         }

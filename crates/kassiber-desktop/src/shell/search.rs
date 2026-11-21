@@ -659,7 +659,7 @@ pub fn results(app: &App) -> Vec<Item> {
                 };
                 let detail = format!(
                     "{} · {} · {}",
-                    tx.date,
+                    crate::format::tx_date(&tx.date, tx.conf > 0.0),
                     tx.tx_type,
                     crate::format::btc(tx.amount_sat / 1e8, 8, true)
                 );
@@ -685,11 +685,15 @@ pub fn results(app: &App) -> Vec<Item> {
     {
         // appSearch.ts `resolvedTransactionResults`: these two strings are hard-coded
         // English in the web, not in the bundles.
+        let date = crate::format::tx_date(
+            tx["date"].as_str().unwrap_or(""),
+            tx["conf"].as_f64().unwrap_or(0.0) > 0.0,
+        );
         let detail = [
             "Exact txid match",
             tx["account"].as_str().unwrap_or(""),
             tx["type"].as_str().unwrap_or(""),
-            tx["date"].as_str().unwrap_or(""),
+            &date,
         ]
         .iter()
         .filter(|p| !p.is_empty())

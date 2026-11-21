@@ -272,7 +272,7 @@ impl NodeSnapshot {
     }
 }
 
-pub(super) const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+pub(super) const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 
 fn year_out_of_range() -> AppError {
     AppError::new("internal_error", "Lightning timestamp is out of range")

@@ -149,6 +149,15 @@ command with exit code 2.
 
 Not every command produces CSV-friendly output, but list-style commands generally do.
 
+When a source reports no time for a transaction (it is unconfirmed or was
+replaced, or a Lightning or import row has no timestamp), the book stores the
+placeholder `1970-01-01T00:00:00Z` as its `occurred_at`. `json` and `csv` keep
+that stored value; in JSON, `confirmed_at: null` marks the transaction as
+unconfirmed. `table` and `plain` print `unconfirmed` in place of the placeholder,
+or `unknown date` when the row has a `confirmed_at`
+(`kassiber_envelope::occurred_at`). The desktop shows the same wording
+(`format::tx_date`) and leaves such transactions out of the activity chart.
+
 ## Stability
 
 The machine envelope is one of Kassiber's key contracts. `crates/envelope/tests/golden.rs` pins its builders, and the recorded CLI smoke sessions that `scripts/replay-sessions.sh` replays pin whole command envelopes.

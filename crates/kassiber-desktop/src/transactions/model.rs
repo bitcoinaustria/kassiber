@@ -286,6 +286,8 @@ pub struct Row {
     pub txn_id: String,
     pub explorer_id: Option<String>,
     pub date: String,
+    /// `conf > 0`: names a placeholder `date` "Unknown" rather than "Unconfirmed".
+    pub confirmed: bool,
     pub tx_type: String,
     pub wallet: String,
     pub counterparty: String,
@@ -480,6 +482,7 @@ impl Row {
             txn_id: os(v, "externalId").unwrap_or_else(|| s(v, "id")),
             explorer_id: os(v, "explorerId"),
             date: s(v, "date"),
+            confirmed: conf > 0.0,
             tx_type,
             wallet: if account.is_empty() {
                 t("transactions:fallback.unassignedWallet")
