@@ -2039,7 +2039,8 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Bisq refusals that could become reviewed flows if real users hit them
   (the slim importer refuses by trade id instead): redating stored legs whose
   escrow dates moved or were read in another `--timezone`; network partitions
-  of a book with held trades; revising or grouping a pair with a
+  of a book with held or cleared trades (carrying the holds into the
+  partition); revising or grouping a pair with a
   provider-stated miner fee; fiat markets outside the shared fiat list;
   altcoin-market trades as crypto-scope swap legs once the multi-asset
   foundation lands.
