@@ -449,7 +449,8 @@ fn conflict_sets<R: Row>(
     let ids = |txids: &BTreeSet<Physical>| -> Ids {
         row_txid
             .iter()
-            .filter_map(|(id, txid)| txids.contains(txid).then(|| id.clone()))
+            .filter(|(_, txid)| txids.contains(*txid))
+            .map(|(id, _)| id.clone())
             .collect()
     };
     let replaced: BTreeSet<_> = superseded.difference(&contradicted).cloned().collect();
