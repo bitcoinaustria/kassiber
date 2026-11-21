@@ -63,5 +63,17 @@ mod tests {
             error("ui.source_funds.bank_lines.accept", empty),
             "ui.source_funds.bank_lines.accept requires args.line_ids as a list of ids"
         );
+        // The desktop names the suggestion it showed; the acceptance binds to it.
+        let shown = dict([
+            ("line_ids", Value::List(vec![s("L")])),
+            ("transaction_ids", Value::List(vec![s("T")])),
+            ("suggestion_id", s("abc")),
+        ]);
+        let Ok(Command::Accept { suggestion, .. }) =
+            Command::from_args("ui.source_funds.bank_lines.accept", &shown)
+        else {
+            panic!("accept")
+        };
+        assert_eq!(suggestion.as_deref(), Some("abc"));
     }
 }

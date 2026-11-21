@@ -39,7 +39,24 @@ pub fn accept(
     sources: &dyn Sources,
 ) -> Result<Value> {
     crate::export::admitted(conn, || {
-        accept_inner(conn, scope, lines, transactions, sources)
+        accept_inner(conn, scope, lines, transactions, None, sources)
+    })
+}
+
+/// Accept a suggestion the user was shown (`suggestion` is its id): refused
+/// for a new review unless the named pair is still exactly that suggestion,
+/// so a match presented as exact and unique never lands as an explicit
+/// pairing after the purchase or the statements changed.
+pub fn accept_suggestion(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    lines: &[String],
+    transactions: &[String],
+    suggestion: &str,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    crate::export::admitted(conn, || {
+        accept_inner(conn, scope, lines, transactions, Some(suggestion), sources)
     })
 }
 
@@ -48,8 +65,15 @@ fn accept_inner(
     scope: &Scope<'_>,
     lines: &[String],
     transactions: &[String],
+    suggestion: Option<&str>,
     sources: &dyn Sources,
 ) -> Result<Value> {
+    let key = matching::group_key(lines, transactions);
+    if suggestion.is_some_and(|id| id != key) {
+        return Err(invalid(
+            "The suggestion id does not name these bank lines and purchases",
+        ));
+    }
     let (line_rows, tx_rows) = matching::resolve_pairs(conn, scope, lines, transactions)?;
     let currency = line_rows[0].currency.clone();
     let mut bank_total = Money::ZERO;
@@ -101,15 +125,20 @@ fn accept_inner(
             .with_details(dict([("transaction", value(tx, "id").clone())])));
         }
     }
-    let key = matching::group_key(lines, transactions);
     let suggested = matching::suggest_for_book(conn, scope, None)?;
     let found = match value(&suggested, "suggestions") {
         Value::List(items) => items.as_slice(),
         _ => &[],
     };
-    let reasons = found
-        .iter()
-        .find(|item| txt(item, "id") == key)
+    let current = found.iter().find(|item| txt(item, "id") == key);
+    if suggestion.is_some() && current.is_none() {
+        return Err(AppError::new(
+            "conflict",
+            "These bank lines and purchases are no longer suggested as a match",
+        )
+        .with_hint("Review the current suggestions again; the purchase or the statements changed since this one was shown."));
+    }
+    let reasons = current
         .map(|item| value(item, "reasons").clone())
         .unwrap_or_else(|| {
             Value::List(vec![s("accepted as an explicit pairing, not a suggestion")])

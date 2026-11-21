@@ -108,6 +108,12 @@ pub fn open_counts(data: Option<&Value>) -> (usize, usize) {
     (unpriced, ambiguous)
 }
 
+/// The accepted evidence to show, or `None` when its read failed: a failed read is an error
+/// with a retry, never an empty list (that would make existing evidence look absent).
+pub fn accepted_evidence(reads: &Reads) -> Option<Vec<Value>> {
+    (!reads.lines.error()).then(|| accepted(reads.lines.data()))
+}
+
 /// Only lines with an accepted decision count as evidence.
 pub fn accepted(data: Option<&Value>) -> Vec<Value> {
     data.map(|d| {
@@ -189,12 +195,18 @@ pub fn reason_text(reason: &str) -> String {
     reason.to_owned()
 }
 
-/// The decision a suggestion's buttons send: exactly its lines and purchases.
-pub fn decision_args(s: &Value) -> Value {
-    json!({
+/// The decision a suggestion's buttons send: exactly its lines and purchases. Accepting also names
+/// the suggestion shown, so the daemon refuses it for a new review once the pair is no longer that
+/// exact, unique match (instead of recording it as an explicit pairing).
+pub fn decision_args(kind: &str, s: &Value) -> Value {
+    let mut a = json!({
         "line_ids": s.get("line_ids").cloned().unwrap_or(json!([])),
         "transaction_ids": s.get("transaction_ids").cloned().unwrap_or(json!([])),
-    })
+    });
+    if kind == ACCEPT {
+        a["suggestion_id"] = s.get("id").cloned().unwrap_or(Value::Null);
+    }
+    a
 }
 
 /// The import request: the picked file, and the stated account when there is one.
@@ -328,7 +340,12 @@ fn import(a: &mut App, file: &str, account: &str) {
 
 fn decide(a: &mut App, kind: &'static str, s: &Value) {
     clear_notes(a);
-    if super::send(a, kind, decision_args(s), "provenance.sof.bank.decide") {
+    if super::send(
+        a,
+        kind,
+        decision_args(kind, s),
+        "provenance.sof.bank.decide",
+    ) {
         a.provenance.sof.busy.insert("bank.decide");
         super::sent_from(a, "bank.decide");
     }
@@ -379,6 +396,9 @@ pub fn on_reply(a: &mut App, sub: &str, r: &Reply) {
             // Accepted lines become evidence on a reviewed source: every case read refreshes.
             if r.error.is_none() {
                 super::invalidate(a);
+            } else if sub == "decide" {
+                // A refused decision (a suggestion that went stale) asks for the current matches.
+                retry_reads(a);
             }
         }
         _ => {}
@@ -488,6 +508,33 @@ fn suggestion_card(tk: &Tk, i: usize, s: &Value, pending: bool) -> El {
         .child(row().gap(tk.r(0.5)).child(ok).child(no))
 }
 
+/// A failed read: its message, and (unless another failure already offers one) a retry that drops
+/// the panel's failures so the next poll asks again.
+fn load_error(tk: &Tk, retry: Option<&'static str>, message: String) -> El {
+    let alert = row().w_full().gap(tk.r(0.75)).center_y().flex_wrap().child(
+        text(message)
+            .font(tk.tsm(400.0))
+            .color(tk.destructive)
+            .role("alert")
+            .wrap(),
+    );
+    match retry {
+        Some(id) => alert.child(
+            kit::button(
+                tk,
+                id,
+                Variant::Outline,
+                Size::Sm,
+                None,
+                &t("sourceFunds:bank.retry"),
+                true,
+            )
+            .on_press(retry_reads),
+        ),
+        None => alert,
+    }
+}
+
 fn body(app: &App, tk: &Tk) -> El {
     let reads = &app.provenance.sof.bank;
     let p = &app.provenance.sof.case.as_ref().expect("case").bank;
@@ -557,33 +604,11 @@ fn body(app: &App, tk: &Tk) -> El {
     }
     let data = reads.suggest.data();
     if reads.suggest.error() {
-        // A failed read is never shown as "no matches"; retrying drops the failure so the
-        // next poll asks again.
-        let retry = kit::button(
+        out = out.child(load_error(
             tk,
-            "sof-bank-retry",
-            Variant::Outline,
-            Size::Sm,
-            None,
-            &t("sourceFunds:bank.retry"),
-            true,
-        )
-        .on_press(retry_reads);
-        out = out.child(
-            row()
-                .w_full()
-                .gap(tk.r(0.75))
-                .center_y()
-                .flex_wrap()
-                .child(
-                    text(t("sourceFunds:bank.loadError"))
-                        .font(tk.tsm(400.0))
-                        .color(tk.destructive)
-                        .role("alert")
-                        .wrap(),
-                )
-                .child(retry),
-        );
+            Some("sof-bank-retry"),
+            t("sourceFunds:bank.loadError"),
+        ));
     } else if reads.suggest.fetching() || reads.suggest.loading() {
         out = out.child(small(tk, t("sourceFunds:case.loading")).role("status"));
     } else {
@@ -610,7 +635,14 @@ fn body(app: &App, tk: &Tk) -> El {
     if ambiguous > 0 {
         out = out.child(small(tk, tc("sourceFunds:bank.ambiguous", ambiguous, &[])));
     }
-    let ok = accepted(reads.lines.data());
+    let Some(ok) = accepted_evidence(reads) else {
+        return out.child(load_error(
+            tk,
+            // One retry asks both reads again.
+            (!reads.suggest.error()).then_some("sof-bank-lines-retry"),
+            t("sourceFunds:bank.acceptedLoadError"),
+        ));
+    };
     if !ok.is_empty() {
         out = out.child(
             col()
@@ -695,8 +727,13 @@ mod tests {
     #[test]
     fn decisions_send_exactly_the_suggestions_ids() {
         assert_eq!(
-            decision_args(&suggestion()),
+            decision_args(REJECT, &suggestion()),
             json!({"line_ids": ["L1"], "transaction_ids": ["T1"]})
+        );
+        // Accepting binds to the suggestion shown.
+        assert_eq!(
+            decision_args(ACCEPT, &suggestion()),
+            json!({"line_ids": ["L1"], "transaction_ids": ["T1"], "suggestion_id": "abc"})
         );
     }
 
@@ -919,6 +956,22 @@ mod tests {
         assert!(!q.error() && q.errors.is_empty());
     }
 
+    /// A failed accepted-evidence read is an error with a retry, never an empty list, even when
+    /// the suggestions read succeeded; retrying clears the failure so the panel asks again.
+    #[test]
+    fn a_failed_accepted_evidence_read_offers_a_retry() {
+        let mut app = crate::app::tests::quiet_app();
+        let q = &mut app.provenance.sof.bank.lines;
+        q.current = "{}".into();
+        q.errors.insert("{}".into(), "database is locked".into());
+        assert!(!app.provenance.sof.bank.suggest.error());
+        assert_eq!(accepted_evidence(&app.provenance.sof.bank), None);
+        retry_reads(&mut app);
+        let reads = &app.provenance.sof.bank;
+        assert!(!reads.lines.error() && reads.lines.errors.is_empty());
+        assert_eq!(accepted_evidence(reads), Some(vec![]));
+    }
+
     /// Accepted evidence is read from the store's largest page of outgoing lines, not the
     /// default 200 newest.
     #[test]
@@ -950,6 +1003,7 @@ mod tests {
             "accountPlaceholder",
             "accountHelp",
             "loadError",
+            "acceptedLoadError",
             "retry",
         ] {
             assert!(crate::i18n::has(&format!("sourceFunds:bank.{k}")), "{k}");
