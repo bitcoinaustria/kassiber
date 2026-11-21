@@ -123,6 +123,22 @@ fn partition_snapshot(conn: &Connection, profile: &str, args: &Value) -> Result<
             "Select connections from this book for the partition",
         ));
     }
+    // Bank-statement evidence is not split by network: refused, never
+    // dropped or guessed (docs/reference/bank-statements.md).
+    let bank = kassiber_store::optional::bank_statements_present(conn)
+        .map_err(|e| AppError::new(e.code, e.message))?;
+    if bank
+        && !rows(
+            conn,
+            "SELECT id FROM bank_statement_imports WHERE profile_id=? LIMIT 1",
+            [profile],
+        )?
+        .is_empty()
+    {
+        return Err(error("validation", "This book holds bank statements, which a network partition does not carry")
+            .with_hint("Roll back the statement imports first (documents rollback-statement), or keep the book whole.")
+            .with_details(dict([("reason", s("bank_statements_partition"))])));
+    }
     // Held Bisq trades name txids, not rows: a partition cannot carry them.
     // A cleared hold whose trade legs are gone (a rolled-back import) is
     // open again: the same predicate as kassiber_wallets' bisq holds `OPEN`.

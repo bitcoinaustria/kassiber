@@ -8,6 +8,7 @@ mod camt;
 mod csv;
 
 pub mod money;
+pub mod store;
 
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pyjson::Value;

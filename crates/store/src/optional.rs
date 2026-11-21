@@ -11,9 +11,11 @@
 //! every correction since its release; see
 //! `docs/reference/database-compatibility.md#opt-in-schema-groups`.
 //!
-//! Groups: `provider_trade_holds` (provider trades an importer holds for
-//! review, [Bisq](../../../docs/exchanges/bisq.md)). The bank-statement
-//! branch adds its tables the same way; both share this file's shape.
+//! Groups: `bank_statements` (imported bank statements,
+//! `docs/reference/bank-statements.md`; their tables hold personal financial
+//! data, so a book that never imported a statement carries none of them) and
+//! `provider_trade_holds` (provider trades an importer holds for review,
+//! [Bisq](../../../docs/exchanges/bisq.md)).
 use crate::{map_sqlite_error, Result};
 use rusqlite::Connection;
 use serde_json::Value;
@@ -21,10 +23,15 @@ use std::sync::OnceLock;
 
 const FIXTURE: &str = include_str!("../fixtures/optional-schema.json");
 
+/// Imported bank statements (`bank_statements`).
+pub const BANK_STATEMENTS: &str = "bank_statements";
 /// Provider trades held for review (`provider_trade_holds`).
 pub const PROVIDER_TRADE_HOLDS: &str = "provider_trade_holds";
 /// Every group and the table whose presence marks it started.
-const GROUPS: &[(&str, &str)] = &[(PROVIDER_TRADE_HOLDS, "provider_trade_holds")];
+const GROUPS: &[(&str, &str)] = &[
+    (BANK_STATEMENTS, "bank_statement_lines"),
+    (PROVIDER_TRADE_HOLDS, "provider_trade_holds"),
+];
 
 fn fixture() -> &'static Value {
     static FIXTURE_VALUE: OnceLock<Value> = OnceLock::new();
@@ -69,6 +76,26 @@ pub fn ensure(conn: &Connection, group: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The bank-statement table names.
+pub fn bank_statement_tables() -> Vec<&'static str> {
+    objects(BANK_STATEMENTS)
+        .iter()
+        .filter(|o| o[0] == "table")
+        .map(|o| o[1].as_str().expect("name"))
+        .collect()
+}
+
+/// Whether this book has started storing bank statements.
+pub fn bank_statements_present(conn: &Connection) -> Result<bool> {
+    present(conn, BANK_STATEMENTS)
+}
+
+/// Create the bank-statement objects if absent. Call inside the caller's
+/// write transaction, so a failed import leaves no tables behind.
+pub fn ensure_bank_statement_schema(conn: &Connection) -> Result<()> {
+    ensure(conn, BANK_STATEMENTS)
 }
 
 /// Names of every optional object, whether or not this book has them.
@@ -121,6 +148,81 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let book = crate::Book::create(root.path(), None).unwrap();
         (root, book)
+    }
+
+    #[test]
+    fn fresh_books_have_no_bank_tables_and_creation_is_idempotent_and_verified() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        assert!(!bank_statements_present(conn).unwrap());
+        crate::schema::verify(conn).unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        ensure_bank_statement_schema(conn).unwrap();
+        ensure_bank_statement_schema(conn).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        assert!(bank_statements_present(conn).unwrap());
+        assert_eq!(
+            bank_statement_tables(),
+            [
+                "bank_statement_imports",
+                "bank_statement_line_decisions",
+                "bank_statement_lines"
+            ]
+        );
+        crate::schema::verify(conn).unwrap();
+        // The stored definitions are exactly the fixture's.
+        for object in objects(BANK_STATEMENTS) {
+            let sql: String = conn
+                .query_row(
+                    "SELECT sql FROM sqlite_master WHERE type=? AND name=?",
+                    [object[0].as_str().unwrap(), object[1].as_str().unwrap()],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(sql, object[3].as_str().unwrap());
+        }
+    }
+
+    #[test]
+    fn a_partial_or_drifted_bank_set_fails_closed() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        ensure_bank_statement_schema(conn).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        conn.execute_batch("DROP INDEX idx_bank_statement_lines_profile_date")
+            .unwrap();
+        assert!(crate::schema::verify(conn).is_err());
+        conn.execute_batch("CREATE INDEX idx_bank_statement_lines_profile_date ON bank_statement_lines(profile_id)")
+            .unwrap();
+        assert!(crate::schema::verify(conn).is_err());
+        conn.execute_batch("DROP INDEX idx_bank_statement_lines_profile_date")
+            .unwrap();
+        ensure_bank_statement_schema(conn).unwrap();
+        crate::schema::verify(conn).unwrap();
+        conn.execute_batch("ALTER TABLE bank_statement_lines ADD COLUMN extra TEXT")
+            .unwrap();
+        assert!(crate::schema::verify(conn).is_err());
+    }
+
+    /// Each group is expected on its own: a book that uses both verifies,
+    /// and one group's objects never make the other's expected.
+    #[test]
+    fn groups_are_expected_independently() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        ensure(conn, PROVIDER_TRADE_HOLDS).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        assert!(!bank_statements_present(conn).unwrap());
+        crate::schema::verify(conn).unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        ensure_bank_statement_schema(conn).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        crate::schema::verify(conn).unwrap();
+        conn.execute_batch("DROP INDEX idx_provider_trade_holds_profile")
+            .unwrap();
+        assert!(crate::schema::verify(conn).is_err());
     }
 
     #[test]

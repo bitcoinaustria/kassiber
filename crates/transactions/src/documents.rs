@@ -172,7 +172,7 @@ pub(crate) fn timestamp(v: &Value) -> Result<Option<String>> {
     let normalized = crate::metadata::time::format_timestamp(us / 1_000_000 * 1_000_000)?;
     Ok((normalized != "1970-01-01T00:00:00Z").then_some(normalized))
 }
-fn expanded(path: &str) -> Result<PathBuf> {
+pub(crate) fn expanded(path: &str) -> Result<PathBuf> {
     kassiber_paths::Context::from_env()
         .map_err(|e| AppError::new(e.code, e.message))?
         .expand_user(Path::new(path))
@@ -288,7 +288,12 @@ pub fn execute(
     }
     result.map_err(reference_failure)
 }
-fn create(conn: &Connection, scope: &Scope<'_>, args: &Value, raw: &Value) -> Result<Value> {
+pub(crate) fn create(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    raw: &Value,
+) -> Result<Value> {
     let kind = choice(&value(args, "document_type"), TYPES, "document type")?;
     let external = value(args, "external_ref");
     if truthy(&external)
@@ -385,7 +390,7 @@ fn payload(row: &Value) -> Value {
         }),
     )
 }
-fn attach(
+pub(crate) fn attach(
     conn: &Connection,
     scope: &Scope<'_>,
     root: &Path,
@@ -416,9 +421,11 @@ fn attach(
                 format!("Attachment file '{file}' not found"),
             ));
         }
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
+        // Callers that must not keep the file's own name (bank statements,
+        // whose names often carry an IBAN) pass a safe one.
+        let name = get(args, "stored_name")
+            .and_then(string)
+            .or_else(|| path.file_name().and_then(|s| s.to_str()))
             .unwrap_or_default();
         let (destination, relative) =
             crate::attachments::storage(root, scope.profile_id, &id, name)?;
