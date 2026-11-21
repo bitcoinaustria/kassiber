@@ -750,7 +750,8 @@ pub fn run(app: &mut App, action: Action) {
         Action::Nav(href) => go(app, &href),
         Action::Refresh => app.refresh_book(false),
         Action::FullRescan => app.refresh_book(true),
-        Action::AddWallet => go(app, "/connections"),
+        // As from the app menu: the connection dialog opens once Connections shows.
+        Action::AddWallet => crate::native::intent::add_wallet(app),
         Action::ProcessJournals => app.process_journals(),
         Action::Lock => super::overlays::lock(app),
         Action::Settings => app.shell.settings_open = true,
@@ -1077,6 +1078,21 @@ mod tests {
 
     use super::*;
     use crate::i18n::{Lang, set_lang};
+
+    /// "Add wallet" opens the connection dialog ("Open the wallet connection dialog"), not only
+    /// the Connections page.
+    #[test]
+    fn add_wallet_opens_the_connection_dialog() {
+        let mut app = crate::app::tests::quiet_app();
+        // A book is open (tests restore no preferences, so the identity gate would send to `/`).
+        app.onboarding.identity = Some(crate::onboarding::model::Identity {
+            name: "Test".into(),
+            ..Default::default()
+        });
+        run(&mut app, Action::AddWallet);
+        assert_eq!(app.route.path(), "/connections");
+        assert_eq!(app.wallets.add.deferred, Some("descriptor"));
+    }
 
     fn terms(q: &str) -> Vec<String> {
         q.to_lowercase()
