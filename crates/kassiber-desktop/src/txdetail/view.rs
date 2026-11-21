@@ -335,7 +335,7 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             app.prefs.ai_features,
             |a| {
                 a.detail.add_open = false;
-                crate::assistant::open_panel(a);
+                crate::assistant::open_about_detail(a);
             },
         ),
         (
@@ -428,7 +428,7 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             let Some(t) = target else { return false };
             a.detail.add_open = false;
             match t {
-                0 => crate::assistant::open_panel(a),
+                0 => crate::assistant::open_about_detail(a),
                 1 => a.navigate("/review"),
                 2 => crate::assistant::panel::open_surface(a, 2),
                 3 => crate::assistant::panel::open_surface(a, 3),
