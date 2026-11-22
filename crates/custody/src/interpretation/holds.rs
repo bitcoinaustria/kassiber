@@ -152,6 +152,28 @@ fn explicit(payload: &Py) -> Option<bool> {
     }
 }
 
+fn positive_integer(value: &Py) -> bool {
+    matches!(value, Py::Int(n) if positive_sign(n.cmp(&BigInt::from(0))))
+}
+
+/// Whether a payload's confirmation rests on a positive block height. Esplora
+/// and BDK statuses carry the height; the Electrum observers store none, but
+/// write `confirmed` only for a positive history height (the Liquid one keeps
+/// that history). A non-positive or missing height never proves a block.
+fn height_proof(payload: &Py) -> bool {
+    let height = stored::get(stored::get(payload, "status"), "block_height");
+    if !matches!(height, Py::Null) {
+        return positive_integer(height);
+    }
+    if positive_integer(stored::get(stored::get(payload, "history"), "height")) {
+        return true;
+    }
+    stored::text(stored::get(
+        stored::get(payload, "_kassiber_electrum_graph"),
+        "kind",
+    )) == "bitcoin_electrum"
+}
+
 pub(crate) fn capture_confirmation(row: &Value) -> Result<Value, String> {
     let authoritative = evidence::current_observation_of(row).map_err(|e| e.code.to_owned())?;
     if !authoritative {
@@ -181,6 +203,8 @@ pub(super) struct Facts {
     transfer_scope: Option<graph::ownership::TransferScope>,
     scope: Option<Physical>,
     explicit: Option<bool>,
+    /// Whether the stored status ties a confirmation to a positive height.
+    height_proof: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -235,6 +259,7 @@ fn graphless_facts<R: Row + ?Sized>(row: &R) -> Option<Facts> {
         transfer_scope: None,
         scope: None,
         explicit: None,
+        height_proof: false,
     })
 }
 
@@ -248,16 +273,18 @@ pub(super) fn facts<R: Row>(rows: &[R]) -> Vec<Facts> {
         let raw_txid = stored::text(stored::get(&raw, "txid"));
         let invalid_txid =
             !raw_txid.py_strip().is_empty() && graph::strict_txid(&json!(raw_txid)).is_none();
+        let payload = if has_nested_payload(&raw, true) {
+            stored::get(&raw, "tx")
+        } else {
+            &raw
+        };
         (
             Facts {
                 parsed,
                 transfer_scope: None,
                 scope: None,
-                explicit: explicit(if has_nested_payload(&raw, true) {
-                    stored::get(&raw, "tx")
-                } else {
-                    &raw
-                }),
+                explicit: explicit(payload),
+                height_proof: height_proof(payload),
             },
             invalid_txid,
         )
@@ -288,9 +315,37 @@ fn confirmation_states<R: Row>(
     facts: &[Facts],
     closed: bool,
 ) -> Result<BTreeMap<Physical, bool>, String> {
+    observe(rows, facts, closed).map(|observed| observed.states)
+}
+
+/// What the latest current chain observations of one transaction prove.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Proof {
+    /// Confirmed at a positive block height.
+    Confirmed,
+    /// Explicitly unconfirmed.
+    Unconfirmed,
+    /// Confirmed without a height, or latest observations that disagree.
+    Unproven,
+}
+
+/// The confirmation chronology of the rows. `states` is the fail-closed
+/// confirmation every detector reads. `proofs` and `current` keep only the
+/// current chain-observer evidence (open mode): the latest observations of
+/// each transaction and which rows are current observations. Imported
+/// confirmation claims and observations whose latest timestamp ties with a
+/// disagreeing one prove nothing there.
+struct Observed {
+    states: BTreeMap<Physical, bool>,
+    proofs: BTreeMap<Physical, Proof>,
+    current: Vec<bool>,
+}
+
+fn observe<R: Row>(rows: &[R], facts: &[Facts], closed: bool) -> Result<Observed, String> {
     let mut legacy = BTreeMap::new();
-    let mut observed: BTreeMap<Physical, Vec<(i64, bool)>> = BTreeMap::new();
-    for (row, fact) in rows.iter().zip(facts) {
+    let mut observed: BTreeMap<Physical, Vec<(i64, bool, bool)>> = BTreeMap::new();
+    let mut current = vec![false; rows.len()];
+    for (index, (row, fact)) in rows.iter().zip(facts).enumerate() {
         fact.parsed.as_ref().map_err(Clone::clone)?;
         let Some(scope) = fact.scope.clone() else {
             continue;
@@ -307,10 +362,11 @@ fn confirmation_states<R: Row>(
                 if let Some(timestamp) = time::instant(&captured["observed_at"]["$datetime"])
                     .map_err(|e| e.code.to_owned())?
                 {
-                    observed
-                        .entry(scope)
-                        .or_default()
-                        .push((timestamp, truth(&captured["confirmed"])));
+                    observed.entry(scope).or_default().push((
+                        timestamp,
+                        truth(&captured["confirmed"]),
+                        false,
+                    ));
                 }
             }
             // A captured dataclass is authoritative as captured; a different
@@ -322,6 +378,7 @@ fn confirmation_states<R: Row>(
         if !evidence::current_observation_of(row).map_err(|e| e.code.to_owned())? {
             continue;
         }
+        current[index] = !closed;
         let Some(confirmed) = fact.explicit else {
             continue;
         };
@@ -330,26 +387,50 @@ fn confirmation_states<R: Row>(
         else {
             continue;
         };
-        observed
-            .entry(scope)
-            .or_default()
-            .push((timestamp, confirmed));
+        observed.entry(scope).or_default().push((
+            timestamp,
+            confirmed,
+            !closed && fact.height_proof,
+        ));
     }
+    let mut proofs = BTreeMap::new();
     for (scope, facts) in observed {
-        let latest = facts
+        let latest_at = facts
             .iter()
-            .map(|(timestamp, _)| *timestamp)
+            .map(|(timestamp, _, _)| *timestamp)
             .max()
             .expect("observation");
+        let latest: Vec<_> = facts
+            .iter()
+            .filter(|(timestamp, _, _)| *timestamp == latest_at)
+            .collect();
         legacy.insert(
-            scope,
-            facts
-                .iter()
-                .filter(|(timestamp, _)| *timestamp == latest)
-                .all(|(_, confirmed)| *confirmed),
+            scope.clone(),
+            latest.iter().all(|(_, confirmed, _)| *confirmed),
         );
+        if !closed {
+            let found: BTreeSet<_> = latest
+                .iter()
+                .map(|(_, confirmed, height)| match (confirmed, height) {
+                    (false, _) => Proof::Unconfirmed,
+                    (true, true) => Proof::Confirmed,
+                    (true, false) => Proof::Unproven,
+                })
+                .collect();
+            // Disagreeing latest observations stay ambiguous.
+            let proof = if found.len() == 1 {
+                found.into_iter().next().expect("one proof")
+            } else {
+                Proof::Unproven
+            };
+            proofs.insert(scope, proof);
+        }
     }
-    Ok(legacy)
+    Ok(Observed {
+        states: legacy,
+        proofs,
+        current,
+    })
 }
 
 fn canonical_outpoint(value: &Py) -> Option<String> {
@@ -379,44 +460,52 @@ fn conflicts_from_states<R: Row>(
     facts: &[Facts],
     states: &BTreeMap<Physical, bool>,
 ) -> Result<Ids, String> {
-    conflict_sets(rows, facts, states).map(|(losers, _)| losers)
+    conflict_sets(rows, facts, states, None).map(|(losers, _)| losers)
 }
 
 /// Every row whose transaction shares a prevout with another observed
-/// transaction, and the subset of those rows that a confirmed spend replaced.
+/// transaction, and (given open-mode `evidence`) the subset of those rows
+/// that a confirmed spend replaced.
 ///
-/// A transaction is replaced when it is explicitly unconfirmed and some
-/// conflict group it belongs to has exactly one confirmed member, which is
-/// not it. That prevout is spent on chain, so the transaction can only come
-/// back through a reorg that unconfirms the winner; the next run then sees no
-/// confirmed member and holds the whole group again. A group with two or more
-/// confirmed members contradicts the chain and keeps every member a loser
-/// that is never replaced (fail closed), as does a member whose confirmation
-/// was never observed explicitly.
+/// A transaction is replaced only on current chain-observer evidence: its
+/// latest observations agree it is unconfirmed, and a prevout that its own
+/// observed graph spends is also spent by the observed graph of the single
+/// confirmed member of that prevout's conflict group, whose latest
+/// observations agree it is confirmed at a positive height. That prevout is
+/// spent on chain, so the transaction can only come back through a reorg
+/// that unconfirms the winner; the next run then sees no confirmed member and
+/// holds the whole group again. Everything weaker stays a loser: a group with
+/// two or more confirmed members (including an imported confirmation claim),
+/// a member whose status was never observed, observations that disagree at
+/// their latest timestamp, or a confirmation without a height (fail closed).
 fn conflict_sets<R: Row>(
     rows: &[R],
     facts: &[Facts],
     states: &BTreeMap<Physical, bool>,
+    evidence: Option<&Observed>,
 ) -> Result<(Ids, Ids), String> {
     let mut row_txid = BTreeMap::new();
-    let mut explicit_txids = BTreeSet::new();
     let mut outpoints: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
-    for (row, fact) in rows.iter().zip(facts) {
+    // Spenders by prevout as current observations' own graphs show them.
+    let mut observed: BTreeMap<Physical, BTreeSet<Physical>> = BTreeMap::new();
+    for (index, (row, fact)) in rows.iter().zip(facts).enumerate() {
         let parsed = fact.parsed.as_ref().map_err(Clone::clone)?;
         let Some(scope) = fact.scope.clone() else {
             continue;
         };
         row_txid.insert(codec::pystr(row.at("id")), scope.clone());
-        if fact.explicit.is_some() {
-            explicit_txids.insert(scope.clone());
-        }
+        let current = evidence.is_some_and(|evidence| evidence.current[index]);
         if let Some(parsed) = parsed {
             for entry in stored::list(stored::get(parsed, "inputs")) {
                 if let Some(outpoint) = canonical_outpoint(stored::get(entry, "outpoint")) {
-                    outpoints
-                        .entry((scope.0.clone(), scope.1.clone(), outpoint))
-                        .or_default()
-                        .insert(scope.clone());
+                    let key = (scope.0.clone(), scope.1.clone(), outpoint);
+                    if current {
+                        observed
+                            .entry(key.clone())
+                            .or_default()
+                            .insert(scope.clone());
+                    }
+                    outpoints.entry(key).or_default().insert(scope.clone());
                 }
             }
         }
@@ -424,7 +513,7 @@ fn conflict_sets<R: Row>(
     let mut losers = BTreeSet::new();
     let mut superseded = BTreeSet::new();
     let mut contradicted = BTreeSet::new();
-    for txids in outpoints.values() {
+    for (outpoint, txids) in &outpoints {
         if txids.len() < 2 {
             continue;
         }
@@ -436,15 +525,29 @@ fn conflict_sets<R: Row>(
             if confirmed.len() != 1 || !confirmed.contains(txid) {
                 losers.insert(txid.clone());
             }
-            if confirmed.len() > 1 {
-                contradicted.insert(txid.clone());
-            } else if confirmed.len() == 1
-                && states.get(txid) == Some(&false)
-                && explicit_txids.contains(txid)
-            {
-                superseded.insert(txid.clone());
-            }
         }
+        if confirmed.len() > 1 {
+            contradicted.extend(txids.iter().cloned());
+            continue;
+        }
+        let (Some(evidence), [winner]) = (evidence, &confirmed.into_iter().collect::<Vec<_>>()[..])
+        else {
+            continue;
+        };
+        let spenders = observed.get(outpoint);
+        let proven = |txid: &Physical, proof: Proof| {
+            evidence.proofs.get(txid) == Some(&proof)
+                && spenders.is_some_and(|spenders| spenders.contains(txid))
+        };
+        if !proven(winner, Proof::Confirmed) {
+            continue;
+        }
+        superseded.extend(
+            txids
+                .iter()
+                .filter(|txid| *txid != *winner && proven(txid, Proof::Unconfirmed))
+                .cloned(),
+        );
     }
     let ids = |txids: &BTreeSet<Physical>| -> Ids {
         row_txid
@@ -455,6 +558,15 @@ fn conflict_sets<R: Row>(
     };
     let replaced: BTreeSet<_> = superseded.difference(&contradicted).cloned().collect();
     Ok((ids(&losers), ids(&replaced)))
+}
+
+/// The ids of rows a confirmed conflicting spend replaced, derived exactly as
+/// the hold stage derives them. Readiness reads it to leave such rows out of
+/// the prices a book still needs.
+pub fn replaced_transaction_ids(rows: &[crate::snapshot::Record]) -> Result<Ids, String> {
+    let facts = facts(rows);
+    let observed = observe(rows, &facts, false)?;
+    conflict_sets(rows, &facts, &observed.states, Some(&observed)).map(|(_, replaced)| replaced)
 }
 
 #[cfg(test)]
@@ -716,13 +828,14 @@ fn same_rows<R, D>(rows: &[R], other: &[D]) -> bool {
 pub(super) fn compute<R: Row, D: Row>(input: Inputs<'_, R, D>) -> Result<Holds, String> {
     let _span = crate::timing::span("interpretation.holds");
     let facts = facts(input.rows);
-    let states = confirmation_states(input.rows, &facts, false)?;
+    let observed = observe(input.rows, &facts, false)?;
+    let states = &observed.states;
     let (conflict_ids, replaced_ids) = if input.has_chain_events {
-        conflict_sets(input.rows, &facts, &states)?
+        conflict_sets(input.rows, &facts, states, Some(&observed))?
     } else {
         (Ids::new(), Ids::new())
     };
-    let pending_ids = pending_from_states(input.rows, &facts, &states)?;
+    let pending_ids = pending_from_states(input.rows, &facts, states)?;
     // Only looked up; a later row with the same id replaces an earlier one.
     let by_id: crate::fxhash::HashMap<std::borrow::Cow<'_, str>, _> = input
         .rows
@@ -954,13 +1067,26 @@ mod tests {
         }
         assert!(count > 0);
     }
-    /// An outbound row spending `bb..bb:1`; `confirmed` is the synced status
-    /// (`None` writes no status at all).
+    /// A current observation of an outbound row spending `bb..bb:1`;
+    /// `confirmed` is the synced status (`None` writes no status at all) and a
+    /// confirmed one carries a positive block height.
     fn spend(id: &str, txid: char, confirmed: Option<bool>) -> Value {
         spend_outputs(id, txid, confirmed, &[1])
     }
-    /// An outbound row spending `bb..bb:<vout>` for each listed vout.
+    /// [`spend`] spending `bb..bb:<vout>` for each listed vout.
     fn spend_outputs(id: &str, txid: char, confirmed: Option<bool>, vouts: &[u32]) -> Value {
+        let status = confirmed.map(|confirmed| {
+            if confirmed {
+                json!({"confirmed":true,"block_height":100})
+            } else {
+                json!({"confirmed":false})
+            }
+        });
+        observed(unobserved(id, txid, status, vouts), "2026-01-02T00:00:00Z")
+    }
+    /// An outbound row with this raw status and no observation provenance, as
+    /// an import stores it.
+    fn unobserved(id: &str, txid: char, status: Option<Value>, vouts: &[u32]) -> Value {
         let txid = txid.to_string().repeat(64);
         let vin: Vec<_> = vouts
             .iter()
@@ -972,13 +1098,21 @@ mod tests {
         let mut raw = json!({"chain":"bitcoin","network":"main","txid":txid,"vin":vin,
             "vout":[{"n":0,"value_sats":10,
                 "scriptpubkey":"00142222222222222222222222222222222222222222"}]});
-        if let Some(confirmed) = confirmed {
-            raw["status"] = json!({"confirmed":confirmed});
+        if let Some(status) = status {
+            raw["status"] = status;
         }
         json!({"id":id,"workspace_id":"workspace","profile_id":"profile",
             "wallet_id":"wallet-a","direction":"outbound","asset":"BTC","amount":10000,
             "fee":0,"occurred_at":"2026-01-01T00:00:00Z","external_id":txid,
             "raw_json":raw.to_string()})
+    }
+    /// The row as a current chain observation made at `at`.
+    fn observed(mut row: Value, at: &str) -> Value {
+        row["observation_authority_version"] = json!(1);
+        row["observation_graph_hash"] = json!(evidence::graph_hash(&row["raw_json"]).unwrap().0);
+        row["observation_quantity_hash"] = json!(evidence::observed_hash(&row).unwrap().0);
+        row["observation_observed_at"] = json!(at);
+        row
     }
     /// (blocked, quarantine reasons by id, transient) of the hold stage.
     fn hold(rows: &[Value]) -> (Ids, BTreeMap<String, String>, Ids) {
@@ -1024,11 +1158,13 @@ mod tests {
             (ids(["original"]), reasons([]), ids(["original"]))
         );
         let facts = facts(&rows);
-        let states = confirmation_states(&rows, &facts, false).unwrap();
+        let observed = observe(&rows, &facts, false).unwrap();
         assert_eq!(
-            conflict_sets(&rows, &facts, &states).unwrap(),
+            conflict_sets(&rows, &facts, &observed.states, Some(&observed)).unwrap(),
             (ids(["original"]), ids(["original"]))
         );
+        // The ledger detector never settles a conflict.
+        assert_eq!(conflicts(&rows, &facts).unwrap(), ids(["original"]));
     }
 
     #[test]
@@ -1107,6 +1243,176 @@ mod tests {
         // A sibling without an explicit status is not proven unconfirmed.
         let rows = [spend("bump", 'a', Some(true)), spend("unknown", 'c', None)];
         assert_eq!(hold(&rows).1, reasons([("unknown", "conflicting_spend")]));
+    }
+
+    #[test]
+    fn only_current_observer_evidence_settles_a_replaced_spend() {
+        let conflicting = |rows: &[Value]| {
+            hold(rows).1.get("original").cloned() == Some("conflicting_spend".into())
+        };
+        // An imported row claiming a confirmed spend of the same prevout
+        // cannot clear the conflict, whether through its status or a bare
+        // `confirmed_at`.
+        let mut claimed = unobserved("claim", 'a', None, &[1]);
+        claimed["confirmed_at"] = json!("2026-01-01T00:00:00Z");
+        for winner in [
+            unobserved(
+                "claim",
+                'a',
+                Some(json!({"confirmed":true,"block_height":100})),
+                &[1],
+            ),
+            claimed,
+        ] {
+            assert!(conflicting(&[winner, spend("original", 'c', Some(false))]));
+        }
+        // An imported unconfirmed loser is not proven unconfirmed either.
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            unobserved("original", 'c', Some(json!({"confirmed":false})), &[1]),
+        ];
+        assert!(conflicting(&rows));
+        // The winner's confirmation counts only for a prevout its observed
+        // graph spends, not one an imported row of the same txid claims.
+        let elsewhere = observed(
+            unobserved(
+                "bump",
+                'a',
+                Some(json!({"confirmed":true,"block_height":100})),
+                &[5],
+            ),
+            "2026-01-02T00:00:00Z",
+        );
+        let mut claim = unobserved("bump-claim", 'a', None, &[1]);
+        claim["wallet_id"] = json!("wallet-b");
+        assert!(conflicting(&[
+            elsewhere,
+            claim,
+            spend("original", 'c', Some(false))
+        ]));
+        // A stale observation, whose graph changed since it was observed,
+        // proves nothing.
+        let mut stale = spend("bump", 'a', Some(true));
+        stale["observation_graph_hash"] = json!("0".repeat(64));
+        assert!(conflicting(&[stale, spend("original", 'c', Some(false))]));
+        // A confirmation without a positive block height is no proof.
+        for status in [
+            json!({"confirmed":true}),
+            json!({"confirmed":true,"block_height":0}),
+            json!({"confirmed":true,"block_height":-1}),
+        ] {
+            let winner = observed(
+                unobserved("bump", 'a', Some(status), &[1]),
+                "2026-01-02T00:00:00Z",
+            );
+            assert!(conflicting(&[winner, spend("original", 'c', Some(false))]));
+        }
+        // The Electrum observers store no height but confirm only a positive
+        // one.
+        let mut electrum = unobserved("bump", 'a', Some(json!({"confirmed":true})), &[1]);
+        let mut raw: Value = serde_json::from_str(electrum["raw_json"].as_str().unwrap()).unwrap();
+        raw["_kassiber_electrum_graph"] = json!({"kind":"bitcoin_electrum","version":2});
+        electrum["raw_json"] = json!(raw.to_string());
+        let rows = [
+            observed(electrum, "2026-01-02T00:00:00Z"),
+            spend("original", 'c', Some(false)),
+        ];
+        assert_eq!(hold(&rows).1, reasons([]));
+    }
+
+    #[test]
+    fn disagreeing_latest_observations_keep_the_conflict() {
+        // Two wallets observed the original at the same second and disagree.
+        let mut other = spend("original-b", 'c', Some(true));
+        other["wallet_id"] = json!("wallet-b");
+        let other = observed(other, "2026-01-02T00:00:00Z");
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            spend("original", 'c', Some(false)),
+            other,
+        ];
+        assert_eq!(
+            hold(&rows).1,
+            reasons([
+                ("original", "conflicting_spend"),
+                ("original-b", "conflicting_spend")
+            ])
+        );
+        // Disagreeing observations of the winner prove no confirmation.
+        let mut unconfirmed = spend("bump-b", 'a', Some(false));
+        unconfirmed["wallet_id"] = json!("wallet-b");
+        let unconfirmed = observed(unconfirmed, "2026-01-02T00:00:00Z");
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            unconfirmed,
+            spend("original", 'c', Some(false)),
+        ];
+        assert!(hold(&rows).1.contains_key("original"));
+        // A later agreeing observation settles it again.
+        let mut later = spend("original-b", 'c', Some(false));
+        later["wallet_id"] = json!("wallet-b");
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            observed(spend("original", 'c', Some(true)), "2026-01-01T00:00:00Z"),
+            observed(later, "2026-01-03T00:00:00Z"),
+        ];
+        assert_eq!(hold(&rows).1, reasons([]));
+    }
+
+    #[test]
+    fn a_transfer_partner_of_a_replaced_spend_stays_a_transient_dependency() {
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            spend("original", 'c', Some(false)),
+            spend_outputs("receiver", 'e', Some(true), &[7]),
+        ];
+        let pair = json!({"out":{"id":"original"},"in":{"id":"receiver"}});
+        let none = Ids::new();
+        let holds = compute(Inputs {
+            rows: &rows,
+            derivation_rows: &rows,
+            pairs: &[&pair],
+            wallets: &BTreeMap::new(),
+            has_chain_events: true,
+            excluded: &none,
+            blocked: &none,
+            resolved: &none,
+        })
+        .unwrap();
+        let reasons: Vec<_> = holds
+            .quarantines
+            .iter()
+            .map(|q| (codec::text(&q["transaction_id"]), codec::text(&q["reason"])))
+            .collect();
+        assert_eq!(
+            reasons,
+            [("receiver".into(), "transfer_pair_dependency_blocked".into())]
+        );
+        assert_eq!(holds.blocked_ids, ids(["original", "receiver"]));
+        // Transient: it persists no custody-quantity barrier.
+        assert_eq!(holds.transient_ids, ids(["original", "receiver"]));
+    }
+
+    #[test]
+    fn replaced_transaction_ids_match_the_hold_stage() {
+        let rows = [
+            spend("bump", 'a', Some(true)),
+            spend("original", 'c', Some(false)),
+        ];
+        let records: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                let fields = row.as_object().unwrap();
+                let mut names: Vec<_> = fields.keys().cloned().collect();
+                names.sort();
+                let values = names.iter().map(|name| fields[name].clone()).collect();
+                crate::snapshot::Record::new(crate::snapshot::Columns::new(names).unwrap(), values)
+            })
+            .collect();
+        assert_eq!(
+            replaced_transaction_ids(&records).unwrap(),
+            ids(["original"])
+        );
     }
 
     #[test]

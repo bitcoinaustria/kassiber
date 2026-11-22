@@ -70,6 +70,9 @@ that no retraction withdrew (the compatibility Electrum observer keeps no
 history membership to retract from) stays stored as observed; once a
 conflicting spend of the same prevout confirms, journal processing derives it
 as replaced instead of holding it (see [tax quarantines](tax.md#quarantines)).
+The compatibility Electrum observer stores no block height, so it records a
+transaction as confirmed only when its history height is positive; a server's
+own time on a mempool row dates the row but confirms nothing.
 
 Cancellation fences native observer connection creation, each exposed SDK
 network step, repeated incremental BDK scans, and transitions between source

@@ -32,6 +32,7 @@ use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+pub use holds::replaced_transaction_ids;
 pub(crate) use holds::{capture_confirmation, ledger_conflicts, ledger_pending};
 pub use migration::quarantines as migration_quarantines;
 pub(crate) use text::repr as value_repr;

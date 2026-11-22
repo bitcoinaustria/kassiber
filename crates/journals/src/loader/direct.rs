@@ -332,6 +332,79 @@ pub fn load(conn: &Connection, profile: Value, as_of: &str) -> Result<LoadedSnap
     load_read_snapshot(conn, profile, as_of)
 }
 
+/// The profile's transaction rows in the source order, or the legacy order
+/// on a narrow table.
+fn transaction_rows(
+    conn: &Connection,
+    reader: &mut Reader,
+    profile_id: &str,
+) -> Result<Vec<Record>> {
+    match reader.rows(
+        conn,
+        "transactions[]",
+        TRANSACTIONS.as_str(),
+        [profile_id],
+        true,
+    ) {
+        Err(error) if missing_column(&error) => reader.rows(
+            conn,
+            "transactions[]",
+            LEGACY_TRANSACTIONS.as_str(),
+            [profile_id],
+            true,
+        ),
+        rows => rows,
+    }
+}
+
+/// The ids among `candidates` of rows a confirmed conflicting spend replaced,
+/// by the hold stage's own rule over the rows journal processing reads. Only
+/// an explicitly unconfirmed row can be replaced, so without such a candidate
+/// nothing more is read.
+pub fn replaced_among(
+    conn: &Connection,
+    profile_id: &str,
+    candidates: &BTreeSet<String>,
+) -> Result<BTreeSet<String>> {
+    let mut unconfirmed = false;
+    for id in candidates {
+        let raw = conn
+            .query_row(
+                "SELECT raw_json FROM transactions WHERE id=? AND profile_id=?",
+                [id, profile_id],
+                |row| Ok(row.get::<_, String>(0).ok()),
+            )
+            .optional()?
+            .flatten();
+        let Some(raw) = raw.and_then(|raw| serde_json::from_str::<J>(&raw).ok()) else {
+            continue;
+        };
+        let payload = if raw["tx"].is_object() {
+            &raw["tx"]
+        } else {
+            &raw
+        };
+        if payload["status"]["confirmed"] == J::Bool(false) {
+            unconfirmed = true;
+            break;
+        }
+    }
+    if !unconfirmed {
+        return Ok(BTreeSet::new());
+    }
+    struct Memos;
+    impl Drop for Memos {
+        fn drop(&mut self) {
+            kassiber_custody::journal_support::clear_memos();
+        }
+    }
+    let _memos = Memos;
+    let rows = transaction_rows(conn, &mut Reader::default(), profile_id)?;
+    let replaced = kassiber_custody::interpretation::replaced_transaction_ids(&rows)
+        .map_err(Error::Invalid)?;
+    Ok(replaced.intersection(candidates).cloned().collect())
+}
+
 #[allow(clippy::field_reassign_with_default)]
 pub fn load_read_snapshot(
     conn: &Connection,
@@ -359,22 +432,7 @@ pub fn load_read_snapshot(
         ..Default::default()
     };
     let network = network(conn, &profile_id, &mut reader)?;
-    let transactions = match reader.rows(
-        conn,
-        "transactions[]",
-        TRANSACTIONS.as_str(),
-        [&profile_id],
-        true,
-    ) {
-        Err(error) if missing_column(&error) => reader.rows(
-            conn,
-            "transactions[]",
-            LEGACY_TRANSACTIONS.as_str(),
-            [&profile_id],
-            true,
-        ),
-        rows => rows,
-    }?;
+    let transactions = transaction_rows(conn, &mut reader, &profile_id)?;
     confirmation_quantity_refusals(&transactions)?;
     reader.capacity = 0;
     let wallets = reader.rows(conn,"wallets[]","SELECT w.id,w.label,w.kind,w.config_json,w.account_id AS wallet_account_id,COALESCE(a.code,'treasury') AS account_code,COALESCE(a.label,'Treasury') AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=?",[&profile_id],true)?;

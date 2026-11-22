@@ -1269,11 +1269,9 @@ impl RealBook {
                 return Ok(health);
             }
             readiness::next_actions(health, || {
-                kassiber_rates::desktop_command(
+                kassiber_journals::report_blockers::rates_coverage(
                     conn,
-                    "ui.rates.coverage",
                     &dict([("limit", Value::Int(1.into()))]),
-                    &self.rates,
                 )
             })
         })())
@@ -1516,6 +1514,9 @@ impl Book for RealBook {
         use kassiber_envelope::{py_str, truthy};
         if command == "ui.rates.rebuild" {
             return self.rates_rebuild(args);
+        }
+        if command == "ui.rates.coverage" {
+            return kassiber_journals::report_blockers::rates_coverage(self.conn()?, args);
         }
         if command.starts_with("ui.") {
             return kassiber_rates::desktop_command(self.conn()?, command, args, &self.rates);
@@ -2212,11 +2213,9 @@ impl Book for RealBook {
         let conn = self.conn()?;
         let (context, profile) = readiness::scope(conn, None)?;
         let health = readiness::health(conn, &context, profile.as_ref())?;
-        let coverage = kassiber_rates::desktop_command(
+        let coverage = kassiber_journals::report_blockers::rates_coverage(
             conn,
-            "ui.rates.coverage",
             &dict([("limit", Value::Int(10.into()))]),
-            &self.rates,
         )?;
         let snapshot = kassiber_journals::report_blockers::snapshot(conn, health, coverage)?;
         Ok(kassiber_journals::report_blockers::apply_sync_failure(
