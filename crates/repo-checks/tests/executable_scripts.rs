@@ -1,22 +1,9 @@
-//! Tests write the scripts they run with
-//! `kassiber_test_support::write_executable`, never by writing and chmod-ing
-//! the file in-process.
-//!
-//! Exec fails with ETXTBSY while any process holds the file open for writing.
-//! A test that writes a script in-process lets a child forked meanwhile by
-//! another test thread inherit that descriptor until it execs, so the script
-//! intermittently refuses to start. Five commits patched this with local
-//! retry loops (9147119a1, 469b6edf8, b9a86e559, 7dc525a46, d9b0a4439) before
-//! the next test hit it again.
-
 use std::path::{Path, PathBuf};
 
 const FIX: &str = "write test scripts with kassiber_test_support::write_executable \
      (a short-lived child writes the file, so no fork of this process can hold it \
      open for writing and exec cannot fail with ETXTBSY)";
 
-/// Files that may name ETXTBSY: product launches of executables something
-/// outside this process may still be writing, and this check's own subject.
 const ETXTBSY_ALLOWED: &[(&str, &str)] = &[
     (
         "crates/provider-broker/src/executables.rs",
@@ -60,7 +47,6 @@ fn tests_write_their_scripts_through_the_shared_helper() {
     assert!(findings.is_empty(), "\n{}\n", findings.join("\n"));
 }
 
-/// The test of d9b0a4439's parent, which failed on #787's Desktop app job.
 #[test]
 fn the_check_refuses_the_test_that_flaked_on_ci() {
     let source = r##"
@@ -82,7 +68,6 @@ mod tests {
     assert!(findings[0].contains(":10:") && findings[0].contains("write_executable"));
 }
 
-/// b9a86e559's retry loop, which this check replaces.
 #[test]
 fn the_check_refuses_a_local_etxtbsy_retry() {
     let source = r#"
@@ -136,9 +121,11 @@ fn check(relative: &str, source: &str) -> Vec<String> {
             }
         }
     }
-    let test_from = test_context_start(relative, source);
+    let Some(test_from) = test_context_start(relative, source) else {
+        return findings;
+    };
     let lines: Vec<&str> = source.lines().collect();
-    let test_lines = lines.get(test_from..).unwrap_or_default();
+    let test_lines = &lines[test_from..];
     let writes_scripts = test_lines.iter().any(|line| {
         line.contains("#!/") || (line.contains("include_str!(") && line.contains(".sh\")"))
     });
@@ -155,7 +142,9 @@ fn check(relative: &str, source: &str) -> Vec<String> {
         .collect();
     for (offset, line) in test_lines.iter().enumerate() {
         let number = test_from + offset + 1;
-        if line.contains(".mode(0o") && executable_mode(line.split_once(".mode(").unwrap().1) {
+        if line.contains(".mode(0o")
+            && octal_grants_owner_execute(line.split_once(".mode(").unwrap().1)
+        {
             findings.push(format!(
                 "{relative}:{number}: opens a script executable; {FIX}"
             ));
@@ -178,7 +167,7 @@ fn check(relative: &str, source: &str) -> Vec<String> {
             compact.contains(&format!("{call}{target}"))
                 || compact.contains(&format!("{call}&{target}"))
         });
-        if executable_mode(mode) && wrote {
+        if octal_grants_owner_execute(mode) && wrote {
             findings.push(format!(
                 "{relative}:{number}: marks a script it wrote executable; {FIX}"
             ));
@@ -187,20 +176,15 @@ fn check(relative: &str, source: &str) -> Vec<String> {
     findings
 }
 
-/// The first line of test code: the whole file for integration tests and
-/// `tests.rs` modules, otherwise from the first `#[cfg(test)]`.
-fn test_context_start(relative: &str, source: &str) -> usize {
+fn test_context_start(relative: &str, source: &str) -> Option<usize> {
     let name = relative.rsplit('/').next().unwrap();
     if relative.contains("/tests/") || name == "tests.rs" || name.ends_with("_tests.rs") {
-        return 0;
+        return Some(0);
     }
-    source
-        .lines()
-        .position(|line| {
-            let line = line.trim();
-            line.starts_with("#[cfg(test)]") || line.starts_with("#[cfg(all(test")
-        })
-        .unwrap_or(usize::MAX)
+    source.lines().position(|line| {
+        let line = line.trim();
+        line.starts_with("#[cfg(test)]") || line.starts_with("#[cfg(all(test")
+    })
 }
 
 fn first_argument(call: &str) -> String {
@@ -226,8 +210,7 @@ fn first_argument(call: &str) -> String {
         .to_owned()
 }
 
-/// Whether an octal literal at the start of `mode` grants its owner execute.
-fn executable_mode(mode: &str) -> bool {
+fn octal_grants_owner_execute(mode: &str) -> bool {
     let digits: String = mode
         .trim_start()
         .trim_start_matches("0o")

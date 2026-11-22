@@ -1,5 +1,3 @@
-//! Scripts written by `write_executable` run at once while other threads of
-//! this process keep forking, the situation that made exec report `ETXTBSY`.
 #![cfg(unix)]
 
 use std::process::Command;
