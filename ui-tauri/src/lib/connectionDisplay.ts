@@ -179,6 +179,8 @@ export const connectionStatusStyles: Record<ConnectionStatus, string> = {
   syncing:
     "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-400/20",
   idle: "bg-muted text-muted-foreground ring-border",
+  behind:
+    "bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-900/30 dark:text-orange-400 dark:ring-orange-400/20",
   error:
     "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
 };

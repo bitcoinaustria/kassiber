@@ -1181,3 +1181,149 @@ fn the_payload_says_whether_a_file_is_remembered() {
         None
     );
 }
+
+/// Codex 4660318071: an exchange API sync records its run without a file
+/// name (`exchange_api::execute` imports with an empty file path). Such a
+/// run is no file evidence: an API-only wallet stays a live source and its
+/// rows never become a file range.
+#[test]
+fn api_sync_runs_are_no_file_evidence() {
+    let conn = book();
+    wallet(
+        &conn,
+        "kraken",
+        "kraken",
+        r#"{"backend":"kraken","last_synced_at":"2026-07-15T08:00:00Z"}"#,
+    );
+    conn.execute_batch(
+        "INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,imported_at,rows_inserted,first_row_at,last_row_at,rows_read)
+         VALUES('api','ws','p','kraken','json','','2026-07-15T08:00:00Z',1,'2024-01-01T00:00:00Z','2024-01-01T00:00:00Z',1)",
+    )
+    .unwrap();
+    transaction(&conn, "kraken", "k1", "2024-01-01T00:00:00Z");
+    member(&conn, "api", "k1");
+    let live = source(&conn, "kraken", None);
+    assert_eq!((live.source_mode, live.import_count), ("live", 0));
+    assert_eq!((live.freshness_state, live.action), ("current", "none"));
+    assert_eq!(live.file_last_row_at, None);
+    // A file the user imports later still makes it a hybrid.
+    batch(
+        &conn,
+        "kraken",
+        "csv",
+        "2026-07-15T09:00:00Z",
+        Some(("2024-02-01T00:00:00Z", "2024-02-02T00:00:00Z")),
+    );
+    let hybrid = source(&conn, "kraken", None);
+    assert_eq!((hybrid.source_mode, hybrid.import_count), ("hybrid", 1));
+}
+
+/// Codex 4660318084: a sync whose results were degraded (a partial silent
+/// payment scan) stores its time but flags the source as blocking reports.
+/// That time is no complete coverage: the source needs its sync reviewed
+/// until a complete sync clears the flag.
+#[test]
+fn an_incomplete_sync_is_no_coverage() {
+    let conn = book();
+    wallet(
+        &conn,
+        "sp",
+        "silent-payment",
+        r#"{"sp_descriptor":"d","sp_full_history":true,"last_synced_at":"2026-07-15T08:00:00Z"}"#,
+    );
+    conn.execute_batch(
+        "INSERT INTO freshness_source_states(profile_id,source_key,source_type,source_label,status,state,blocking_reports,last_success_at,updated_at)
+         VALUES('p','onchain_wallet:sp','onchain_wallet','sp','blocking_reports','blocking_reports',1,'2026-07-15T08:00:00Z','x')",
+    )
+    .unwrap();
+    let incomplete = source(&conn, "sp", None);
+    assert_eq!(
+        (
+            incomplete.freshness_state,
+            incomplete.reason,
+            incomplete.action
+        ),
+        ("sync_failed", "last_sync_incomplete", "review_sync_error")
+    );
+    assert!(incomplete.needs_action());
+    // A complete sync clears the flag.
+    conn.execute_batch(
+        "UPDATE freshness_source_states SET status='fresh', state='fresh', blocking_reports=0",
+    )
+    .unwrap();
+    assert_eq!(source(&conn, "sp", None).freshness_state, "current");
+}
+
+/// Codex 4660313536: a Bitpanda sync reports `skipped` as counts per
+/// category. The stored outcome keeps that map and reads it back, so the
+/// sync cards still show the skipped-operation notice after a reload; a map
+/// holding anything but counts is not stored.
+#[test]
+fn categorized_skipped_counts_survive_the_stored_sync_outcome() {
+    let conn = book();
+    wallet(&conn, "bitpanda", "bitpanda", r#"{"backend":"bitpanda"}"#);
+    let skipped = dict([
+        ("fiat_only_operations", Value::from(2_i64)),
+        ("non_btc_operations", Value::from(3_i64)),
+        ("internal_btc_moves", Value::from(0_i64)),
+    ]);
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T12:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("imported", Value::from(1_i64)),
+            ("skipped", skipped.clone()),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    let back = kassiber_envelope::get(&record, "skipped").unwrap();
+    for (key, count) in [
+        ("fiat_only_operations", 2_i64),
+        ("non_btc_operations", 3),
+        ("internal_btc_moves", 0),
+    ] {
+        assert_eq!(
+            kassiber_envelope::get(back, key),
+            Some(&Value::from(count)),
+            "{key}"
+        );
+    }
+    // Not counts: dropped, never stored as text.
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T13:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("skipped", dict([("x", s("provider text"))])),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!stored.contains("provider text"), "{stored}");
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    assert_eq!(kassiber_envelope::get(&record, "skipped"), None);
+    // An integer count still reads back as before.
+    let plain = r#"{"exchange_sync":{"at":"2026-01-01T00:00:00Z","status":"ok","skipped":4}}"#;
+    let record = exchange_sync_record(Some(plain)).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&record, "skipped"),
+        Some(&Value::from(4_i64))
+    );
+}
