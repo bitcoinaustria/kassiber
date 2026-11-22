@@ -1,8 +1,8 @@
 //! Fixtures shared by crate tests. Nothing here ships.
 
+use std::io;
 #[cfg(unix)]
-use std::io::{self, Write};
-#[cfg(unix)]
+use std::io::Write;
 use std::path::Path;
 #[cfg(unix)]
 use std::process::{Command, Stdio};
@@ -40,4 +40,11 @@ pub fn write_executable(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<(
             path.display()
         )))
     }
+}
+
+/// Writes `contents` to `path`: outside Unix no exec bit makes a script
+/// runnable and exec does not refuse a file open for writing.
+#[cfg(not(unix))]
+pub fn write_executable(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    std::fs::write(path, contents)
 }
