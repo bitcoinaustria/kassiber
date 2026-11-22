@@ -1911,6 +1911,28 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Quarantine follow-ups
 
+- [ ] Bump calculation semantics to 11 for settled replaced spends. Journals
+  an older build processed keep a stale `conflicting_spend` quarantine for a
+  transaction a confirmed spend replaced until the next input change or
+  `kassiber journals process` ([quarantines](docs/reference/tax.md#quarantines));
+  it fails closed, so it was left out of #807. Done per
+  [database compatibility](docs/reference/database-compatibility.md): the
+  version moves to 11 and a one-shot migration requires 11 for books with a
+  persisted `conflicting_spend` quarantine. Measured blast radius (2026-11-22):
+  the new audit row lands in ~126 checked-in routing-ports and black-box
+  transcripts, the v10 stamp is pinned in ~16 checked-in test books and ~30
+  frozen test-data vector sets (journals, transfers, reports, wallets,
+  workspace) without a write mode, plus recorded sessions.
+- [ ] Let the compatibility Electrum route retract replaced transactions as
+  the Esplora route does. Journals and readiness now settle a transaction a
+  confirmed conflicting spend replaced ([quarantines](docs/reference/tax.md#quarantines)),
+  but the row stays stored at `1970-01-01T00:00:00Z` because the observer keeps
+  no history membership to withdraw it from (regtest RBF probe, 2026-11-21).
+  Its Liquid counterpart still writes `confirmed` from a server time without a
+  positive height; custody does not trust that (it reads the stored history
+  height), but the stored status is wrong. The overview's
+  `fiat.completeness.missingPriceCount` (`crates/workspace/src/overview.rs`)
+  still counts the replaced row; report readiness and rate coverage do not.
 - [ ] Offer a user-triggered "reprice from market rates" for
   `price_currency_mismatch` rows. A book whose currency changed holds every
   row priced in the old currency ([quarantines](docs/reference/tax.md#quarantines));

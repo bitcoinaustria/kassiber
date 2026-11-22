@@ -6996,8 +6996,8 @@
   {
     "id": "R2c-safety-closed-latest",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": ".map(|(timestamp, _)| *timestamp)\n            .max()",
-    "replace": ".map(|(timestamp, _)| *timestamp)\n            .min()",
+    "find": ".map(|(timestamp, _, _)| *timestamp)\n            .max()",
+    "replace": ".map(|(timestamp, _, _)| *timestamp)\n            .min()",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7006,8 +7006,8 @@
   {
     "id": "R2c-safety-closed-tie",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": ".all(|(_, confirmed)| *confirmed),",
-    "replace": ".any(|(_, confirmed)| *confirmed),",
+    "find": "latest.iter().all(|(_, confirmed, _)| *confirmed),",
+    "replace": "latest.iter().any(|(_, confirmed, _)| *confirmed),",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7016,8 +7016,8 @@
   {
     "id": "R2c-safety-closed-latest-filter",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": ".filter(|(timestamp, _)| *timestamp == latest)",
-    "replace": ".filter(|(timestamp, _)| *timestamp <= latest)",
+    "find": ".filter(|(timestamp, _, _)| *timestamp == latest_at)",
+    "replace": ".filter(|(timestamp, _, _)| *timestamp <= latest_at)",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7076,8 +7076,8 @@
   {
     "id": "R2c-safety-conflict-network-key",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": ".entry((scope.0.clone(), scope.1.clone(), outpoint))",
-    "replace": ".entry((scope.0.clone(), String::new(), outpoint))",
+    "find": "let key = (scope.0.clone(), scope.1.clone(), outpoint);",
+    "replace": "let key = (scope.0.clone(), String::new(), outpoint);",
     "expect_failing": [
       "raw_observation_detector_vectors"
     ],
@@ -7246,10 +7246,11 @@
   {
     "id": "R2c-safety-holds-chain-conflicts",
     "file": "crates/custody/src/interpretation/holds.rs",
-    "find": "let conflict_ids = if input.has_chain_events {",
-    "replace": "let conflict_ids = if false {",
+    "find": "let (conflict_ids, replaced_ids) = if input.has_chain_events {",
+    "replace": "let (conflict_ids, replaced_ids) = if false {",
     "expect_failing": [
-      "raw_observation_hold_vectors"
+      "raw_observation_hold_vectors",
+      "a_confirmed_replacement_settles_the_replaced_spend_without_a_quarantine"
     ],
     "rule": "Conflict detection is activated by canonical chain events."
   },
@@ -7862,6 +7863,99 @@
       "raw_observation_hold_vectors"
     ],
     "rule": "Raw hold reasons preserve the exact Python quarantine vocabulary and precedence."
+  },
+  {
+    "id": "R2c-safety-replaced-no-quarantine",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if *reason == REPLACED {",
+    "replace": "if *reason == \"\" {",
+    "expect_failing": [
+      "a_confirmed_replacement_settles_the_replaced_spend_without_a_quarantine",
+      "a_reorg_that_unconfirms_the_replacement_holds_the_group_again"
+    ],
+    "rule": "A transaction a confirmed conflicting spend replaced stays out of booking without a quarantine."
+  },
+  {
+    "id": "R2c-safety-replaced-loser-proven-unconfirmed",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".filter(|txid| *txid != *winner && proven(txid, Proof::Unconfirmed))",
+    "replace": ".filter(|txid| *txid != *winner)",
+    "expect_failing": [
+      "contradicting_or_unobserved_confirmations_still_fail_closed",
+      "only_current_observer_evidence_settles_a_replaced_spend"
+    ],
+    "rule": "Only a sibling whose current observations agree it is unconfirmed counts as replaced."
+  },
+  {
+    "id": "R2c-safety-replaced-winner-proven",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if !proven(winner, Proof::Confirmed) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "only_current_observer_evidence_settles_a_replaced_spend"
+    ],
+    "rule": "Only a winner whose current observations agree it is confirmed settles its siblings; imported confirmation claims do not."
+  },
+  {
+    "id": "R2c-safety-replaced-observed-input",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let current = evidence.is_some_and(|evidence| evidence.current[index]);",
+    "replace": "let current = evidence.is_some();",
+    "expect_failing": [
+      "only_current_observer_evidence_settles_a_replaced_spend"
+    ],
+    "rule": "The shared prevout must appear in the observed graphs, not only in an imported row's."
+  },
+  {
+    "id": "R2c-safety-replaced-needs-height",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(true, false) => Proof::Unproven,",
+    "replace": "(true, false) => Proof::Confirmed,",
+    "expect_failing": [
+      "only_current_observer_evidence_settles_a_replaced_spend"
+    ],
+    "rule": "A confirmation proves a winner only at a positive block height."
+  },
+  {
+    "id": "R2c-safety-replaced-electrum-height",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "    )) == \"bitcoin_electrum\"",
+    "replace": "    )) == \"bitcoin_electrum_never\"",
+    "expect_failing": [
+      "only_current_observer_evidence_settles_a_replaced_spend"
+    ],
+    "rule": "The Electrum graph's stored confirmation rests on a positive history height."
+  },
+  {
+    "id": "R2c-safety-replaced-ambiguous-latest",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "            } else {\n                Proof::Unproven\n            };",
+    "replace": "            } else {\n                Proof::Unconfirmed\n            };",
+    "expect_failing": [
+      "disagreeing_latest_observations_keep_the_conflict"
+    ],
+    "rule": "Latest observations that disagree at one timestamp prove nothing."
+  },
+  {
+    "id": "R2c-safety-replaced-contradiction",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "superseded.difference(&contradicted)",
+    "replace": "superseded.difference(&BTreeSet::new())",
+    "expect_failing": [
+      "contradicting_or_unobserved_confirmations_still_fail_closed"
+    ],
+    "rule": "A transaction in any group with two confirmed spends is never replaced."
+  },
+  {
+    "id": "R2c-safety-replaced-from-chain",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(&replaced_ids, REPLACED),",
+    "replace": "",
+    "expect_failing": [
+      "a_confirmed_replacement_settles_the_replaced_spend_without_a_quarantine",
+      "a_reorg_that_unconfirms_the_replacement_holds_the_group_again"
+    ],
+    "rule": "Replacement is derived before conflict and pending holds and takes precedence over them."
   },
   {
     "id": "R2c-safety-hold-reason-fanout_ids",
