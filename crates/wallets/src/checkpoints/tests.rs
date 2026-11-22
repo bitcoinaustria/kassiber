@@ -344,6 +344,54 @@ fn reports_show_the_latest_per_origin_and_the_worst_state() {
     );
 }
 
+/// Two balances for one wallet, origin, asset and time recorded within the
+/// same second: the later-recorded one is the latest, whatever the random ids.
+#[test]
+fn a_tie_on_time_and_creation_reports_the_later_recorded_balance() {
+    let conn = book();
+    movement(&conn, "a", "2025-01-01T00:00:00Z", 100);
+    processed(&conn);
+    for msat in [90, 100] {
+        record(
+            &conn,
+            "p",
+            &New {
+                wallet_id: "w".into(),
+                asset: "BTC".into(),
+                as_of: "2025-01-02T00:00:00Z".into(),
+                amount_msat: msat,
+                origin: "manual",
+                scope: None,
+                origin_ref: None,
+                attachment_id: None,
+                note: None,
+            },
+        )
+        .unwrap();
+    }
+    // Same creation second, and ids that sort the older row last.
+    conn.execute_batch(
+        "UPDATE balance_checkpoints SET created_at='2025-06-01T00:00:00Z';
+         UPDATE balance_checkpoints SET id='zz-older' WHERE amount_msat=90;
+         UPDATE balance_checkpoints SET id='aa-newer' WHERE amount_msat=100;",
+    )
+    .unwrap();
+    let latest = report(&conn, "p", None, vec![], false).unwrap();
+    let Some(Value::List(rows)) = get(&latest, "checkpoints") else {
+        panic!()
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(get(&rows[0], "id"), Some(&s("aa-newer")));
+    let Some(Value::List(wallets)) = get(&latest, "wallets") else {
+        panic!()
+    };
+    assert_eq!(get(&wallets[0], "status"), Some(&s("matches")));
+    // History lists both, oldest recorded first.
+    let history = super::stored(&conn, "p", None).unwrap();
+    let ids: Vec<_> = history.iter().filter_map(|c| c.id.as_deref()).collect();
+    assert_eq!(ids, ["zz-older", "aa-newer"]);
+}
+
 /// A date covers its whole UTC day: every instant before the next midnight,
 /// fractions of the last second included, and nothing from the next day.
 #[test]
