@@ -1499,6 +1499,27 @@ book than the conversation's. A hint that names a plan tool (component, custody 
 import rollback inverses), carries its own `expected_scope`, or names a kind
 outside the allowlist gets no button; the assistant can still take it back.
 
+Two review decisions get the same treatment. Resolving a held transaction
+(`ui.journals.quarantine.resolve`) names the transaction (the group's root when
+the call names a `root:` group), why it is held when the review page knows the
+reason, the decision (leave it out of the books, or the reviewed price or value
+in the book's currency) and what that means for reports; a call that skips
+reprocessing says reports stay out of date. Applied, it adds what the result
+measured: whether the transaction cleared, how many waiting rows were released,
+and any newly held. Its Undo is `ui.transactions.history.revert`. A custody-gap
+decision (`ui.custody.review.apply`) names the gap as the custody page reads it
+(`ui.custody.gaps.review_context`, a local read: wallets, dates, the amount that
+left and the unexplained rest), the decision in the custody page's words and
+its effect on the books. When the conversation holds the
+`ui.custody.review.plan` result for the same gap, action, classification and
+input version, the card shows that plan's exact amounts and filed-report
+warning; the apply still runs only that plan and fails closed when the book
+moved on. `ui.custody.review.plan` itself is a read and asks nothing. Its
+inverse is a reopen plan, so the applied card has no Undo button. A resolution
+the core would refuse (both or neither target, a price with an exclusion, rate
+and value together, a non-decimal price) and a classification outside the
+custody page's options keep the generic row.
+
 Each desktop chat sends its permission mode as `permission_mode` with every
 `ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
 approve changes that can be undone and stay on this device, and asks before

@@ -1,6 +1,8 @@
 //! The assistant's most common changes as the app's own cards ("answers are actions, not text"):
 //! linking two transactions as one transfer (`ui.transfers.pair`), no longer suggesting a link
-//! (`ui.transfers.dismiss`) and editing a transaction (`ui.transactions.metadata.update`).
+//! (`ui.transfers.dismiss`), editing a transaction (`ui.transactions.metadata.update`), and the
+//! two review decisions of `super::decision`: resolving a held transaction
+//! (`ui.journals.quarantine.resolve`) and a custody-gap review (`ui.custody.review.apply`).
 //!
 //! A waiting call shows what changes in plain terms: the transactions as the open book has them
 //! (`ui.transactions.resolve`, a local read that starts no sync and contacts nothing) and each
@@ -87,6 +89,10 @@ pub enum Action {
         fields: Vec<(&'static str, Value)>,
         reason: Option<String>,
     },
+    /// Resolve a held transaction (`super::decision`).
+    Resolve(super::decision::Resolve),
+    /// Apply a custody-gap review decision (`super::decision`).
+    Custody(super::decision::Custody),
 }
 
 impl Action {
@@ -95,6 +101,16 @@ impl Action {
         match self {
             Action::Pair { out, inn, .. } | Action::Dismiss { out, inn, .. } => vec![out, inn],
             Action::Edit { transaction, .. } => vec![transaction],
+            Action::Resolve(r) => vec![&r.transaction],
+            Action::Custody(_) => vec![],
+        }
+    }
+
+    /// The custody gap the card names.
+    pub fn gap_id(&self) -> Option<&str> {
+        match self {
+            Action::Custody(c) => Some(&c.gap),
+            _ => None,
         }
     }
 
@@ -103,6 +119,8 @@ impl Action {
             Action::Pair { .. } => "assistant:action.pair.title",
             Action::Dismiss { .. } => "assistant:action.dismiss.title",
             Action::Edit { .. } => "assistant:action.edit.title",
+            Action::Resolve(r) => r.title_key(),
+            Action::Custody(c) => c.title_key(),
         })
     }
 
@@ -111,11 +129,14 @@ impl Action {
             Action::Pair { .. } => &I::LINK_2,
             Action::Dismiss { .. } => &I::EYE_OFF,
             Action::Edit { .. } => &I::SQUARE_PEN,
+            Action::Resolve(r) if r.price.is_none() => &I::EYE_OFF,
+            Action::Resolve(_) => &I::SQUARE_PEN,
+            Action::Custody(_) => &I::LINK_2,
         }
     }
 }
 
-fn id_of(v: &Value) -> Option<String> {
+pub(super) fn id_of(v: &Value) -> Option<String> {
     v.as_str()
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -123,7 +144,7 @@ fn id_of(v: &Value) -> Option<String> {
 }
 
 /// An optional string argument: `Some(None)` absent or null, `None` the wrong type.
-fn opt_str(v: &Value) -> Option<Option<String>> {
+pub(super) fn opt_str(v: &Value) -> Option<Option<String>> {
     match v {
         Value::Null => Some(None),
         Value::String(s) => Some(Some(s.clone())),
@@ -238,6 +259,8 @@ pub fn parse(name: &str, args: &Value) -> Option<Action> {
                 reason: opt_str(&args["reason"])?.filter(|r| !r.trim().is_empty()),
             })
         }
+        "ui.journals.quarantine.resolve" => super::decision::parse_resolve(o).map(Action::Resolve),
+        "ui.custody.review.apply" => super::decision::parse_custody(o).map(Action::Custody),
         _ => None,
     }
 }
@@ -324,6 +347,11 @@ pub struct State {
     pub undo: HashMap<String, UndoState>,
     /// Undos in flight: request id → card key.
     pub undo_ids: Vec<(String, String)>,
+    /// Custody gaps read for the cards (`ui.custody.gaps.review_context`), by gap id; `tx` holds
+    /// the gap.
+    pub gaps: HashMap<String, Leg>,
+    /// Gap reads in flight: request id → gap id.
+    pub gap_ids: Vec<(String, String)>,
 }
 
 /// The key of a card's Undo state: the owning message and the call.
@@ -383,6 +411,8 @@ pub fn invalidate_legs(app: &mut App) {
     let st = &mut app.assistant.thread.actions;
     st.legs.clear();
     st.leg_ids.clear();
+    st.gaps.clear();
+    st.gap_ids.clear();
 }
 
 /// The one of `list` whose request is no longer pending: the reply being handled now.
@@ -427,6 +457,26 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 },
             );
         }
+        "assistant.action.gap" => {
+            let mut list = std::mem::take(&mut app.assistant.thread.actions.gap_ids);
+            let id = finished(app, &mut list);
+            app.assistant.thread.actions.gap_ids = list;
+            let Some(id) = id else { return };
+            // The read names one gap; any other answer is no gap.
+            let gap = r.data["gaps"]
+                .as_array()
+                .and_then(|a| a.first())
+                .filter(|g| g["gap_id"].as_str() == Some(id.as_str()))
+                .cloned();
+            app.assistant.thread.actions.gaps.insert(
+                id,
+                Leg {
+                    loading: false,
+                    failed: r.error.is_some() || gap.is_none(),
+                    tx: gap,
+                },
+            );
+        }
         _ => {}
     }
 }
@@ -440,6 +490,8 @@ pub fn poll(app: &mut App) -> bool {
     if st.legs_book != book && !app.assistant.synthetic {
         st.legs.clear();
         st.leg_ids.clear();
+        st.gaps.clear();
+        st.gap_ids.clear();
         st.legs_book = book.clone();
         changed = true;
     }
@@ -447,6 +499,7 @@ pub fn poll(app: &mut App) -> bool {
         return changed;
     }
     let mut want: Vec<String> = vec![];
+    let mut want_gaps: Vec<String> = vec![];
     let consents = app
         .assistant
         .pending_consents
@@ -465,6 +518,12 @@ pub fn poll(app: &mut App) -> bool {
             {
                 want.push(id.to_owned());
             }
+        }
+        if let Some(id) = a.gap_id()
+            && !app.assistant.thread.actions.gaps.contains_key(id)
+            && !want_gaps.iter().any(|w| w == id)
+        {
+            want_gaps.push(id.to_owned());
         }
     }
     let synthetic = app.assistant.synthetic;
@@ -486,13 +545,31 @@ pub fn poll(app: &mut App) -> bool {
             app.assistant.thread.actions.leg_ids.push((req, id));
         }
     }
+    for id in want_gaps {
+        changed = true;
+        let leg = Leg {
+            loading: !synthetic,
+            ..Leg::default()
+        };
+        app.assistant.thread.actions.gaps.insert(id.clone(), leg);
+        // A local read of the one gap (the custody page's own), never a sync.
+        if !synthetic
+            && let Some(req) = app.send(
+                "ui.custody.gaps.review_context",
+                json!({"gap_id": id}),
+                "assistant.action.gap",
+            )
+        {
+            app.assistant.thread.actions.gap_ids.push((req, id));
+        }
+    }
     changed
 }
 
 // ---- Views -----------------------------------------------------------------------------------
 
 /// A label/value row (the proposal's `<dl>` row).
-fn fact(tk: &Tk, label: String, value: El) -> El {
+pub(super) fn fact(tk: &Tk, label: String, value: El) -> El {
     row()
         .w_full()
         .flex_wrap()
@@ -501,7 +578,7 @@ fn fact(tk: &Tk, label: String, value: El) -> El {
         .child(value)
 }
 
-fn value_text(tk: &Tk, s: impl Into<String>) -> El {
+pub(super) fn value_text(tk: &Tk, s: impl Into<String>) -> El {
     text(s.into())
         .font(tk.tsm(500.0).features("'tnum' 1"))
         .color(tk.fg)
@@ -520,7 +597,7 @@ fn reads_as_other_side(tx: &Value, side: Option<LegSide>) -> bool {
 /// (a transfer's sending or receiving leg). The desktop's resolve read does not filter by
 /// direction, so a txid shared by both legs of a self-transfer can read back as the other leg;
 /// then the card says it cannot show the transaction rather than show the wrong one.
-fn leg_view(
+pub(super) fn leg_view(
     app: &App,
     tk: &Tk,
     label: String,
@@ -795,6 +872,14 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
             }
             reason.as_deref()
         }
+        Action::Resolve(r) => {
+            c = super::decision::resolve_body(app, tk, c, r, pending);
+            Some(r.reason.as_str())
+        }
+        Action::Custody(d) => {
+            c = super::decision::custody_body(app, tk, c, d, pending);
+            d.reason.as_deref()
+        }
     };
     if let Some(r) = reason {
         c = c.child(
@@ -882,6 +967,19 @@ pub fn applied_line(app: &App, tk: &Tk, key: &str, msg_id: &str, c: &ToolCall) -
     );
     if let Some(u) = undo_control(app, tk, key, msg_id, c) {
         line = line.child(u);
+    } else if super::tool::undoable(c) {
+        // An inverse the assistant plans first (a custody reopen): no button, only the hint.
+        line = line.child(
+            row()
+                .gap(tk.r(0.25))
+                .center_y()
+                .child(ic(&I::UNDO_2, tk.r(0.75), tk.muted_fg).a11y_hidden())
+                .child(
+                    text(t("assistant:tool.undoHint"))
+                        .font(tk.txs(400.0))
+                        .color(tk.muted_fg),
+                ),
+        );
     }
     line
 }
@@ -931,6 +1029,7 @@ pub fn applied_card(app: &App, tk: &Tk, msg_id: &str, c: &ToolCall) -> Option<El
                     ),
             )
             .child(body(app, tk, &a, false))
+            .children(super::decision::outcome(app, tk, &a, c))
             .child(applied_line(app, tk, &key, msg_id, c)),
     )
 }
@@ -1392,11 +1491,11 @@ mod tests {
     fn cards(lang: crate::i18n::Lang) -> rune::Runtime<App> {
         let mut rt = rune::App::new(rune::AppSpec::new(
             "cards",
-            (900.0, 3200.0),
+            (900.0, 6000.0),
             cards_app,
             cards_view,
         ))
-        .headless_runtime((900.0, 3200.0), rune::Env::new(true, 1.0));
+        .headless_runtime((900.0, 6000.0), rune::Env::new(true, 1.0));
         rt.state.prefs.lang = lang;
         for _ in 0..3 {
             rt.frame(1.0 / 60.0);
@@ -1428,7 +1527,103 @@ mod tests {
             for words in ["Cold wallet", "Kraken"] {
                 assert!(tree.contains(words), "{lang:?}: {words}");
             }
+            // The review decisions: what they touch, the decision and its effect, in words.
+            for key in [
+                "assistant:action.resolve.title.price",
+                "assistant:action.resolve.title.exclude",
+                "assistant:action.resolve.effect.exclude",
+                "assistant:action.resolve.effect.root",
+                "assistant:action.resolve.outcome.cleared",
+                "assistant:action.resolve.heldBecause",
+                "assistant:action.custody.classified",
+                "assistant:action.custody.title.create",
+                "assistant:action.custody.title.classify_residual",
+                "custodyGaps:residual.options.external_gift.label",
+                "custodyGaps:residual.custodyState.external_confirmed",
+                "custodyGaps:status.resolved",
+            ] {
+                assert!(tree.contains(&t(key)), "{lang:?}: {key}");
+            }
+            for words in [
+                "Ledger → Cold wallet",
+                "Bitpanda",
+                // The plan's exact residual, and the price the resolution set.
+                "0.015 BTC",
+                "1840.00 EUR",
+            ] {
+                assert!(tree.contains(words), "{lang:?}: {words}");
+            }
+            assert!(
+                !tree.contains("ui.custody.review.apply")
+                    && !tree.contains("ui.journals.quarantine.resolve"),
+                "{lang:?}: native cards, not tool names"
+            );
         }
+    }
+
+    /// Resolving a held transaction is undone by reverting the edit; a custody decision's inverse
+    /// is a plan the assistant shows first, so its card only says the assistant can take it back.
+    #[test]
+    fn review_decisions_keep_their_undo_paths() {
+        let mut rt = cards(crate::i18n::Lang::En);
+        rt.state.assistant.synthetic = false;
+        assert!(rt.find("asst-action-a9-z2-undo").is_none());
+        let tree = rt.accessibility_json().to_string();
+        assert!(tree.contains(&t("assistant:tool.undoHint")));
+        press(&mut rt, "asst-action-a9-z1-undo");
+        let sent: Vec<_> = rt
+            .state
+            .pending
+            .values()
+            .filter(|(tag, _, _)| *tag == "assistant.action.undo")
+            .map(|(_, k, _)| k.clone())
+            .collect();
+        assert_eq!(sent, vec!["ui.transactions.history.revert".to_owned()]);
+    }
+
+    #[test]
+    fn custody_cards_read_their_gap_once_per_book() {
+        let mut app = quiet_app();
+        with_book(&mut app);
+        app.assistant.pending_consents = vec![crate::assistant::model::Consent {
+            call_id: "c1".into(),
+            name: "ui.custody.review.apply".into(),
+            summary: String::new(),
+            arguments_preview: json!({"action": "dismiss", "gap_id": "gap-1", "expected_input_version": 3}),
+            review_preview: None,
+            reversible: true,
+            egresses: false,
+            can_allow_session: false,
+        }];
+        assert!(poll(&mut app));
+        let reads = |app: &App| {
+            app.pending
+                .values()
+                .filter(|(tag, k, _)| {
+                    k == "ui.custody.gaps.review_context" && *tag == "assistant.action.gap"
+                })
+                .count()
+        };
+        assert_eq!(reads(&app), 1);
+        assert!(!poll(&mut app));
+        assert_eq!(reads(&app), 1, "the gap is read once");
+        // The reply settles the read; an answer about another gap is no gap.
+        app.pending.clear();
+        let reply = |gap: &str| Reply {
+            kind: "ui.custody.gaps.review_context".into(),
+            data: json!({"gaps": [{"gap_id": gap, "asset": "BTC"}]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "assistant.action.gap", &reply("gap-1"));
+        let read = &app.assistant.thread.actions.gaps["gap-1"];
+        assert!(!read.loading && !read.failed && read.tx.is_some());
+        app.assistant.thread.actions.gap_ids = vec![("r-gone".into(), "gap-1".into())];
+        on_reply(&mut app, "assistant.action.gap", &reply("gap-2"));
+        assert!(app.assistant.thread.actions.gaps["gap-1"].failed);
+        invalidate_legs(&mut app);
+        assert!(app.assistant.thread.actions.gaps.is_empty());
     }
 
     #[test]

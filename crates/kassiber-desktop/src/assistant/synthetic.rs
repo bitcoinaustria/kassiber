@@ -519,7 +519,120 @@ fn actions() -> (Vec<Msg>, Vec<Consent>) {
     );
     component.approval = Some("auto".into());
     a8.tool_calls = vec![linked, dismissed, component];
-    (vec![u8, a8, u7, a7], consents)
+
+    // The review decisions: a held transaction resolved (Undo reverts the edit), a custody gap
+    // bridged (its inverse is a plan, so no Undo button), and two waiting on approval, the
+    // custody one after the plan it applies.
+    let u9 = Msg::new(
+        "u9",
+        Role::User,
+        "Price the held Bitpanda buy from the invoice, and keep the Ledger gap as mine.",
+    );
+    let mut a9 = assistant(
+        "a9",
+        "Done: the buy is priced and the March gap is bridged.",
+    );
+    let mut priced = call(
+        "z1",
+        "ui.journals.quarantine.resolve",
+        ToolStatus::Done,
+        json!({"transaction": "tx-2025-0115-buy", "action": "price_override", "fiat_value": "1840.00", "reason": "Bitpanda invoice"}),
+        Some(json!({"kind": "ui.journals.quarantine.resolve", "data": {
+            "transaction_id": "tx-2025-0115-buy", "action": "price_override",
+            "resolution": {"resolution": "price-override", "fiat_value_exact": "1840.00", "history_event_id": "h-1"},
+            "reprocessed": true, "cleared": true,
+            "dependents_cleared": {"count": 2, "transaction_ids": ["a", "b"], "truncated": false},
+            "quarantine_delta": {"status": "measured", "newly_quarantined": {"count": 0, "transaction_ids": [], "truncated": false}},
+            "undo": {"tool": "ui_transactions_history_revert", "arguments": {"transaction": "tx-2025-0115-buy", "event": "h-1"}}}})),
+    );
+    priced.approval = Some("required".into());
+    let mut bridged = call(
+        "z2",
+        "ui.custody.review.apply",
+        ToolStatus::Done,
+        json!({"action": "create", "gap_id": "gap-2025-03", "expected_input_version": 41}),
+        Some(json!({"kind": "ui.custody.review.apply", "data": {
+            "gap_id": "gap-2025-03", "status": "resolved", "retained_msat": 9_990_000_000_i64,
+            "residual_msat": 0, "fee_msat": 10_000_000, "filed_report_impacts": [],
+            "undo": {"tool": "ui_custody_review_plan", "arguments": {"action": "reopen", "gap_id": "gap-2025-03"}}}})),
+    );
+    bridged.approval = Some("required".into());
+    a9.tool_calls = vec![priced, bridged];
+
+    let u10 = Msg::new(
+        "u10",
+        Role::User,
+        "Exclude the unpriced test deposit, and the rest of the June gap was a gift.",
+    );
+    let mut a10 = assistant("a10", "");
+    a10.status = MsgStatus::Streaming;
+    let exclude_args = json!({"group_id": "root:tx-2025-0611-test", "action": "exclude", "reason": "A test deposit the exchange reversed"});
+    let classify_args = json!({"action": "classify_residual", "gap_id": "gap-2025-06", "classification": "external_gift", "expected_input_version": 42, "reason": "Gift to my brother"});
+    let plan = call(
+        "w1",
+        "ui.custody.review.plan",
+        ToolStatus::Done,
+        json!({"action": "classify_residual", "gap_id": "gap-2025-06", "classification": "external_gift"}),
+        Some(json!({"kind": "ui.custody.review.plan", "data": {
+            "action": "classify_residual", "gap_id": "gap-2025-06", "input_version": 42,
+            "classification": "external_gift", "custody_state": "external_confirmed",
+            "residual_msat": 1_500_000_000, "filed_report_impacts": []}})),
+    );
+    let mut exclude = call(
+        "w2",
+        "ui.journals.quarantine.resolve",
+        ToolStatus::AwaitingConsent,
+        exclude_args.clone(),
+        None,
+    );
+    exclude.needs_consent = true;
+    let mut classify = call(
+        "w3",
+        "ui.custody.review.apply",
+        ToolStatus::AwaitingConsent,
+        classify_args.clone(),
+        None,
+    );
+    classify.needs_consent = true;
+    a10.tool_calls = vec![plan, exclude, classify];
+    let mut consents = consents;
+    consents.extend([
+        Consent {
+            call_id: "w2".into(),
+            name: "ui.journals.quarantine.resolve".into(),
+            summary: "Exclude the root of root:tx-2025-0611-test from accounting".into(),
+            arguments_preview: exclude_args,
+            review_preview: None,
+            reversible: true,
+            egresses: false,
+            can_allow_session: false,
+        },
+        Consent {
+            call_id: "w3".into(),
+            name: "ui.custody.review.apply".into(),
+            summary: "Apply custody review".into(),
+            arguments_preview: classify_args,
+            review_preview: None,
+            reversible: true,
+            egresses: false,
+            can_allow_session: false,
+        },
+    ]);
+    (vec![u8, a8, u9, a9, u7, a7, u10, a10], consents)
+}
+
+/// The custody gaps the action cards name, as `ui.custody.gaps.review_context` returns them.
+fn action_gaps() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "gap-2025-03",
+            json!({"gap_id": "gap-2025-03", "status": "resolved", "asset": "BTC", "source_wallet_label": "Ledger", "destination_wallet_labels": ["Cold wallet"], "source_total_msat": "10000000000", "source_fee_msat": "10000000", "residual_msat": "0", "started_at": "2025-03-02T10:00:00Z", "ended_at": "2025-03-04T18:30:00Z"}),
+        ),
+        (
+            "gap-2025-06",
+            json!({"gap_id": "gap-2025-06", "status": "resolved", "asset": "BTC", "source_wallet_label": "Spending", "destination_wallet_labels": [], "source_total_msat": "4000000000", "source_fee_msat": "2000000", "residual_msat": "1500000000", "started_at": "2025-06-11T08:00:00Z", "ended_at": "2025-06-11T08:00:00Z"}),
+        ),
+    ]
 }
 
 /// The transactions the action cards name, as `ui.transactions.resolve` returns them.
@@ -541,6 +654,14 @@ fn action_legs() -> Vec<(&'static str, Value)> {
             "tx-2025-0320-in",
             json!({"id": "tx-2025-0320-in", "date": "2025-03-20 17:40", "account": "Cold wallet", "asset": "BTC", "amountSat": 950_000}),
         ),
+        (
+            "tx-2025-0115-buy",
+            json!({"id": "tx-2025-0115-buy", "date": "2025-01-15 12:05", "account": "Bitpanda", "asset": "BTC", "amountSat": 2_000_000}),
+        ),
+        (
+            "tx-2025-0611-test",
+            json!({"id": "tx-2025-0611-test", "date": "2025-06-11 08:00", "account": "Kraken", "asset": "BTC", "amountSat": 3_000_000, "quarantineReason": "missing_spot_price"}),
+        ),
     ]
 }
 
@@ -560,6 +681,16 @@ pub fn load_actions(a: &mut App) {
                 loading: false,
                 failed: false,
                 tx: Some(tx),
+            },
+        );
+    }
+    for (id, gap) in action_gaps() {
+        st.gaps.insert(
+            id.into(),
+            super::thread::action::Leg {
+                loading: false,
+                failed: false,
+                tx: Some(gap),
             },
         );
     }

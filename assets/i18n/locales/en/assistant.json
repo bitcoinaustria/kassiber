@@ -1131,6 +1131,64 @@
       "done": "Undone",
       "failed": "Couldn't undo: {{message}}",
       "label": "Undo this change"
+    },
+    "resolve": {
+      "title": {
+        "exclude": "Exclude a held transaction",
+        "price": "Set a reviewed price for a held transaction"
+      },
+      "transaction": "Held transaction",
+      "root": "Held transaction (others wait on it)",
+      "heldBecause": "Held because",
+      "decision": "Decision",
+      "exclude": "Leave it out of the books",
+      "rate": "Reviewed price",
+      "perUnit": "{{rate}} {{currency}} per {{asset}}",
+      "total": "Reviewed value",
+      "effect": {
+        "exclude": "Kassiber leaves this transaction out of reports and tax calculations. It stays in the book, and you can include it again.",
+        "price": "Kassiber values this transaction at this price instead of a market rate and records it as a manual price.",
+        "root": "Transactions that wait on it are released once it clears.",
+        "noReprocess": "Journals aren't reprocessed with this change, so reports stay out of date until they are."
+      },
+      "outcome": {
+        "cleared": "No longer held.",
+        "stillHeld": "Still held after reprocessing.",
+        "notMeasured": "Journals weren't reprocessed, so whether it cleared isn't known yet.",
+        "released_one": "{{count}} transaction that waited on it was released too.",
+        "released_other": "{{count}} transactions that waited on it were released too.",
+        "newlyHeld_one": "{{count}} other transaction is now held.",
+        "newlyHeld_other": "{{count}} other transactions are now held.",
+        "value": "Value in the books"
+      }
+    },
+    "custody": {
+      "title": {
+        "create": "Confirm the bitcoin stayed yours",
+        "dismiss": "Dismiss a custody gap suggestion",
+        "revise": "Activate a corrected custody bridge",
+        "reopen": "Reopen a reviewed custody bridge",
+        "classify_residual": "Classify a custody gap's remaining amount"
+      },
+      "gap": "Custody gap",
+      "loading": "Reading the custody gap…",
+      "missing": "This custody gap isn't in the open book.",
+      "decision": {
+        "create": "Same bitcoin, still yours",
+        "dismiss": "Not the same bitcoin",
+        "revise": "Activate the corrected bridge",
+        "reopen": "Reopen for correction"
+      },
+      "effect": {
+        "create": "Kassiber treats the carried amount as still yours, so it keeps its cost basis. What stays in custody suspense keeps blocking final cost basis until you classify it.",
+        "dismiss": "Kassiber stops suggesting this gap for its current evidence, and changed evidence reopens it. No bitcoin is carried across the gap.",
+        "revise": "The corrected bridge replaces the reopened one in the same history; the earlier version is kept, not deleted. What stays in custody suspense keeps blocking final cost basis until you classify it.",
+        "reopen": "The current bridge is superseded, not deleted. Reports stay blocked until you activate a revised bridge."
+      },
+      "retained": "Carried as yours",
+      "suspense": "Stays in custody suspense",
+      "classified": "Amount classified",
+      "statusNow": "Gap status"
     }
   }
 }
