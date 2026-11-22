@@ -39,6 +39,8 @@ pub struct Card {
     pub read: Read<Value>,
     /// The book refresh cycle the read follows (`App::book_generation`).
     pub generation: u64,
+    /// The asset a manual balance of this connection is in (`checkpoint_asset`).
+    pub asset: &'static str,
     pub add: Option<AddForm>,
     pub removing: bool,
     pub remove_error: Option<String>,
@@ -119,13 +121,36 @@ pub fn differs(app: &App, id: &str) -> bool {
 /// The `balance.differs` row (notificationProjection.ts): (title, body, details). It names the
 /// wallet, never an amount; it says "waits for the next sync" only when every wallet in it
 /// waits. Wallet names follow the privacy mode as the other rows' labels do.
-pub fn condition_text(diffs: &[WalletDiff], privacy: Privacy) -> (String, String, Vec<String>) {
-    let shown = |l: &str| match privacy {
-        Privacy::HideAmounts if l.chars().any(|c| c.is_ascii_digit()) => {
+/// A wallet name as the privacy mode shows it: hidden under Hide all, and under Hide amounts
+/// when it carries digits (a name can hold a balance).
+fn masked_name(name: &str, privacy: Privacy) -> String {
+    match privacy {
+        Privacy::HideAll => crate::theme::MASK.to_owned(),
+        Privacy::HideAmounts if name.chars().any(|c| c.is_ascii_digit()) => {
             crate::theme::MASK.to_owned()
         }
-        _ => l.to_owned(),
-    };
+        _ => name.to_owned(),
+    }
+}
+
+/// `diffs` with each wallet name as the privacy mode shows it.
+pub fn shown(diffs: &[WalletDiff], privacy: Privacy) -> Vec<WalletDiff> {
+    diffs
+        .iter()
+        .map(|d| WalletDiff {
+            wallet: masked_name(&d.wallet, privacy),
+            ..d.clone()
+        })
+        .collect()
+}
+
+/// The open book's differing wallets for the Reports notice, named as the privacy mode allows.
+pub fn readiness_diffs(app: &App) -> Vec<WalletDiff> {
+    shown(&book_diffs(app), app.prefs.privacy)
+}
+
+pub fn condition_text(diffs: &[WalletDiff], privacy: Privacy) -> (String, String, Vec<String>) {
+    let shown = |l: &str| masked_name(l, privacy);
     let pending = diffs.iter().all(|d| d.pending);
     let base = if pending {
         "chrome:notifications.condition.balanceWaits"
@@ -153,7 +178,8 @@ pub fn condition_route(diffs: &[WalletDiff]) -> String {
     }
 }
 
-/// The Reports notice (`buildReportReadiness`): (title, detail), naming each wallet once.
+/// The Reports notice (`buildReportReadiness`): (title, detail), naming each wallet once. Pass
+/// the names through `shown` first (`readiness_diffs`).
 pub fn readiness_text(diffs: &[WalletDiff]) -> Option<(String, String)> {
     if diffs.is_empty() {
         return None;
@@ -216,13 +242,27 @@ fn card_rows(card: &Card) -> Vec<&Value> {
         .unwrap_or_default()
 }
 
-/// The Add balance request: the trimmed fields, the note only when given.
-pub fn add_args(wallet: &str, f: &AddForm) -> Value {
+/// The asset of a manual balance on connection `c`: LBTC on Liquid, BTC everywhere else (a
+/// Lightning node's balance is BTC).
+pub fn checkpoint_asset(c: &Conn) -> &'static str {
+    if c.asset_label() == "LBTC" {
+        "LBTC"
+    } else {
+        "BTC"
+    }
+}
+
+/// The Add balance request: the trimmed fields, the connection's asset, the note only when
+/// given.
+pub fn add_args(wallet: &str, asset: &str, f: &AddForm) -> Value {
     let mut args = json!({
         "wallet": wallet,
         "btc": f.btc.text.trim(),
         "date": f.date.text.trim(),
     });
+    if !asset.is_empty() {
+        args["asset"] = json!(asset);
+    }
     let note = f.note.text.trim();
     if !note.is_empty() {
         args["note"] = json!(note);
@@ -260,14 +300,15 @@ pub fn read_card(app: &mut App, wallet: &str) {
 }
 
 /// Every frame on a connection's page: read when the card has no read for it, and again after
-/// a book refresh cycle.
+/// a book refresh cycle; keep the connection's asset for Add balance.
 pub fn poll(app: &mut App, c: &Conn) -> bool {
     let card = &app.wallets.checks.card;
-    if card.wallet != c.id || card.generation != app.book_generation {
+    let read = card.wallet != c.id || card.generation != app.book_generation;
+    if read {
         read_card(app, &c.id);
-        return true;
     }
-    false
+    app.wallets.checks.card.asset = checkpoint_asset(c);
+    read
 }
 
 fn toggle_history(a: &mut App) {
@@ -291,6 +332,7 @@ fn can_save(f: &AddForm) -> bool {
 
 fn submit_add(a: &mut App) {
     let wallet = a.wallets.checks.card.wallet.clone();
+    let asset = a.wallets.checks.card.asset;
     let Some(f) = a.wallets.checks.card.add.as_mut() else {
         return;
     };
@@ -299,7 +341,7 @@ fn submit_add(a: &mut App) {
     }
     f.pending = true;
     f.error = None;
-    let args = add_args(&wallet, f);
+    let args = add_args(&wallet, asset, f);
     a.send("ui.wallets.checkpoints.add", args, "wallets.checks.add");
 }
 
@@ -927,15 +969,67 @@ mod tests {
             ..AddForm::default()
         };
         assert_eq!(
-            add_args("w1", &f),
-            json!({"wallet": "w1", "btc": "0.12345678", "date": "2024-12-31"})
+            add_args("w1", "BTC", &f),
+            json!({"wallet": "w1", "btc": "0.12345678", "date": "2024-12-31", "asset": "BTC"})
         );
         assert!(can_save(&f));
         f.note = TextEdit::new(" statement ");
-        assert_eq!(add_args("w1", &f)["note"], "statement");
+        assert_eq!(add_args("w1", "BTC", &f)["note"], "statement");
         f.pending = true;
         assert!(!can_save(&f));
         assert!(!can_save(&AddForm::default()));
+    }
+
+    /// A Liquid connection's balance is LBTC; every other connection's (a Lightning node
+    /// included) is BTC. The dialog sends it, so the checkpoint compares with the right postings.
+    #[test]
+    fn add_sends_the_connection_s_asset() {
+        let liquid = Conn::parse(&json!({"id": "l1", "kind": "descriptor", "chain": "liquid"}));
+        let node = Conn::parse(&json!({"id": "n1", "kind": "core-ln"}));
+        let chain = Conn::parse(&json!({"id": "w1", "kind": "descriptor"}));
+        assert_eq!(checkpoint_asset(&liquid), "LBTC");
+        assert_eq!(checkpoint_asset(&node), "BTC");
+        assert_eq!(checkpoint_asset(&chain), "BTC");
+        let f = AddForm {
+            btc: TextEdit::new("0.5"),
+            date: TextEdit::new("2024-12-31"),
+            ..AddForm::default()
+        };
+        assert_eq!(add_args("l1", "LBTC", &f)["asset"], "LBTC");
+        // The card keeps the asset of the connection its page shows.
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.checks.card.wallet = "l1".into();
+        app.wallets.checks.card.generation = app.book_generation;
+        poll(&mut app, &liquid);
+        assert_eq!(app.wallets.checks.card.asset, "LBTC");
+    }
+
+    /// The Reports notice names wallets as the privacy mode allows: none under Hide all, and
+    /// under Hide amounts not a name that carries digits.
+    #[test]
+    fn readiness_names_follow_the_privacy_mode() {
+        crate::i18n::set_lang(crate::i18n::Lang::En);
+        let diffs = [diff("w1", "Kraken", false), diff("w2", "Cold 21", false)];
+        let (_, normal) = readiness_text(&shown(&diffs, Privacy::Normal)).unwrap();
+        assert!(normal.starts_with("Kraken, Cold 21: "), "{normal}");
+        let (_, amounts) = readiness_text(&shown(&diffs, Privacy::HideAmounts)).unwrap();
+        assert!(
+            amounts.starts_with(&format!("Kraken, {}: ", crate::theme::MASK)),
+            "{amounts}"
+        );
+        let (_, all) = readiness_text(&shown(&diffs, Privacy::HideAll)).unwrap();
+        assert!(
+            all.starts_with(&format!("{}: ", crate::theme::MASK)),
+            "{all}"
+        );
+        assert!(!all.contains("Kraken") && !all.contains("Cold"), "{all}");
+        // The page reads them through the app's mode.
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.checks.book = Some(report(json!([
+            {"wallet_id": "w1", "wallet": "Kraken", "status": "differs", "reason": ""},
+        ])));
+        app.prefs.privacy = Privacy::HideAll;
+        assert_eq!(readiness_diffs(&app)[0].wallet, crate::theme::MASK);
     }
 
     #[test]
