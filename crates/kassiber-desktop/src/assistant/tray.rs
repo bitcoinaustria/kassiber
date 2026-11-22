@@ -372,6 +372,57 @@ mod tests {
         assert_eq!(s.screen["entity_id"], "tx-5");
     }
 
+    /// The tray as the composer draws it, headless, in both languages: every chip and remove
+    /// button is labelled (the scene check's own rules) and no string is missing.
+    #[test]
+    fn the_tray_is_labelled_and_translated() {
+        fn tray_app() -> App {
+            let mut app = crate::app::tests::quiet_app();
+            app.route = crate::app::Route("/transactions".into());
+            app.prefs.ai_features = true;
+            app.assistant.focus = Some(pin("tx-2", true));
+            app.txs.filters.chart = Some(sel());
+            app
+        }
+        fn tray_view(app: &App, _cx: &mut rune::Cx<App>) -> rune::El {
+            crate::i18n::set_lang(app.prefs.lang);
+            let tk = app.tk();
+            rune_kit::root(
+                rune::col()
+                    .w_full()
+                    .padding(16.0)
+                    .child(super::super::composer::context_tray(app, &tk, false)),
+                vec![],
+            )
+        }
+        for lang in [crate::i18n::Lang::En, crate::i18n::Lang::De] {
+            let mut rt = rune::App::new(rune::AppSpec::new(
+                "tray",
+                (900.0, 400.0),
+                tray_app,
+                tray_view,
+            ))
+            .headless_runtime((900.0, 400.0), rune::Env::new(true, 1.0));
+            rt.state.prefs.lang = lang;
+            for _ in 0..3 {
+                rt.frame(1.0 / 60.0);
+            }
+            let found = crate::checks::a11y_findings(&rt.accessibility_json(), &rt.elements());
+            assert!(found.is_empty(), "{lang:?}: {found:?}");
+            let missing: Vec<String> = crate::i18n::missing()
+                .into_iter()
+                .filter(|k| k.contains("assistant:panel."))
+                .collect();
+            assert!(missing.is_empty(), "{lang:?}: {missing:?}");
+            let tree = rt.accessibility_json().to_string();
+            assert!(
+                tree.contains("2025-03-05"),
+                "{lang:?}: the pinned item's chip"
+            );
+            assert!(!tree.contains("tx-2"), "{lang:?}: no raw id on screen");
+        }
+    }
+
     /// On the app: the open transaction joins on any route once the book is known, a removal
     /// keeps it out until another opens, and a pin wins over it.
     #[test]
