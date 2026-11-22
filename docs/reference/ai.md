@@ -1386,7 +1386,12 @@ model context as exact local data, so answers use program-derived facts. That au
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
 
-An item pinned with "Ask about this" is read too. When the desktop sends
+An item the user asked about (pinned with "Ask about this" or the transaction
+panel's Assistant surface) is read too. A transaction that is only open in the
+detail panel is shared as its typed entity and not read: in a check with four
+models through a CLI proxy, every model read the shown transaction itself when
+the question was about it, while reading it up front made unrelated questions
+slower and larger. When the desktop sends
 `read_pinned_entity: true` with a `screen_context` whose entity the daemon kept
 (a `transaction` of the open book, or a `custody_gap`), the router runs that
 item's own review read first: `ui.transactions.review_context` or
@@ -1399,8 +1404,9 @@ local reference or safety note) and names them in `omitted_sections`, so the
 model can read one with the tool's own flags. The flag is opt-in: a request
 without it, a request that is not for Kassiber's own system prompt, or a pin the
 daemon unbound because the item is not in the open book reads exactly as before.
-The desktop sends it only when the pin is that turn's context, not when a page
-request or evidence continuation brings its own.
+The desktop sends it only when that item is the turn's context, not when a page
+request or evidence continuation brings its own, and not after the user removed
+the item from the tray.
 When one of those reads needs current reports or journal-derived state,
 Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
@@ -1669,15 +1675,26 @@ it.
 The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
-read tool. An "Ask about this" action pins a typed entity for the following
-turns until the user removes it, and the daemon reads the pinned item for the
-model each turn (see the pre-read router above); the item's identity travels
-only as that typed entity, never interpolated into the prompt text. The
+read tool. The desktop composer shows what the next question shares in a
+"The assistant sees:" tray, built from the app's typed state by one function
+(`tray::build` in `crates/kassiber-desktop/src/assistant/tray.rs`) that also
+produces the `screen_context`, so the chips and the request cannot disagree.
+In order it lists the item (a transaction pinned with "Ask about this" for the
+following turns until the user removes it; with nothing pinned, the
+transaction open in the detail panel on any page, which the user can remove
+until another transaction opens), the Transactions chart selection (as the
+bounded filters `chart_flows`, `chart_segment` and `chart_bucket`, removable
+until the selection changes), and the page (not removable). The item adds its
+typed entity and capability pack to the page's route and filters; a pinned
+item is also read for the model each turn (see the pre-read router above). Chip
+labels name the item by date and kind and stay on the device; the item's
+identity travels only as that typed entity, never interpolated into the prompt
+text, and nothing is sent before the user presses Send. The
 transaction panel's Assistant surface pins the transaction on screen the same
-way without replacing the user's draft. A question queued
+way as "Ask about this" without replacing the user's draft. A question queued
 while an answer streams, or held until the open book's provider settings have
-seeded the reasoning effort, keeps the pin that was active when it was
-submitted and the page it was asked on (route, capability hints, and counts
+seeded the reasoning effort, keeps the item and chart selection the tray showed
+when it was submitted and the page it was asked on (route, capability hints, and counts
 with the book state they were counted on, which the daemon still checks);
 navigating, or pinning or clearing another item, before it runs does not
 retarget it.
@@ -1686,7 +1703,8 @@ Everything the assistant sends belongs to a book, and one rule binds it
 (`BookStamp` in `ui-tauri/src/components/ai/bookStamp.ts`). A stamp is the
 daemon session plus the book's workspace and profile ids. It is captured
 synchronously at the user's action that creates the content, before any
-await: the submit for a typed question or held edit, the click for a pin, a
+await: the submit for a typed question or held edit (and for the open
+transaction the tray shows with it), the click for a pin, a
 page's handoff or a reopened chat, the click before the picker for an
 attached file. A page's handoff takes the book of the page's scope boundary
 (the book its data came from) when it has one, otherwise the open book. The

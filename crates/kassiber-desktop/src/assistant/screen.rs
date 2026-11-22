@@ -111,12 +111,9 @@ pub fn context_for(pathname: &str, search: &str) -> Value {
     let ps = params(search);
     let m = match path.as_str() {
         "/transactions" => {
+            // No entity: the transaction open in the detail panel travels as the tray's item
+            // (`tray::build`), which the user can see and remove.
             let mut m = ctx("/transactions", &["transactions"]);
-            entity(
-                &mut m,
-                "transaction",
-                first_safe(&ps, &["tx", "transaction", "transactionId"]),
-            );
             let tab = get(&ps, "tab")
                 .filter(|t| TRANSACTION_TABS.contains(t))
                 .map(|t| json!(t));
@@ -259,25 +256,31 @@ pub fn context_for(pathname: &str, search: &str) -> Value {
     Value::Object(m)
 }
 
-/// The page on screen now as the web's URL would name it: the route, Settings while its dialog
-/// is open, and the open transaction (`?tx=`) on Transactions.
+/// The context of a pinned or open transaction (the tray's item): its typed entity on the route
+/// whose capability pack reads it, Review for a held one. None for an unsafe id.
+pub fn item_context(tx_id: &str, quarantine: bool) -> Option<Value> {
+    let id = safe_entity_id(Some(tx_id))?;
+    let mut m = if quarantine {
+        ctx("/review", &["review"])
+    } else {
+        ctx("/transactions", &["transactions"])
+    };
+    entity(&mut m, "transaction", Some(id));
+    Some(Value::Object(m))
+}
+
+/// The page on screen now: the route with its own query, or Settings while its dialog is open.
 pub fn current_location(app: &App) -> (String, String) {
     if app.shell.settings_open {
         return ("/settings".into(), String::new());
     }
-    let full = &app.route.0;
     let path = app.route.path().to_owned();
-    let mut search = full
+    let search = app
+        .route
+        .0
         .split_once('?')
         .map(|(_, q)| q.split('#').next().unwrap_or("").to_owned())
         .unwrap_or_default();
-    if path == "/transactions"
-        && get(&params(&search), "tx").is_none()
-        && let Some(id) = app.detail.open.as_ref().and_then(|o| o.id())
-    {
-        let pre = if search.is_empty() { "" } else { "&" };
-        search = format!("{search}{pre}tx={id}");
-    }
     (path, search)
 }
 
@@ -371,11 +374,19 @@ mod tests {
 
     #[test]
     fn routes_map_to_their_packs() {
+        // The route's `tx` is not the page's: the open transaction is the tray's item.
         let t = context_for("/transactions", "?tx=abc&tab=pricing&quick=nope");
         assert_eq!(
             t,
-            json!({"route": "/transactions", "capabilities": ["transactions"], "entity_type": "transaction", "entity_id": "abc", "filters": {"tab": "pricing"}})
+            json!({"route": "/transactions", "capabilities": ["transactions"], "filters": {"tab": "pricing"}})
         );
+        assert_eq!(
+            item_context("abc", true),
+            Some(
+                json!({"route": "/review", "capabilities": ["review"], "entity_type": "transaction", "entity_id": "abc"})
+            )
+        );
+        assert_eq!(item_context("../x", false), None);
         assert_eq!(context_for("/reports", "year=1999")["filters"], Value::Null);
         assert_eq!(
             context_for("/reports", "year=2024")["filters"],

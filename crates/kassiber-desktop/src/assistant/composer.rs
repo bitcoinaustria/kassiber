@@ -1,7 +1,7 @@
 //! The composer (components/ai-02.tsx): the frosted `kb-composer-glass` box with the chat's
 //! files, the auto-growing text field, the toolbar (attach, model picker, send) and the starter
-//! suggestions; plus the file card (ChatAttachmentCard.tsx) and the "About" focus chip
-//! (AssistantFocusChip.tsx).
+//! suggestions; plus the file card (ChatAttachmentCard.tsx) and the "The assistant sees" tray
+//! (`tray`), which replaced the web's single "About" chip (AssistantFocusChip.tsx).
 //!
 //! Return or the send button sends (`sendPrompt`); while an answer streams the same button
 //! queues the question and a Stop button ends the answer. Shift+Return breaks the line.
@@ -18,7 +18,7 @@ use rune::{Color, Cx, El, Icon, Key, KeyEvent, Shadow, TextEdit, Tx, col, row, t
 use serde_json::json;
 
 use super::model::{AttachmentView, ChatFile, FileState, Role};
-use super::{chat, picker};
+use super::{chat, picker, tray};
 use crate::app::{App, ToastTone};
 use crate::i18n::{t, tr};
 use crate::icons as I;
@@ -536,55 +536,72 @@ pub fn fill_prompt(s: &mut App, prompt: &str) {
     s.assistant.parked = None;
 }
 
-/// `AssistantFocusChip`: "About" and the pinned item, removable.
-pub fn focus_chip(app: &App, tk: &Tk, centered: bool) -> Option<El> {
-    let f = app.assistant.focus.as_ref()?;
-    let remove = tr("assistant:panel.removeFocus", &[("label", &f.label)]);
-    let chip = row()
+/// "The assistant sees: …" (`tray::build`): one chip per part the next question shares, in the
+/// order it is listed there; each but the page has a remove button.
+pub fn context_tray(app: &App, tk: &Tk, centered: bool) -> El {
+    let heading = t("assistant:panel.seesLabel");
+    let mut list = row()
+        .min_w(0.0)
+        .flex_wrap()
+        .gap(tk.r(0.25))
+        .center_y()
+        .role("list")
+        .label(heading.clone());
+    for (i, c) in tray::build(app).chips.into_iter().enumerate() {
+        list = list.child(context_chip(tk, i, c));
+    }
+    let mut r = row()
+        .w_full()
+        .gap(tk.r(0.375))
+        .px(tk.r(0.25))
+        .center_y()
+        .child(text(heading).font(tk.txs(400.0)).color(tk.muted_fg))
+        .child(list);
+    if centered {
+        r = r.justify_center();
+    }
+    r
+}
+
+fn context_chip(tk: &Tk, i: usize, c: tray::Chip) -> El {
+    let removable = c.part != tray::Part::Page;
+    let mut chip = row()
+        .key(format!("asst-context-{i}"))
         .min_w(0.0)
         .gap(tk.r(0.25))
         .center_y()
         .radius(999.0)
         .border(1.0, tk.border.alpha(tk.border.a * 0.7))
         .border_layout()
-        .fill(tk.muted.alpha(0.6))
+        .fill(tk.muted.alpha(if removable { 0.6 } else { 0.3 }))
         .py(tk.r(0.125))
-        .pr(tk.r(0.125))
+        .pr(tk.r(if removable { 0.125 } else { 0.5 }))
         .pl(tk.r(0.5))
+        .role("listitem")
+        .label(c.label.clone())
         .child(
-            text(f.label.clone())
+            text(c.label.clone())
                 .font(tk.txs(500.0))
-                .color(tk.fg)
+                .color(if removable { tk.fg } else { tk.muted_fg })
                 .truncate(),
-        )
-        .child(
+        );
+    if removable {
+        let part = c.part;
+        chip = chip.child(
             row()
-                .key("asst-focus-remove")
+                .key(format!("asst-context-remove-{i}"))
                 .size(tk.r(1.0), tk.r(1.0))
                 .center()
                 .radius(999.0)
                 .hover(tk.muted)
                 .role("button")
-                .label(remove)
+                .label(tr("assistant:panel.removeContext", &[("label", &c.label)]))
                 .focusable(true)
-                .on_press(|s: &mut App| s.assistant.focus = None)
+                .on_press(move |s: &mut App| tray::remove(s, part))
                 .child(ic(&I::X, tk.r(0.75), tk.muted_fg)),
         );
-    let mut r = row()
-        .w_full()
-        .gap(tk.r(0.375))
-        .px(tk.r(0.25))
-        .center_y()
-        .child(
-            text(t("assistant:panel.focusLabel"))
-                .font(tk.txs(400.0))
-                .color(tk.muted_fg),
-        )
-        .child(chip);
-    if centered {
-        r = r.justify_center();
     }
-    Some(r)
+    chip
 }
 
 /// `ChatAttachmentCard`: a type tile, the name, the type and size (or `note`), and a remove

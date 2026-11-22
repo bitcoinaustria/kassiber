@@ -107,9 +107,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
             .px(tk.r(1.25))
             .pt(tk.r(1.5))
             .pb(tk.r(0.75));
-        if let Some(chip) = composer::focus_chip(app, tk, false) {
-            dock = dock.child(chip.mb(tk.r(0.5)));
-        }
+        dock = dock.child(composer::context_tray(app, tk, false).mb(tk.r(0.5)));
         dock = dock.child(composer::view(
             app,
             cx,
