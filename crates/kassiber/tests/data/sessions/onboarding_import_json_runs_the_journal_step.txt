@@ -13,7 +13,7 @@
 + freshness_source_states ("p", "journals:p", "journals", "Journal refresh", "blocking_reports", "blocking_reports", "book_network_review_required", 1, 0, NULL, NULL, 1, NULL, "<now>", "book_network_review_required", "This book contains incompatible network histories", "error", "{\"phase\":\"error\"}", "{}", "<now>")
 + import_batch_transactions ("<uuid>", "<uuid>", 1)
 + import_batch_transactions ("<uuid>", "<uuid>", 2)
-+ import_batches ("<uuid>", "w", "p", "imports", "json", "rows.json", NULL, "<now>", 1, 2, 0, 0, "2025-01-03T10:00:00Z", "2025-02-10T14:30:00Z", 2, "f88549dd69ca56f19c18407d0e7ccf663d790c371eff32a66d5dc3cf66ce8d78", 412)
++ import_batches ("<uuid>", "w", "p", "imports", "json", "rows.json", NULL, "<now>", 1, 2, 0, 0)
 - profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 1, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
 + profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 2, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
 + transactions ("<uuid>", "w", "p", "imports", "funding-001", NULL, "7d762ee104b06263e50e1dfff6b3c509b4108f5d5348c9bfbce8702741a43e50", "2025-01-03T10:00:00Z", NULL, "inbound", "BTC", 50000000000, 0, 0, "EUR", 44000.0, 22000.0, "import", "44000", "22000.0", "generic_import", NULL, NULL, "2025-01-03T10:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "deposit", "Initial funding", NULL, NULL, 0, "{\"amount\": 0.5, \"asset\": \"BTC\", \"description\": \"Initial funding\", \"direction\": \"inbound\", \"fee\": 0, \"fiat_rate\": 44000, \"kind\": \"deposit\", \"occurred_at\": \"2025-01-03T10:00:00Z\", \"txid\": \"funding-001\"}", NULL, NULL, NULL, NULL, "<now>")
