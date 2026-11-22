@@ -534,16 +534,19 @@ pub(super) fn normalize(
             legs,
         });
     }
-    // Every BTC leg per wallet, oldest first, for withdrawal fee checks.
+    // Every BTC leg per wallet, oldest first, for withdrawal fee checks. A
+    // leg without a wallet id belongs to a wallet whose balance is unknown.
     let mut ledger = Ledger::new();
+    let mut unidentified = false;
     for operation in &relevant {
         for leg in operation.legs.iter().filter(|l| l.holding == Holding::Btc) {
-            if let Some(wallet) = &leg.wallet {
-                ledger.entry(wallet.clone()).or_default().push((
+            match &leg.wallet {
+                Some(wallet) => ledger.entry(wallet.clone()).or_default().push((
                     leg.occurred,
                     leg.balance_after.clone(),
                     leg.id.clone(),
-                ));
+                )),
+                None => unidentified = true,
             }
         }
     }
@@ -554,8 +557,14 @@ pub(super) fn normalize(
             None => internal += 1,
         }
     }
-    // A missing or ambiguous figure leaves the history intact.
-    let outcome = match balance(&ledger) {
+    // A missing or ambiguous figure leaves the history intact; so does a BTC
+    // leg of an unidentified wallet, whose movements the total would miss.
+    let total = if unidentified {
+        Err(BalanceGap::new("incomplete", None))
+    } else {
+        balance(&ledger)
+    };
+    let outcome = match total {
         Ok(balance) => (balance, None),
         Err(gap) => (None, Some(gap)),
     };
