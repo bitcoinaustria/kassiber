@@ -103,12 +103,22 @@ impl State {
     }
 }
 
-/// Keeps the state bound to the shown connection; expires the "Copied" label.
+/// The node connection the current route shows.
+fn current(app: &App) -> Option<Conn> {
+    let id = super::route_id(app)?;
+    super::conn::find(app, &id).filter(Conn::is_node)
+}
+
+/// Keeps the state bound to the shown connection; expires the "Copied" label; reads the
+/// balance checks (local, docs/reference/balance-checkpoints.md) a node's warning leads to.
 pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     let Some(id) = super::route_id(app) else {
         return false;
     };
     let mut changed = false;
+    if let Some(c) = current(app) {
+        changed |= crate::wallets::checks::poll(app, &c);
+    }
     if app.wallets.node.conn_id.as_deref() != Some(id.as_str()) {
         app.wallets.node = State {
             conn_id: Some(id),
@@ -206,8 +216,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
-/// Escape closes the channel sheet (the innermost overlay).
+/// Escape closes the channel sheet (the innermost overlay), or the balance checks' Add balance
+/// dialog.
 pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
+    if current(app).is_some() && crate::wallets::checks::on_key(app, ev) {
+        return true;
+    }
     if app.wallets.node.open_channel.is_some() && matches!(ev.key, Key::Escape) {
         app.wallets.node.open_channel = None;
         return true;
@@ -341,5 +355,33 @@ mod tests {
         assert_eq!(app.wallets.node.live.as_ref().unwrap()["alias"], "node 2");
         assert!(!app.wallets.node.fetching);
         assert!(app.wallets.node.asked.is_empty());
+    }
+
+    /// A node's page reads its balance checks (where a balance warning leads), and Escape
+    /// closes its Add balance dialog.
+    #[test]
+    fn a_node_page_reads_and_closes_its_balance_checks() {
+        let mut app = crate::app::tests::quiet_app();
+        app.reads.insert(
+            "ui.overview.snapshot".into(),
+            Reply {
+                kind: "ui.overview.snapshot".into(),
+                data: json!({"connections": [{"id": "n1", "kind": "core-ln", "label": "Node"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: Default::default(),
+            },
+        );
+        app.route = crate::app::Route("/connections/n1".into());
+        let mut tx = Tx::default();
+        poll(&mut app, &mut tx);
+        assert_eq!(app.wallets.checks.card.wallet, "n1");
+        app.wallets.checks.card.add = Some(Default::default());
+        let escape = KeyEvent {
+            key: Key::Escape,
+            mods: rune::Mods::default(),
+        };
+        assert!(on_key(&mut app, &escape, &mut tx));
+        assert!(app.wallets.checks.card.add.is_none());
     }
 }

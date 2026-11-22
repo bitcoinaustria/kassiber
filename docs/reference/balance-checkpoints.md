@@ -99,9 +99,9 @@ the latest checkpoints. With `history` every checkpoint is listed.
 | --- | --- | --- |
 | CLI | `wallets checkpoints list [--wallet W] [--history]` | `wallets checkpoints add --wallet W --btc N --date D [--asset BTC|LBTC] [--note T] [--attachment ID]`, `remove --id ID`, `import --file F`, `export [--wallet W] [--file F]` |
 | Daemon | `ui.wallets.checkpoints.list {wallet?, history?}` (read) | `.add {wallet, btc, date, asset?, note?, attachment?, expected_input_version?}`, `.remove {id, expected_input_version?}`, `.import {csv, source?}`, `.export {wallet?}` (operator) |
-| Desktop | the **Balance checks** card on a connection's page, a mismatch mark in the wallets list, one Needs attention row naming the wallets whose reported balance differs (or waits for the next sync) | **Add balance** on the card; **View history** lists every checkpoint with **Remove** for stored ones |
+| Desktop | the **Balance checks** card on a connection's page (Lightning node pages included), a mismatch mark in the wallets list, one Needs attention row naming the wallets whose reported balance differs (or waits for the next sync) | **Add balance** on the card (LBTC on a Liquid connection, BTC elsewhere); **View history** lists every checkpoint with **Remove** for stored ones |
 | Assistant and MCP | `ui_wallets_checkpoints_list` ([AI](ai.md#balance-checkpoints)), without import references or attachment ids | `ui_wallets_checkpoints_add`, `ui_wallets_checkpoints_remove`: consented, bound to `expected_input_version` from the read |
-| Report readiness | `ui.report.blockers` adds a `balance_checkpoint_mismatch` warning listing the differing checkpoints; `ready` and the blockers are unchanged. The desktop Reports page shows a "Reported balance differs" notice naming the wallets, after the journal, quarantine and completeness notices | |
+| Report readiness | `ui.report.blockers` adds a `balance_checkpoint_mismatch` warning listing the differing checkpoints; `ready` and the blockers are unchanged. The desktop Reports page shows a "Reported balance differs" notice naming the wallets (masked as the privacy mode masks names), after the journal, quarantine and completeness notices | |
 
 All five kinds and leaves are Rust only. The daemon never receives a path:
 the desktop sends CSV text it read itself, and `export` returns the CSV
