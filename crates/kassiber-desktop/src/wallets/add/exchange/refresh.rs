@@ -20,18 +20,34 @@ pub struct RefreshRun {
     pub session: u64,
     /// Exchange wallets with a key still to sync: (id, label).
     pub queue: std::collections::VecDeque<(String, String)>,
-    /// The one syncing now (its label).
-    pub running: Option<String>,
+    /// The exchanges' status read that lists the targets is out.
+    pub awaiting_status: bool,
+    /// The one syncing now: (id, label).
+    pub running: Option<(String, String)>,
     /// Any sync of this run finished (the book re-reads at the end).
     pub synced: bool,
+}
+
+impl RefreshRun {
+    /// Still listing or syncing: its requests can still answer.
+    pub fn active(&self) -> bool {
+        self.awaiting_status || self.running.is_some() || !self.queue.is_empty()
+    }
 }
 
 /// After a title-bar refresh: every exchange API source with a key, one sync each, like the
 /// wallet page's Sync now (a running job, then a result or a failure).
 pub fn sync_after_refresh(app: &mut App) {
+    // A run still listing or syncing in this session already covers every exchange: another
+    // click does not replace it while its requests can still answer (Codex 4660319612).
+    let current = &st(app).refresh;
+    if current.session == app.session && current.active() {
+        return;
+    }
     let scope = app.expected_scope();
     stm(app).refresh = RefreshRun {
         session: app.session,
+        awaiting_status: true,
         ..RefreshRun::default()
     };
     app.send(
@@ -43,7 +59,11 @@ pub fn sync_after_refresh(app: &mut App) {
 
 /// The connection syncing now, for the notification center's running job.
 pub fn refresh_running(app: &App) -> Option<&str> {
-    st(app).refresh.running.as_deref()
+    st(app)
+        .refresh
+        .running
+        .as_ref()
+        .map(|(_, label)| label.as_str())
 }
 
 /// The exchange wallets a refresh syncs: a key is stored and the backend is configured.
@@ -65,7 +85,7 @@ fn refresh_next(app: &mut App) {
     let next = stm(app).refresh.queue.pop_front();
     match next {
         Some((id, label)) => {
-            stm(app).refresh.running = Some(label);
+            stm(app).refresh.running = Some((id.clone(), label));
             let scope = app.expected_scope();
             app.send(
                 "ui.connections.exchange.sync",
@@ -82,17 +102,36 @@ fn refresh_next(app: &mut App) {
     }
 }
 
+/// The wallet page's exchange card, when it shows `wallet`: its last error follows this sync and
+/// its status is re-read, as after the card's own sync (Codex 4660319617).
+fn card_follows(app: &mut App, wallet: &str, r: &Reply) {
+    if wallet.is_empty() || st(app).sync.wallet.as_deref() != Some(wallet) {
+        return;
+    }
+    stm(app).sync.last_error = r
+        .error
+        .as_ref()
+        .map(|m| ErrorInfo::from_reply(&r.error_detail, Some(m)));
+    stm(app).statuses.push_back(wallet.to_owned());
+    app.send(
+        "ui.connections.exchange.status",
+        json!({"wallet": wallet}),
+        "wallets.exchange.status",
+    );
+}
+
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     if st(app).refresh.session != app.session {
         return;
     }
     if tag == "wallets.exchange.refresh_status" {
+        stm(app).refresh.awaiting_status = false;
         if r.error.is_none() {
             stm(app).refresh.queue = refresh_targets(&r.data).into();
         }
         return refresh_next(app);
     }
-    let label = stm(app).refresh.running.take().unwrap_or_default();
+    let (wallet, label) = stm(app).refresh.running.take().unwrap_or_default();
     match &r.error {
         // Another book is open now: the rest of the run is not this book's.
         Some(_) if r.error_detail["code"] == "stale_context" => {
@@ -135,12 +174,125 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             app.toast(ToastTone::Error, &title, Some(msg), Some("exchange-sync"));
         }
     }
+    card_follows(app, &wallet, r);
     refresh_next(app);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reply(kind: &str, data: Value, error: Option<&str>) -> Reply {
+        Reply {
+            kind: kind.into(),
+            data,
+            error: error.map(str::to_owned),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    fn status(ids: &[&str]) -> Reply {
+        let rows: Vec<Value> = ids
+            .iter()
+            .map(|id| json!({"wallet_id": id, "wallet": id, "backend_configured": true, "has_api_key": true}))
+            .collect();
+        reply(
+            "ui.connections.exchange.status",
+            json!({"connections": rows}),
+            None,
+        )
+    }
+
+    fn running(app: &App) -> Option<String> {
+        refresh_running(app).map(str::to_owned)
+    }
+
+    /// Codex 4660319610: opening an exchange form while a title-bar run syncs keeps the run.
+    #[test]
+    fn a_form_reset_keeps_the_refresh_run() {
+        let mut app = crate::app::tests::quiet_app();
+        sync_after_refresh(&mut app);
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_status",
+            &status(&["a", "b"]),
+        );
+        super::super::reset(&mut app, "kraken");
+        assert_eq!(running(&app).as_deref(), Some("a"));
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_sync",
+            &reply("ui.connections.exchange.sync", json!({}), None),
+        );
+        assert_eq!(running(&app).as_deref(), Some("b"), "the queue survived");
+    }
+
+    /// Codex 4660319612: a second title-bar refresh while a run still syncs does not replace
+    /// it; the running run already covers every exchange.
+    #[test]
+    fn a_second_refresh_leaves_the_running_run_alone() {
+        let mut app = crate::app::tests::quiet_app();
+        sync_after_refresh(&mut app);
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_status",
+            &status(&["a", "b"]),
+        );
+        sync_after_refresh(&mut app);
+        assert_eq!(running(&app).as_deref(), Some("a"));
+        assert_eq!(st(&app).refresh.queue.len(), 1);
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_sync",
+            &reply("ui.connections.exchange.sync", json!({}), None),
+        );
+        assert_eq!(running(&app).as_deref(), Some("b"));
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_sync",
+            &reply("ui.connections.exchange.sync", json!({}), None),
+        );
+        assert_eq!(running(&app), None);
+        // Once it ended, the next click starts a run again.
+        sync_after_refresh(&mut app);
+        assert!(st(&app).refresh.awaiting_status);
+    }
+
+    /// Codex 4660319617: a title-bar sync of the wallet whose card is open re-reads its status
+    /// and replaces the card's last error, as the card's own sync does.
+    #[test]
+    fn a_title_bar_sync_refreshes_the_open_cards_status() {
+        let mut app = crate::app::tests::quiet_app();
+        stm(&mut app).sync = super::super::SyncState {
+            wallet: Some("a".into()),
+            last_error: Some(ErrorInfo::default()),
+            ..Default::default()
+        };
+        sync_after_refresh(&mut app);
+        on_reply(&mut app, "wallets.exchange.refresh_status", &status(&["a"]));
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_sync",
+            &reply("ui.connections.exchange.sync", json!({}), None),
+        );
+        assert!(st(&app).sync.last_error.is_none(), "the old error is gone");
+        assert!(
+            st(&app).statuses.iter().any(|w| w == "a"),
+            "its status is re-read"
+        );
+        sync_after_refresh(&mut app);
+        on_reply(&mut app, "wallets.exchange.refresh_status", &status(&["a"]));
+        on_reply(
+            &mut app,
+            "wallets.exchange.refresh_sync",
+            &reply("ui.connections.exchange.sync", Value::Null, Some("refused")),
+        );
+        assert!(
+            st(&app).sync.last_error.is_some(),
+            "a failed sync shows on the card"
+        );
+    }
 
     #[test]
     fn a_refresh_syncs_only_exchange_wallets_with_a_key() {

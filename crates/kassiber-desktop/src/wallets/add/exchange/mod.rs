@@ -126,6 +126,8 @@ pub fn reset(app: &mut App, exchange: &str) {
     let tests = std::mem::take(&mut s.tests);
     let syncs = std::mem::take(&mut s.syncs);
     let statuses = std::mem::take(&mut s.statuses);
+    // A title-bar run outlives the form (Codex 4660319610).
+    let refresh = std::mem::take(&mut s.refresh);
     let form = s.form + 1;
     app.wallets.add.exchange = State {
         exchange: exchange.to_owned(),
@@ -133,6 +135,7 @@ pub fn reset(app: &mut App, exchange: &str) {
         tests,
         syncs,
         statuses,
+        refresh,
         form,
         ..State::default()
     };

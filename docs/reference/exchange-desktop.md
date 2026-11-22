@@ -123,10 +123,13 @@ proxies; the desktop never sends it.
   contacts the exchange; the title-bar refresh runs `ui.connections.exchange.sync`
   once per exchange wallet with a key after the book refresh. Each of those
   requests carries the originating book's `expected_scope`, and the sequence
-  stops when the book or daemon session changes. Each of those syncs shows
-  like Sync now in the notification list: a running connection sync, then a
-  result, or a failed-sync condition on that connection. Startup, timers and
-  menu-driven book refreshes do not.
+  stops when the book or daemon session changes. Another title-bar refresh while the
+  sequence still lists or syncs leaves it running rather than starting over, and
+  opening an exchange form does not end it. Each of those syncs shows like Sync
+  now in the notification list (a running connection sync, then a result, or a
+  failed-sync condition on that connection) and on an open wallet's exchange
+  card, whose status is re-read. Startup, timers and menu-driven book refreshes
+  do not.
 
 ## Verification
 
