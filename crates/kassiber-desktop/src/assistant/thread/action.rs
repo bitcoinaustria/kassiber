@@ -23,6 +23,7 @@ use serde_json::{Value, json};
 use crate::app::{App, Reply};
 use crate::assistant::chat::{Book, book_now};
 use crate::assistant::model::{ToolCall, ToolStatus};
+use crate::custody::link_model::LegSide;
 use crate::i18n::{t, tc, tr};
 use crate::icons as I;
 use crate::theme::Tk;
@@ -507,12 +508,34 @@ fn value_text(tk: &Tk, s: impl Into<String>) -> El {
         .wrap()
 }
 
-fn leg_view(app: &App, tk: &Tk, label: String, id: &str) -> El {
+/// Whether a resolved row is the other leg than the change uses (`side`).
+fn reads_as_other_side(tx: &Value, side: Option<LegSide>) -> bool {
+    match (crate::custody::link_model::leg_from_tx(tx, None), side) {
+        (Some(l), Some(want)) => l.side != want,
+        _ => false,
+    }
+}
+
+/// One transaction a card names. `side`: the direction the change resolves this reference with
+/// (a transfer's sending or receiving leg). The desktop's resolve read does not filter by
+/// direction, so a txid shared by both legs of a self-transfer can read back as the other leg;
+/// then the card says it cannot show the transaction rather than show the wrong one.
+fn leg_view(
+    app: &App,
+    tk: &Tk,
+    label: String,
+    id: &str,
+    side: Option<crate::custody::link_model::LegSide>,
+) -> El {
     let hide = app.prefs.hide_sensitive();
     let leg = app.assistant.thread.actions.legs.get(id);
-    let found = leg
+    let read = leg
         .and_then(|l| l.tx.as_ref())
         .and_then(|tx| crate::custody::link_model::leg_from_tx(tx, None).map(|l| (tx, l)));
+    let other_side = read
+        .as_ref()
+        .is_some_and(|(tx, _)| reads_as_other_side(tx, side));
+    let found = read.filter(|_| !other_side);
     let mut c = col()
         .w_full()
         .gap(2.0)
@@ -562,6 +585,7 @@ fn leg_view(app: &App, tk: &Tk, label: String, id: &str) -> El {
         }
         None => {
             let (key, alert) = match leg {
+                _ if other_side => ("assistant:action.leg.otherDirection", true),
                 Some(l) if l.loading => ("assistant:action.leg.loading", false),
                 Some(l) if l.failed => ("assistant:action.leg.missing", true),
                 _ => ("", false),
@@ -576,6 +600,7 @@ fn leg_view(app: &App, tk: &Tk, label: String, id: &str) -> El {
         }
     }
     let shown = leg
+        .filter(|_| !other_side)
         .and_then(|l| l.tx.as_ref())
         .and_then(|tx| tx["externalId"].as_str())
         .filter(|s| !s.is_empty())
@@ -656,8 +681,20 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
             notes,
         } => {
             c = c
-                .child(leg_view(app, tk, t("assistant:action.leg.from"), out))
-                .child(leg_view(app, tk, t("assistant:action.leg.to"), inn));
+                .child(leg_view(
+                    app,
+                    tk,
+                    t("assistant:action.leg.from"),
+                    out,
+                    Some(LegSide::Send),
+                ))
+                .child(leg_view(
+                    app,
+                    tk,
+                    t("assistant:action.leg.to"),
+                    inn,
+                    Some(LegSide::Receipt),
+                ));
             let kind_key = crate::custody::link_model::kind_key(kind.as_deref());
             c = c.child(fact(
                 tk,
@@ -702,11 +739,23 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
             days,
         } => {
             c = c
-                .child(leg_view(app, tk, t("assistant:action.leg.from"), out))
-                .child(leg_view(app, tk, t("assistant:action.leg.to"), inn));
+                .child(leg_view(
+                    app,
+                    tk,
+                    t("assistant:action.leg.from"),
+                    out,
+                    Some(LegSide::Send),
+                ))
+                .child(leg_view(
+                    app,
+                    tk,
+                    t("assistant:action.leg.to"),
+                    inn,
+                    Some(LegSide::Receipt),
+                ));
+            // The daemon's own rule (`value or 90`): absent and zero both hide for 90 days.
             let until = match days {
-                None => t("assistant:action.dismiss.defaultDays"),
-                Some(0) => t("assistant:action.dismiss.never"),
+                None | Some(0) => t("assistant:action.dismiss.defaultDays"),
                 Some(n) => tc("assistant:action.dismiss.days", *n as usize, &[]),
             };
             c = c.child(fact(
@@ -726,6 +775,7 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
                 tk,
                 t("assistant:action.edit.transaction"),
                 transaction,
+                None,
             ));
             let tx = app
                 .assistant
@@ -1255,6 +1305,32 @@ mod tests {
                 "{mode}"
             );
         }
+    }
+
+    /// A self-transfer's txid names both legs; the resolve read may return either. A card shows a
+    /// leg only when it reads back in the direction the change uses.
+    #[test]
+    fn transfer_legs_must_read_back_in_the_change_direction() {
+        let sent = json!({"id": "out", "amountSat": -100000, "date": "2025-04-02"});
+        let received = json!({"id": "in", "amountSat": 99000, "date": "2025-04-02"});
+        assert!(!reads_as_other_side(&sent, Some(LegSide::Send)));
+        assert!(reads_as_other_side(&received, Some(LegSide::Send)));
+        assert!(!reads_as_other_side(&received, Some(LegSide::Receipt)));
+        assert!(reads_as_other_side(&sent, Some(LegSide::Receipt)));
+        // An edit names one transaction in whatever direction it has.
+        assert!(!reads_as_other_side(&received, None));
+    }
+
+    /// The daemon hides a dismissal for 90 days when the duration is absent or zero
+    /// (`value or 90`); the card must not promise "permanently".
+    #[test]
+    fn dismissal_zero_days_is_the_default_not_permanent() {
+        let d = parse(
+            "ui.transfers.dismiss",
+            &json!({"tx_out": "a", "tx_in": "b", "expires_in_days": 0}),
+        );
+        assert!(matches!(d, Some(Action::Dismiss { days: Some(0), .. })));
+        assert!(!t("assistant:action.dismiss.defaultDays").is_empty());
     }
 
     #[test]

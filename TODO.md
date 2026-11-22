@@ -2087,6 +2087,11 @@ See [tax countries](docs/reference/tax-countries.md) and
   workspace), translations and integration logos shared with `ui-tauri/` from
   `assets/`, Rune built without its default features (no MPL audio decoders),
   `fmt`/clippy/tests in the gate and a macOS/Linux/Windows CI job.
+- [ ] Assistant change cards (PR #810 follow-ups): refresh the book after a
+  successful Undo even when its conversation was cleared while it ran (the reply
+  finds no card and skips `refresh_reads`); a "Change" action on proposal cards;
+  native cards for unpair, dismissal delete, quarantine resolve, custody and
+  component applies, source-of-funds and the chain-analysis consents.
 - [ ] Make the desktop scene check (`packaging/ci/rune-checks.sh --scenes-only`,
   `src/checks.rs`) finish and pass, then run it in CI's "Desktop app" job. On an
   empty `kassiber init` book each Transactions scene waits out

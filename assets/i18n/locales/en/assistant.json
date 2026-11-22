@@ -1091,6 +1091,7 @@
       "to": "To",
       "loading": "Reading the transaction…",
       "missing": "This transaction isn't in the open book.",
+      "otherDirection": "This reference also names a transaction in the other direction, so the card can't show which one the change uses.",
       "noWallet": "No wallet"
     },
     "pair": {
@@ -1105,7 +1106,6 @@
       "title": "Stop suggesting these two as a transfer",
       "until": "Hidden for",
       "defaultDays": "90 days (default)",
-      "never": "Permanently",
       "days_one": "{{count}} day",
       "days_other": "{{count}} days"
     },
