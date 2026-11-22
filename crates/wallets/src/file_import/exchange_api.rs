@@ -141,6 +141,7 @@ pub fn execute(
         &mut ids,
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
+        None,
     )
     // A revoked or offline route never publishes a book.
     .and_then(|result| client.authorize().map(|()| result));

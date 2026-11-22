@@ -187,6 +187,7 @@ pub fn import_draft(
             &records,
             &mut ids,
             None,
+            None,
         )?;
         let mut attached = Vec::new();
         if request.attach_evidence {

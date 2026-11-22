@@ -1563,6 +1563,10 @@ fn run(
         }
     }
     let from_file = inline.is_none();
+    // The file as it was before its rows were read: the run records this
+    // snapshot only if the file is unchanged once the rows are in (Codex
+    // 4660357770), so a run never pairs one file's rows with another's hash.
+    let parsed_file = from_file.then(|| file_snapshot(&request.file));
     let bundle = match inline {
         Some(payload) => Some(wasabi::load_payload(payload)?),
         None if request.format == Format::Wasabi => Some(wasabi::load(&request.file)?),
@@ -1657,6 +1661,7 @@ fn run(
             &records,
             &mut ids,
             column_map,
+            parsed_file.as_ref(),
         )
         .and_then(|result| {
             if let Some(bundle) = &bundle {
@@ -2177,8 +2182,11 @@ fn apply(
     records: &[Record],
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
+    parsed: Option<&FileSnapshot>,
 ) -> Result<Py, AppError> {
-    apply_records(conn, request, wallet, rows, records, ids, column_map, None)
+    apply_records(
+        conn, request, wallet, rows, records, ids, column_map, None, parsed,
+    )
 }
 #[allow(clippy::too_many_arguments)]
 fn apply_records(
@@ -2190,6 +2198,7 @@ fn apply_records(
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
     api_source: Option<&str>,
+    parsed: Option<&FileSnapshot>,
 ) -> Result<Py, AppError> {
     let profile = &request.profile_id;
     let (workspace, currency): (String, String) = conn
@@ -2345,7 +2354,11 @@ fn apply_records(
     // it. Only a run that created rows has members to roll back.
     if !matches!(request.format, Format::Wasabi | Format::Document) {
         let batch = ids.next(conn)?;
-        let run = RunCoverage::of(records, &request.file);
+        let snapshot = match parsed {
+            Some(before) => parsed_snapshot(&request.file, before)?,
+            None => FileSnapshot::default(),
+        };
+        let run = RunCoverage::of(records, snapshot);
         conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped,first_row_at,last_row_at,rows_read,file_sha256,file_size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped,run.first_row_at,run.last_row_at,run.rows_read,run.file_sha256,run.file_size]).map_err(database_error)?;
         // Each row's place among the run's created rows is its source
         // position among same-time rows (`kassiber_store::transaction_order`).
@@ -2388,14 +2401,13 @@ pub struct RunCoverage {
 }
 
 impl RunCoverage {
-    fn of(records: &[Record], file: &str) -> Self {
+    fn of(records: &[Record], snapshot: FileSnapshot) -> Self {
         let mut dated: Vec<String> = records
             .iter()
             .map(|r| string(&r.fields, "occurred_at"))
             .filter(|at| !at.trim().is_empty() && at != "1970-01-01T00:00:00Z")
             .collect();
         dated.sort();
-        let snapshot = file_snapshot(file);
         Self {
             first_row_at: dated.first().cloned(),
             last_row_at: dated.last().cloned(),
@@ -2413,6 +2425,7 @@ pub const SNAPSHOT_HASH_LIMIT: u64 = 256 * 1024 * 1024;
 /// [`SNAPSHOT_HASH_LIMIT`], its SHA-256. Only regular files count: an inline
 /// payload, a symlink, a FIFO or a device yields nothing, without waiting on
 /// it. Called during an explicit import only, never by a display read.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FileSnapshot {
     pub sha256: Option<String>,
     pub size: Option<i64>,
@@ -2420,6 +2433,20 @@ pub struct FileSnapshot {
 
 pub fn file_snapshot(file: &str) -> FileSnapshot {
     file_snapshot_bounded(file, SNAPSHOT_HASH_LIMIT)
+}
+
+/// The snapshot an import run records: `before`, taken before the file's rows
+/// were read, once the file is confirmed unchanged. A file replaced or written
+/// to while it was imported refuses the run (its savepoint rolls back), since
+/// its rows and its hash would describe different contents.
+pub(crate) fn parsed_snapshot(file: &str, before: &FileSnapshot) -> Result<FileSnapshot, AppError> {
+    if file_snapshot(file) != *before {
+        return Err(
+            AppError::new("validation", "The file changed while it was being imported")
+                .with_hint("Import it again once nothing is writing to it."),
+        );
+    }
+    Ok(before.clone())
 }
 
 pub(crate) fn file_snapshot_bounded(file: &str, limit: u64) -> FileSnapshot {
