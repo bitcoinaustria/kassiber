@@ -1066,10 +1066,10 @@ opens a socket. Per source:
 
 | Field | Meaning |
 | --- | --- |
-| `source_mode` | `live`, `file`, `hybrid`, or `manual`, from the source's configuration: an exchange API key makes it live (hybrid when it also has a remembered file or import runs), a remembered file or import run makes it a file source, the live completeness classes stay live, and a wallet with none of these is manual. |
+| `source_mode` | `live`, `file`, `hybrid`, or `manual`, from the source's configuration: an exchange API key makes it live (hybrid when it also has a remembered file or file import runs; the run an API sync records names no file and is never file evidence), a remembered file or import run makes it a file source, the live completeness classes stay live, and a wallet with none of these is manual. |
 | `covered_from` | Live: the declared scan start or first transaction. File: the earliest row its import runs held. Hybrid: the earlier of both. |
 | `covered_through` | Live: the last successful sync. File: the latest row its import runs held. Hybrid: the later of the API sync and the files' last row. Rows outside import runs (entered by hand, synced from an API) never extend a file's reach. A run's range counts only as far as the rows that import runs of the same wallet and importer (`source_format`) created still reach: rows removed by a rollback or a book reset take that coverage with them, also for runs that only re-observed them. Rows entered by hand, synced from an API, or created by another importer never support a file range. |
-| `freshness_state` | `current`, `behind` (covered through a day before the period end and no attestation covers it), `never_imported`, `sync_failed` (a freshness source or the stored exchange sync failed after the last success), or `unknown` (manual, or no dated rows). |
+| `freshness_state` | `current`, `behind` (covered through a day before the period end and no attestation covers it), `never_imported`, `sync_failed` (a freshness source or the stored exchange sync failed after the last success, reason `last_sync_failed`; or the last sync stored degraded results that block reports, such as a partial silent-payment scan, reason `last_sync_incomplete`, until a complete sync clears it), or `unknown` (manual, or no dated rows). |
 | `reason`, `action` | A stable code and the one action that fixes it: `sync`, `import_newer_file`, `sync_or_import`, `review_sync_error`, or `none`. |
 | `attestation` | The user's statement "no activity after *date*" or "account closed on *date*", with a note. Both say nothing happened after the date. A period's missing interval is (covered_through, period end]; the statement closes it only when its date is on or before the covered end's day, and then for every later period end. A later date leaves (covered_through, date] unattested: the source stays `behind` with reason `attestation_leaves_gap` and `attestation_gap` names that interval, ending at the period end when the date is later. A statement never stands in for a source with nothing covered. It never creates transactions, balances, or tax facts. |
 
@@ -1121,7 +1121,7 @@ Reads: `ui.sources.coverage` (`period_end`, `wallet`, `check_file`) and
 `ui.overview.snapshot` embeds each connection's coverage for today (without
 scan-bound warnings, so the hot read skips the per-row balance walk) and derives
 its `status` from it (`synced` only for a current source, `behind`, `error`
-for a failed sync, `idle` otherwise). Write: `ui.sources.attest_coverage`
+for a failed sync, `idle` otherwise). The legacy Tauri views name, style and filter `behind` like their other statuses. Write: `ui.sources.attest_coverage`
 (`wallet`, `kind`, `date`, `note`, or `clear`) and `wallets attest-coverage`,
 behind the assistant's consent gate like every mutating tool.
 
@@ -1151,6 +1151,9 @@ shell's Needs attention condition "N sources are behind for 2025"
 (`sources.behind`: sources behind for the previous calendar year's end, from
 the local read when the shell mounts, no timer; it clears when a later read
 finds none behind) opens the list with that filter and period.
+With a period the list reads that period's coverage; until the read answers its
+rows show none, and a failed read shows an alert with Retry instead of
+letting today's coverage stand in for the period.
 
 ### Connection detail: Coverage card
 
