@@ -1040,6 +1040,21 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
             }
             refused
         };
+        // A row wider or narrower than the header is ambiguous: an unquoted
+        // decimal comma (`0,5`) would otherwise import as its first part.
+        if row.len() != header.len() {
+            return Err(fail(
+                AppError::new(
+                    "validation",
+                    format!(
+                        "it has {} columns, the header has {}",
+                        row.len(),
+                        header.len()
+                    ),
+                )
+                .with_hint("Quote a field that contains a comma, e.g. \"0,5\" or \"statement, page 2\"; amounts use a decimal point."),
+            ));
+        }
         let wallet = import_wallet(conn, profile_id, at(wallet_id_at), at(wallet)).map_err(fail)?;
         let amount_msat = amount(at(Some(btc)).unwrap_or("")).map_err(fail)?;
         let as_of = parse_as_of(at(Some(date)).unwrap_or(""))

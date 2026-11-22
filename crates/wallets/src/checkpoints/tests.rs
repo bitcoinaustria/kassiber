@@ -359,6 +359,29 @@ fn csv_round_trips_and_refuses_a_bad_row_as_a_whole() {
     );
 }
 
+/// A row with more or fewer fields than the header (an unquoted decimal
+/// comma splits `0,5` into two) refuses the whole file instead of reading
+/// the first part as the amount.
+#[test]
+fn csv_rows_must_have_the_header_s_column_count() {
+    let conn = book();
+    for bad in [
+        "date,wallet,btc_amount\n2025-03-01,Exchange,1\n2025-03-01,Exchange,0,5\n",
+        "date,wallet,btc_amount,note\n2025-03-01,Exchange,1,ok\n2025-03-02,Exchange,1\n",
+    ] {
+        let error = import_csv(&conn, "p", bad, "bad.csv").unwrap_err();
+        assert_eq!(error.code, "validation");
+        assert!(error.message.starts_with("Row 3:"), "{}", error.message);
+        assert!(stored(&conn, "p", None).unwrap().is_empty());
+    }
+    // Blank lines stay skipped.
+    let fine = "date,wallet,btc_amount\n2025-03-01,Exchange,1\n\n";
+    assert_eq!(
+        get(&import_csv(&conn, "p", fine, "ok.csv").unwrap(), "created"),
+        Some(&Value::from(1))
+    );
+}
+
 #[test]
 fn node_checkpoints_read_the_last_successful_sync_only() {
     let conn = book();
