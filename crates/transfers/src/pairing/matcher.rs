@@ -153,8 +153,7 @@ impl Population {
                     .unwrap_or(num(0)))?,
                 scope,
                 domain,
-                seconds: if kassiber_pytext::strip(&when) == kassiber_envelope::occurred_at::UNKNOWN
-                {
+                seconds: if kassiber_pytext::strip(&when) == "1970-01-01T00:00:00Z" {
                     None
                 } else {
                     instant(&s(&when))

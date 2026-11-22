@@ -565,7 +565,7 @@ fn calendar(
     let bounds = rows(
         conn,
         "SELECT MIN(occurred_at) AS first,MAX(occurred_at) AS last FROM transactions WHERE profile_id=? AND occurred_at NOT IN ('',?)",
-        [profile_id, kassiber_envelope::occurred_at::UNKNOWN],
+        [profile_id, "1970-01-01T00:00:00Z"],
     )?;
     let mut years = Vec::new();
     let (first, last) = (val(&bounds[0], "first"), val(&bounds[0], "last"));
@@ -617,9 +617,7 @@ fn utc_text(seconds: i64) -> String {
 fn years(conn: &Connection, base: &str, bind: &[SqlValue], zone: &Zone) -> Result<Vec<Value>> {
     let dated = format!("{base} AND t.occurred_at NOT IN ('',?)");
     let mut dated_bind = bind.to_vec();
-    dated_bind.push(SqlValue::Text(
-        kassiber_envelope::occurred_at::UNKNOWN.into(),
-    ));
+    dated_bind.push(SqlValue::Text("1970-01-01T00:00:00Z".into()));
     let bounds = rows(
         conn,
         &format!("SELECT MIN(t.occurred_at) AS first,MAX(t.occurred_at) AS last FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE {dated}"),
