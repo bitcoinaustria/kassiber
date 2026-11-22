@@ -6,7 +6,7 @@
 //! Transactions chart selection as bounded filters, and the page. Every part but the page is
 //! removable. Chip labels name things in plain words and stay on this device; only the typed
 //! entity, the route's capability packs and bounded filters travel, and nothing travels before
-//! the user sends.
+//! the user sends. Only a pinned item's review packet is read for the model (`Focus::read`).
 
 use serde_json::{Map, Value, json};
 
@@ -86,7 +86,7 @@ fn open_item(app: &App) -> Option<Focus> {
         return None;
     }
     let book = super::chat::book_now(app)?;
-    match open.0 {
+    let mut item = match open.0 {
         Kind::Transaction => {
             let r = app.detail.open.as_ref()?.record.as_ref()?;
             let held = opt_s(r, "quarantineReason").is_some();
@@ -96,7 +96,9 @@ fn open_item(app: &App) -> Option<Focus> {
             let (id, started) = crate::custody::gaps::open_gap(app)?;
             gap_focus(&id, started.as_deref(), book)
         }
-    }
+    }?;
+    item.read = false;
+    Some(item)
 }
 
 /// The chart selection on the Transactions page, unless the user removed it.
@@ -576,6 +578,8 @@ mod tests {
         assert_tray_is_json(&s);
         assert_eq!(s.chips[0].part, Part::Open);
         assert_eq!(s.item.as_ref().unwrap().book, book());
+        // Shared as its typed entity, not read for the model: the user did not ask about it.
+        assert!(!s.item.as_ref().unwrap().read);
 
         remove(&mut app, Part::Open);
         assert!(!poll(&mut app));
@@ -593,6 +597,7 @@ mod tests {
         assert_tray_is_json(&s);
         assert_eq!(s.chips[0].part, Part::Pinned);
         assert_eq!(s.screen["entity_id"], "tx-9");
+        assert!(s.item.as_ref().unwrap().read, "a pin is read for the model");
 
         // Unpinning the transaction that is also open stops sharing it in one click.
         app.assistant.focus = Some(pin("tx-3", false));

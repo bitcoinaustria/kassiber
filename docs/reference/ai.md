@@ -1386,9 +1386,13 @@ model context as exact local data, so answers use program-derived facts. That au
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
 
-The item the desktop's context tray shows (one pinned with "Ask about this",
-or else the transaction open in the detail panel or the custody gap under
-review) is read too. When the desktop sends
+An item the user asked about (a transaction or custody gap pinned with "Ask
+about this", or the transaction panel's Assistant surface) is read too. An item
+that is only open (the transaction in the detail panel, the custody gap under
+review) is shared as its typed entity and not read: in a check with four models
+through a CLI proxy, every model read the shown transaction itself when the
+question was about it, while reading it up front made unrelated questions
+slower and larger. When the desktop sends
 `read_pinned_entity: true` with a `screen_context` whose entity the daemon kept
 (a `transaction` of the open book, or a `custody_gap` the open book's gap
 search finds; a gap is checked only for such a request, because the check is a
@@ -1636,8 +1640,8 @@ has named it in the open book; the user can remove that open item until another
 one opens, and removing it also stops the page's address from naming it), the Transactions chart selection (as the
 bounded filters `chart_flows`, `chart_segment` and `chart_bucket`, removable
 until the selection changes), and the page (not removable). The item adds its
-typed entity and capability pack to the page's route and filters, and the
-daemon reads it for the model each turn (see the pre-read router above). Chip
+typed entity and capability pack to the page's route and filters; a pinned
+item is also read for the model each turn (see the pre-read router above). Chip
 labels name the item by date and kind and stay on the device; the item's
 identity travels only as that typed entity, never interpolated into the prompt
 text, and nothing is sent before the user presses Send. The
