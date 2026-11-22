@@ -90,7 +90,7 @@ pub struct ShellUi {
     /// The last `ui.transactions.resolve` answer for a txid-like query: (query, transaction).
     pub resolved: Option<(String, Value)>,
     /// The txid lookup in flight: (query, request id); only its own answer is taken.
-    pub resolving: Option<(String, String)>,
+    pub resolving: Option<(String, crate::app::Ticket)>,
     /// A txid-shaped query waiting for typing to pause: (query, app-clock time it is sent).
     pub resolve_due: Option<(String, f64)>,
     pub books_filter: TextEdit,

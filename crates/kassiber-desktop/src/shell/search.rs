@@ -790,13 +790,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if app.shell.search.text.trim() != q {
         return false;
     }
-    if let Some(id) = app.send(
+    let ticket = app.send_ticket(
         "ui.transactions.resolve",
         json!({"query": q}),
         "shell.resolve",
-    ) {
-        app.shell.resolving = Some((q, id));
-    }
+    );
+    app.shell.resolving = Some((q, ticket));
     false
 }
 
@@ -807,7 +806,7 @@ pub fn on_resolve(app: &mut App, r: &Reply) {
         .shell
         .resolving
         .as_ref()
-        .is_some_and(|(_, id)| Some(id.as_str()) == app.reply_id());
+        .is_some_and(|(_, ticket)| ticket.answers(app));
     if !current {
         return;
     }
@@ -1055,9 +1054,11 @@ mod tests {
     #[test]
     fn a_lookup_answer_counts_only_for_the_newest_query() {
         let mut app = crate::app::tests::quiet_app();
-        let short = crate::app::tests::inject(&mut app, "ui.transactions.resolve", "shell.resolve");
-        let long = crate::app::tests::inject(&mut app, "ui.transactions.resolve", "shell.resolve");
-        app.shell.resolving = Some(("abcdef0123456789".into(), long.clone()));
+        let (short, _superseded) =
+            crate::app::tests::inject_ticket(&mut app, "ui.transactions.resolve", "shell.resolve");
+        let (long, ticket) =
+            crate::app::tests::inject_ticket(&mut app, "ui.transactions.resolve", "shell.resolve");
+        app.shell.resolving = Some(("abcdef0123456789".into(), ticket));
         // The prefix's answer comes first (or last): it never labels itself with the newest query.
         crate::app::tests::answer(
             &mut app,

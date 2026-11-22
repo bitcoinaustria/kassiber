@@ -56,6 +56,9 @@ and demo resources.
 
 The app supervises the bundled daemon in packaged builds. Preserve request-ID routing,
 cancellation, streaming, and unsolicited event handling when changing `src/daemon.rs` or
-`src/app.rs`. Read [release packaging](../../docs/reference/prerelease-binaries.md) for the
+`src/app.rs`; `src/app/delivery_model.rs` checks every interleaving of the delivery rules
+against the real `App`. A screen that applies an answer to state it may close, reopen,
+re-send or lose in a book reset sends with `App::send_ticket` and keeps the ticket in that
+state: once dropped, the answer reaches nobody. Read [release packaging](../../docs/reference/prerelease-binaries.md) for the
 bundle layout and installed-app CLI forwarding; do not assume a source checkout or a separately
 installed `kassiber` exists on the user's machine.
