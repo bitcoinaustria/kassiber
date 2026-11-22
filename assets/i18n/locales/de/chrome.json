@@ -350,9 +350,9 @@
         "action": "Beobachtungen öffnen"
       },
       "sourcesBehind": {
-        "title_one": "{{count}} Quelle ist im Rückstand für {{period}}",
-        "title_other": "{{count}} Quellen sind im Rückstand für {{period}}",
-        "body": "Importiere einen neueren Export, starte einen Sync oder gib an, dass nach einem Datum nichts passiert ist.",
+        "title_one": "{{count}} Quelle braucht Handlung für {{period}}",
+        "title_other": "{{count}} Quellen brauchen Handlung für {{period}}",
+        "body": "Importiere einen neueren Export, starte einen Sync, prüfe einen fehlgeschlagenen Sync oder gib an, dass nach einem Datum nichts passiert ist.",
         "action": "Quellen anzeigen"
       }
     },
