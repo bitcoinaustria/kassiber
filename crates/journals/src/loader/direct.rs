@@ -89,6 +89,7 @@ impl Gate {
                         "import_duplicate_quarantines",
                         "reset_hold_quarantines",
                         "provider_hold_quarantines",
+                        "excluded_txids",
                         "gap_reviews",
                         "pair_dismissals",
                         "gap_worklist",
@@ -606,6 +607,24 @@ pub fn load_read_snapshot(
             .gate
             .ordered
             .insert("provider_hold_quarantines", holds);
+    }
+    // Excluded rows are not loaded, but a collaborative receipt is released
+    // only as its transaction's single row; only while one shares it.
+    let mut statement = conn.prepare_cached(
+        "SELECT external_id FROM transactions WHERE profile_id=? AND (excluded IS NULL OR excluded<>0) AND external_id IS NOT NULL",
+    )?;
+    let excluded = statement
+        .query_map([&profile_id], |row| row.get::<_, rusqlite::types::Value>(0))?
+        .map(|value| scalar(ValueRef::from(&value?)))
+        .collect::<Result<Vec<J>>>()?;
+    let excluded_txids =
+        kassiber_custody::interpretation::excluded_receipt_txids(&snapshot.transactions, &excluded);
+    if !excluded_txids.is_empty() {
+        reader.gate.ordered.insert(
+            "excluded_txids",
+            Value::List(excluded_txids.iter().cloned().map(Value::from).collect()),
+        );
+        snapshot.excluded_txids = Some(excluded_txids);
     }
     snapshot.gap_reviews = gap_reviews;
     snapshot.pair_dismissals = reader.rows(

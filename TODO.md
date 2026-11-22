@@ -1911,6 +1911,34 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Quarantine follow-ups
 
+- [ ] Resolve outbound collaborative rows without excluding them. A received
+  Payjoin now clears through its acquisition kind
+  ([a Payjoin you received](docs/reference/custody-resolution.md#a-payjoin-you-received)),
+  but its outbound counterparts stay `privacy_hop_unresolved` and every later
+  spend of the wallet waits behind `custody_basis_barrier`: a collaborative
+  payment whose fee the outside party paid (the wallet's net delta is the
+  payment) and a CoinJoin in which the wallet pays only a fee share (the
+  delta is that share). No review path exists: `kind_override` is inbound
+  only, and a custody component refuses a source without an owned
+  destination (`missing_owned_destination`) or a fee-only source. Proposed
+  operation: an owner attestation on the held row, `external_payment` or
+  `fee_share`, accepted under the same conditions as the receipt (current
+  authoritative observation, `implicit_wallet_delta`, no other row of the
+  txid) and booked as a disposal or a fee of the net delta at market value.
+  Risks: an output to an unconnected own wallet must not become a disposal
+  without the owner saying so, and a fee share must not absorb a payment.
+  Callers: `review_operations`, `review_cases` (`supported_operations`), the
+  quarantine catalog's actions, the AI review tools and their catalog
+  description, and the desktop Review card. Done when the regtest probes
+  P2 and P3 of the 2026-11-21 Clams comparison book on review without an
+  exclusion.
+- [ ] Teach the assistant's static texts the received-Payjoin path. The
+  `kind_override` bullet in `crates/ai/skill_references/journal-processing.md`
+  and the AI tool catalog's `kind` description still say "non-quarantined";
+  the review case's `supported_operations` and the `classify` action already
+  lead to it. Recorded sessions pin the skill-reference text and the MCP
+  registry golden pins the catalog, so the wording changes with a reviewed
+  re-record of the affected sessions and a test-data lock bump.
 - [ ] Bump calculation semantics to 11 for settled replaced spends. Journals
   an older build processed keep a stale `conflicting_spend` quarantine for a
   transaction a confirmed spend replaced until the next input change or

@@ -102,6 +102,8 @@ macro_rules! book {
     (@required reset_hold_quarantines, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
     // Present only while a book holds a provider trade for review.
     (@required provider_hold_quarantines, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
+    // Present only while an excluded row shares a possible collaborative receipt's transaction.
+    (@required excluded_txids, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
     (@required $field:ident, $value:ident) => { $value.ok_or_else(|| serde::de::Error::missing_field(stringify!($field)))? };
 }
 
@@ -193,6 +195,7 @@ book! {
     import_duplicate_quarantines: Unported<Vec<Record>>,
     reset_hold_quarantines: Unported<Vec<Record>>,
     provider_hold_quarantines: Unported<Vec<Record>>,
+    excluded_txids: Unported<Vec<String>>,
     gap_reviews: Unported<Vec<Record>>,
     pair_dismissals: Unported<Vec<Record>>,
     gap_worklist: TypedWorklist,
@@ -251,6 +254,11 @@ impl BookSnapshot {
                 .iter()
                 .any(|f| matches!(f, Field::provider_hold_quarantines))
                 .then(|| (*self.provider_hold_quarantines).clone()),
+            excluded_txids: self
+                .order
+                .iter()
+                .any(|f| matches!(f, Field::excluded_txids))
+                .then(|| (*self.excluded_txids).clone()),
             gap_reviews: (*self.gap_reviews).clone(),
             pair_dismissals: (*self.pair_dismissals).clone(),
             rows: Default::default(),

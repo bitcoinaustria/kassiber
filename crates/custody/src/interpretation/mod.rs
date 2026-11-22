@@ -15,7 +15,7 @@ mod native;
 mod ownership;
 mod pairs;
 mod pipeline;
-mod privacy;
+pub(crate) mod privacy;
 mod reconciliation;
 mod recorded;
 mod reviewed;
@@ -39,6 +39,31 @@ pub(crate) use text::repr as value_repr;
 
 pub(crate) fn canonical_event_repr(event: &Value) -> String {
     text::event_repr(event)
+}
+
+/// The snapshot's `excluded_txids`: the transaction ids of the `excluded`
+/// rows (their `external_id`s) that a loaded row which may be a collaborative
+/// receipt shares, sorted and unique. Empty when there are none.
+pub fn excluded_receipt_txids<'a>(
+    loaded: &[crate::snapshot::Record],
+    excluded: impl IntoIterator<Item = &'a Value>,
+) -> Vec<String> {
+    let receipts: BTreeSet<String> = loaded
+        .iter()
+        .filter(|row| privacy::may_be_receipt(*row))
+        .map(|row| privacy::receipt_txid(crate::fields::Fields::at(row, "external_id")))
+        .filter(|txid| !txid.is_empty())
+        .collect();
+    if receipts.is_empty() {
+        return Vec::new();
+    }
+    excluded
+        .into_iter()
+        .map(privacy::receipt_txid)
+        .filter(|txid| receipts.contains(txid))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// Python loads channel context before materializing components.

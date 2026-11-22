@@ -7537,8 +7537,8 @@
   {
     "id": "R2c-safety-privacy-bool-true",
     "file": "crates/custody/src/interpretation/privacy.rs",
-    "find": "Py::Bool(true)",
-    "replace": "Py::Bool(false)",
+    "find": "matches!(value, Py::Bool(true))",
+    "replace": "matches!(value, Py::Bool(false))",
     "expect_failing": [
       "privacy_evidence_vectors"
     ],
@@ -7677,12 +7677,152 @@
   {
     "id": "R2c-safety-privacy-fee-authority",
     "file": "crates/custody/src/interpretation/privacy.rs",
-    "find": "codec::truth(&observation[\"authoritative_chain_observation\"])",
-    "replace": "true",
+    "find": "if codec::truth(&observation[\"authoritative_chain_observation\"])\n                && observation[\"fee_attribution\"] == \"exact\"",
+    "replace": "if true\n                && observation[\"fee_attribution\"] == \"exact\"",
     "expect_failing": [
       "privacy_resolution_vectors"
     ],
     "rule": "The fee-only exception requires authoritative canonical chain observation."
+  },
+  {
+    "id": "R2c-receipt-complete-inputs",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "        && complete_inputs(row.at(\"raw_json\"))",
+    "replace": "        && true",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "A collaborative receipt needs a stored graph whose every input carries its complete previous output."
+  },
+  {
+    "id": "R2c-receipt-inputs-present",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": ".filter(|inputs| !inputs.is_empty())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "A collaborative receipt's graph must have inputs."
+  },
+  {
+    "id": "R2c-receipt-graph-conflicts",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "!codec::truth(&graph[\"evidence_conflicts\"])",
+    "replace": "true",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "Conflicting graph sources keep a collaborative receipt held."
+  },
+  {
+    "id": "R2c-receipt-input-outpoint",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "codec::truth(&input[\"outpoint\"])",
+    "replace": "true",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "Every input of a collaborative receipt needs its outpoint."
+  },
+  {
+    "id": "R2c-receipt-input-script",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "&& codec::truth(&input[\"script\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "Every input of a collaborative receipt needs its previous output script."
+  },
+  {
+    "id": "R2c-receipt-input-value",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "&& !input[\"value_sats\"].is_null()",
+    "replace": "&& true",
+    "expect_failing": [
+      "a_receipt_needs_every_input_with_its_complete_previous_output"
+    ],
+    "rule": "Every input of a collaborative receipt needs its previous output value."
+  },
+  {
+    "id": "R2c-receipt-single-row",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "rows_per_txid.get(&key) != Some(&1)",
+    "replace": "false",
+    "expect_failing": [
+      "any_other_row_of_the_transaction_keeps_a_receipt_held"
+    ],
+    "rule": "Any other row of the transaction, a component anchor included, keeps a collaborative receipt held."
+  },
+  {
+    "id": "R2c-receipt-excluded-sibling",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\n        .chain(excluded_txids.iter().map(|txid| receipt_txid(&json!(txid))));",
+    "replace": ";",
+    "expect_failing": [
+      "any_other_row_of_the_transaction_keeps_a_receipt_held"
+    ],
+    "rule": "An excluded row of the transaction keeps a collaborative receipt held."
+  },
+  {
+    "id": "R2c-receipt-authority",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "if codec::truth(&observation[\"authoritative_chain_observation\"])\n            && observation[\"fee_attribution\"] == \"implicit_wallet_delta\"",
+    "replace": "if true\n            && observation[\"fee_attribution\"] == \"implicit_wallet_delta\"",
+    "expect_failing": [
+      "a_provable_receipt_without_an_acquisition_kind_says_it_can_be_classified"
+    ],
+    "rule": "A collaborative receipt needs a current authoritative chain observation."
+  },
+  {
+    "id": "R2c-receipt-acquisition-kind",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "            if acquisition_kind(row) {",
+    "replace": "            if true {",
+    "expect_failing": [
+      "a_provable_receipt_without_an_acquisition_kind_says_it_can_be_classified"
+    ],
+    "rule": "Only an acquisition kind releases a provable collaborative receipt; deposit keeps it held."
+  },
+  {
+    "id": "R2c-receipt-classifiable-flag",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "if classifiable.contains(&id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "a_provable_receipt_without_an_acquisition_kind_says_it_can_be_classified"
+    ],
+    "rule": "A held receipt provable apart from its classification says it can be classified."
+  },
+  {
+    "id": "R2c-receipt-row-kind",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "acquisition_kind(row) && receipt_shape(row)",
+    "replace": "receipt_shape(row)",
+    "expect_failing": [
+      "only_an_inbound_net_delta_with_an_acquisition_kind_is_a_classified_receipt"
+    ],
+    "rule": "The row-local receipt predicate the tax-engine request reuses requires an acquisition kind."
+  },
+  {
+    "id": "R2c-receipt-loader-candidates",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": ".filter(|row| privacy::may_be_receipt(*row))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "excluded_receipt_txids_name_only_a_possible_receipts_transaction"
+    ],
+    "rule": "The loader reports excluded txids only for a possible collaborative receipt's transaction."
+  },
+  {
+    "id": "R2c-receipt-loader-shared",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": ".filter(|txid| receipts.contains(txid))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "excluded_receipt_txids_name_only_a_possible_receipts_transaction"
+    ],
+    "rule": "The loader reports only excluded txids a possible collaborative receipt shares."
   },
   {
     "id": "R2c-safety-privacy-fee-exact",
@@ -10210,8 +10350,8 @@
   {
     "id": "native11-native-privacy",
     "file": "crates/custody/src/interpretation/safety.rs",
-    "find": "                &ids(&samourai[\"candidate_ids\"]),\n                &native_ids,\n            )?\n        } else {",
-    "replace": "                &ids(&samourai[\"candidate_ids\"]),\n                &Ids::new(),\n            )?\n        } else {",
+    "find": "                &ids(&samourai[\"candidate_ids\"]),\n                &native_ids,\n                excluded_txids,\n            )?\n        } else {",
+    "replace": "                &ids(&samourai[\"candidate_ids\"]),\n                &Ids::new(),\n                excluded_txids,\n            )?\n        } else {",
     "expect_failing": [
       "interpretation_native_projection"
     ],

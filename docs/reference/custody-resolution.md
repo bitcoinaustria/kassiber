@@ -191,6 +191,71 @@ does not charge the owner the entire fee. An unexplained own difference remains
 Adding all connections does not by itself supply that commercial meaning.
 
 Use settled wallet records or supporting documents for the missing attribution.
+
+### A Payjoin you received
+
+In a received Payjoin the wallet adds an input of its own, an outside party
+adds another, and the wallet ends up richer. Native sync stores one inbound
+row for the wallet's net delta (`implicit_wallet_delta`) and marks it
+`collaborative`; it is held as `privacy_hop_unresolved` because the chain
+proves how much the wallet gained but not what the outside party's
+contribution was, and later spends of that wallet wait behind
+`custody_basis_barrier`. Do not exclude it: that drops a real receipt.
+
+Classify the net receipt instead. The owner's acquisition kind (`income`,
+`buy`, `interest`, `lending_interest`, `mining`, `staking`, `wages`,
+`airdrop`, `hardfork`) supplies the commercial meaning the graph cannot,
+and the next journal run books the net amount as that acquisition at market
+value. The wallet's own input never left the wallet, so its lots stay where
+they were. Classify only when the other inputs are not yours; if they are,
+add that wallet and use a custody component instead. The hold clears only
+when all of these hold:
+
+- the row is inbound and carries a `privacy_boundary`;
+- its amount is the wallet's net delta (`implicit_wallet_delta`) under a
+  current authoritative chain observation, so the graph still matches what
+  native sync recorded;
+- its stored graph has every input's outpoint and complete previous output
+  (value and script). Bitcoin Core's fallback can state a net delta without
+  them; such a row stays held until a sync reads them;
+- no other row in the book (another wallet's row, an import, a custody
+  component's anchor, or an excluded row) has the same txid, so the
+  receiving wallet's delta is all of the owner's part in it. When another
+  connected wallet also took part, review the transaction with a custody
+  component instead; and
+- the kind is an acquisition kind. `deposit` says nothing about where the
+  value came from and keeps the hold.
+
+When everything but the classification holds, the hold's detail says
+`classifiable_receipt: true`, `review cases` lists `kind_override` first in
+its `supported_operations`, and the quarantine page leads with `classify`;
+the desktop opens the transaction's classification. Other inbound privacy
+holds are not offered it. For example, a wallet put in
+0.50568205 BTC and received 0.60568205 BTC while the counterparty paid the
+fee; its row is an inbound 0.1 BTC:
+
+```json
+[
+  {
+    "type": "kind_override",
+    "transaction_id": "transaction-from-review-cases",
+    "kind": "income",
+    "reason": "Payjoin receive: the counterparty paid invoice 2025-014"
+  }
+]
+```
+
+`review plan` shows the receipt and the rows behind the barrier leave the
+quarantine and adds the 0.1 BTC to that year's income; `review apply` books
+it. Setting the kind with `metadata records kind set` has the same effect,
+since both write the same authored classification with its history. Books
+processed before this rule keep their journals until the next rebuild.
+
+Outbound collaborative rows (a payment whose fee the outside party paid, a
+CoinJoin fee share) have no equivalent yet: an outbound kind review does not
+exist, and a custody component needs an owned destination. They stay held;
+see [TODO.md](../../TODO.md).
+
 Wasabi `paymentsInCoinJoin` metadata is retained in wallet import metadata, but a
 scheduled or running round does not prove a settled transaction payment and is
 not automatically used as one. Samourai's public Deposit/Badbank/Premix/Postmix/
@@ -444,9 +509,11 @@ so a rebuild that writes `3197.60` for `3197.6` does not hold it again. In the d
 as **Accept these prices**, previewed and confirmed once.
 
 Acquisition review is available in the desktop Tax tab, the CLI and chat. It
-accepts a non-quarantined inbound transaction, using existing authored metadata
+accepts an inbound transaction, using existing authored metadata
 and append-only history; clearing `kind` restores the importer's classification.
-It does not rewrite import evidence or use loan markers. Active custody legs must
+It does not rewrite import evidence or use loan markers. A kind does not clear
+a quarantine by itself; the one exception is a
+[received Payjoin](#a-payjoin-you-received). Active custody legs must
 be reviewed through their custody workflow. Desktop classification applies
 separately from the ordinary Save action; other dirty fields must be saved or
 discarded first.
