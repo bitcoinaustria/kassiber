@@ -292,7 +292,7 @@ fn pretty(v: &Value) -> String {
 
 /// The reverse call a finished change names (`data.undo`): Undo where the desktop may send it
 /// (`action::desktop_undo`), else only a note that the assistant can take it back.
-fn undoable(c: &ToolCall) -> bool {
+pub(super) fn undoable(c: &ToolCall) -> bool {
     c.status == ToolStatus::Done
         && c.result
             .as_ref()

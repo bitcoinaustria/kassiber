@@ -14,6 +14,7 @@
 
 pub mod action;
 pub mod approval;
+pub mod decision;
 pub mod md;
 pub mod message;
 pub mod tool;
