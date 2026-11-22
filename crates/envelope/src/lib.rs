@@ -392,6 +392,8 @@ pub const KIND_SUBCOMMAND_ATTRS: &[&str] = &[
     "profiles_command",
     "accounts_command",
     "wallets_command",
+    // Rust only: `wallets checkpoints <leaf>` (balance checkpoints).
+    "checkpoints_command",
     "transactions_command",
     "attachments_command",
     "metadata_command",
