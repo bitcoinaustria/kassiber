@@ -778,7 +778,10 @@ wallets you own that the book does not know about.
 
 An exchange API wallet stores the outcome of every sync, CLI or desktop
 (`config_json.exchange_sync`, plus `last_synced_at` on success), so a synced
-`provider-api` wallet no longer reports `never_synced` after a restart.
+`provider-api` wallet no longer reports `never_synced` after a restart. The
+record keeps the sync's counts (`imported`, `updated`, `fetched`, `skipped`),
+each an integer or, like Bitpanda's `skipped`, integer counts per category,
+and of a failure only its error class.
 
 These bounds feed [source coverage](desktop.md#sources-live-sync-and-file-snapshots):
 how far each source reaches for a period end, whether it is live or a file
