@@ -122,6 +122,11 @@ pub struct Focus {
     pub label: String,
     pub context: Value,
     pub book: chat::Book,
+    /// The user asked about it ("Ask about this", the panel's Assistant surface): the daemon
+    /// reads its review packet for the model (`read_pinned_entity`). An item that is only open
+    /// in the detail panel travels as its typed entity; the model reads it when the question
+    /// needs it, so unrelated questions don't pay for the packet.
+    pub read: bool,
 }
 
 /// This area's UI state (`app.assistant`): the web's `AssistantSessionProvider` state plus the
@@ -979,6 +984,7 @@ pub fn transaction_focus(
         label: crate::i18n::tr(label_key, &[("date", &day)]),
         context,
         book,
+        read: true,
     })
 }
 

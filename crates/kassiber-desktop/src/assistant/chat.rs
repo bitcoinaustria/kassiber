@@ -392,8 +392,9 @@ fn live_pin(app: &App, pin: Option<&Focus>) -> Option<Focus> {
 /// A turn's screen context: a page request's or evidence continuation's own (`page`), else what
 /// the tray showed when the question was asked (`asked`: the page with the item's entity).
 /// `item` says whether that item is still of the open book (`None`: no item). The flag says the
-/// item is this turn's context, the only case in which the daemon reads it for the model
-/// (`read_pinned_entity`); an item of another book is dropped, never sent.
+/// item is this turn's context; the daemon reads it for the model (`read_pinned_entity`) only
+/// then, and only for an item the user asked about (`Focus::read`). An item of another book is
+/// dropped, never sent.
 fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
     match (page, item) {
         (Some(page), _) => (page, false),
@@ -548,7 +549,9 @@ pub fn run_turn(
                 .filter(|a| a.handoff)
                 .map(|a| a.context.clone())
         });
-    let (screen, read_pin) = turn_context(page_ctx, asked_ctx, item_live);
+    let asked_read = asked_item.as_ref().is_some_and(|p| p.read);
+    let (screen, is_context) = turn_context(page_ctx, asked_ctx, item_live);
+    let read_pin = is_context && asked_read;
     let no_persist = app.assistant.incognito && session.is_none();
     let mut args = json!({
         "provider": provider,
