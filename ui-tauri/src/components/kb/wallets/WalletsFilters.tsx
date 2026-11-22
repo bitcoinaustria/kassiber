@@ -26,10 +26,13 @@ const kindFilterOptions = Array.from(
   new Set([...Object.values(connectionKindCategoryLabels), "Liquid"]),
 );
 
-const statusFilterOptions: ConnectionStatus[] = [
+// `behind`: the overview's coverage says the source ends before today
+// (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+export const statusFilterOptions: ConnectionStatus[] = [
   "synced",
   "syncing",
   "idle",
+  "behind",
   "error",
 ];
 
