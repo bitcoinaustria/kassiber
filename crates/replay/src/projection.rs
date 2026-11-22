@@ -580,7 +580,7 @@ const SAMOURAI: Schema = &[
 
 /// The on-chain and Lightning payload fields the graph, confirmation,
 /// network and channel interpreters read from `raw_json`.
-static RAW_FIELDS: [(&str, F); 85] = [
+static RAW_FIELDS: [(&str, F); 87] = [
     ("txid", F::External),
     ("hash", F::External),
     ("tx_hash", F::External),
@@ -671,6 +671,11 @@ static RAW_FIELDS: [(&str, F); 85] = [
     ("close_balance_msat", F::Amount),
     ("confirmed", F::Bool),
     ("_kassiber_verified_chain_observation", F::Bool),
+    // The Electrum observers' confirmation proof: the history height and
+    // the graph marker the replaced-spend rule reads
+    // (custody/src/interpretation/holds.rs `height_proof`).
+    ("history", F::Obj(ELECTRUM_HISTORY)),
+    ("_kassiber_electrum_graph", F::Obj(ELECTRUM_GRAPH)),
     ("custody_native_fee_normalized", F::Bool),
     ("chain", F::Enum(CHAINS)),
     ("network", F::Enum(NETWORKS)),
@@ -679,6 +684,11 @@ static RAW_FIELDS: [(&str, F); 85] = [
     ("tag", F::Enum(CHANNEL_TAGS)),
 ];
 const RAW: Schema = &RAW_FIELDS;
+const ELECTRUM_HISTORY: Schema = &[("height", F::Int)];
+const ELECTRUM_GRAPH: Schema = &[
+    ("kind", F::Enum(&["bitcoin_electrum"])),
+    ("version", F::Int),
+];
 
 /// The importers that stamp `_kassiber_provenance.import_source`
 /// (`chain/src/lightning/lnd_wallet.rs`, `wallets/src/file_import/generic_json.rs`).
