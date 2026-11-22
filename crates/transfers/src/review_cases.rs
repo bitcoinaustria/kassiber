@@ -636,9 +636,15 @@ pub fn inspect_with_error<E: From<AppError>>(
                     operations.insert(0, s("unpair"));
                 }
             }
-            if reason == "privacy_hop_unresolved" && text(&case, "direction") == "inbound" {
-                // A collaborative receipt: classifying its net amount (an
-                // acquisition review) clears the hold when the chain proves it.
+            if reason == "privacy_hop_unresolved"
+                && matches!(
+                    value(&details[*id], "classifiable_receipt"),
+                    Value::Bool(true)
+                )
+            {
+                // A collaborative receipt custody found provable apart from
+                // its classification: classifying its net amount (an
+                // acquisition review) clears the hold.
                 operations.insert(0, s("kind_override"));
             }
             if reason == "bisq_trade_review_required" {

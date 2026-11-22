@@ -251,8 +251,8 @@
       },
       "privacyHopReceipt": {
         "title": "Shared receipt needs a classification",
-        "why": "You received more than you put into this shared transaction (a Payjoin, for example). The chain shows how much you gained, not what the other party paid you for.",
-        "provide": "Classify the receipt (income, purchase, …) in the transaction's Tax tab. Excluding it would drop a real receipt."
+        "why": "This wallet left this shared transaction (a Payjoin, for example) with more than it put in. The chain does not show what the other party paid you for.",
+        "provide": "If the other inputs are not yours, classify the receipt (income, purchase, …) in the transaction's Tax tab. If they are, add that wallet instead. Excluding it would drop a real receipt."
       },
       "privacyHop": {
         "title": "CoinJoin or shared transaction needs evidence",

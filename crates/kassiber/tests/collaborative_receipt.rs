@@ -6,7 +6,7 @@
 //! Classifying the receipt (`kind_override` through `review plan/apply`)
 //! books the net 0.1 BTC as that acquisition at market value; the wallet's
 //! own input never leaves it. A generic `deposit`, or another row of the
-//! same transaction, keeps the hold. See docs/reference/custody-resolution.md.
+//! same transaction (also an excluded one), keeps the hold. See docs/reference/custody-resolution.md.
 
 use kassiber_store::rusqlite::{params, Connection};
 use serde_json::{json, Value};
@@ -429,11 +429,50 @@ fn another_row_of_the_same_payjoin_keeps_the_receipt_held() {
         50_000,
         "{}",
     );
-    book.run(&["journals", "process"]);
-    let (_, income) = book.plan("income");
-    assert!(
-        held_after(&income).contains(&pair("payjoin", "privacy_hop_unresolved")),
-        "{:?}",
-        held_after(&income)
-    );
+    // Still held when the sibling is classified, and when the user excluded
+    // it: the loader drops excluded rows but reports their transaction.
+    for excluded in [false, true] {
+        book.db()
+            .execute(
+                "UPDATE transactions SET excluded=? WHERE id='sibling'",
+                [excluded],
+            )
+            .unwrap();
+        book.run(&["journals", "process"]);
+        let (_, income) = book.plan("income");
+        assert!(
+            held_after(&income).contains(&pair("payjoin", "privacy_hop_unresolved")),
+            "excluded={excluded}: {:?}",
+            held_after(&income)
+        );
+        // Not provable apart from its classification, so neither the
+        // quarantine page nor the review case offers classifying it.
+        let page = book.run(&["journals", "quarantined"]);
+        let receipt = page["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["transaction_id"] == "payjoin")
+            .unwrap();
+        assert!(
+            !receipt["actions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|action| action["kind"] == "classify"),
+            "excluded={excluded}: {receipt}"
+        );
+        let cases = book.run(&["review", "cases", "--limit", "100"]);
+        let case = cases["data"]["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["transaction_id"] == "payjoin")
+            .unwrap();
+        assert_eq!(
+            case["supported_operations"],
+            json!(["custody_component"]),
+            "excluded={excluded}: {case}"
+        );
+    }
 }

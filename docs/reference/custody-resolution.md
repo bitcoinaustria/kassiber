@@ -207,22 +207,30 @@ Classify the net receipt instead. The owner's acquisition kind (`income`,
 `airdrop`, `hardfork`) supplies the commercial meaning the graph cannot,
 and the next journal run books the net amount as that acquisition at market
 value. The wallet's own input never left the wallet, so its lots stay where
-they were. The hold clears only when all of these hold:
+they were. Classify only when the other inputs are not yours; if they are,
+add that wallet and use a custody component instead. The hold clears only
+when all of these hold:
 
 - the row is inbound and carries a `privacy_boundary`;
 - its amount is the wallet's net delta (`implicit_wallet_delta`) under a
   current authoritative chain observation, so the graph still matches what
   native sync recorded;
-- no other row in the book (another wallet's row, an import) has the same
-  txid, so the receiving wallet's delta is all of the owner's part in it.
-  When another connected wallet also took part, review the transaction with
-  a custody component instead; and
+- its stored graph has every input's outpoint and complete previous output
+  (value and script). Bitcoin Core's fallback can state a net delta without
+  them; such a row stays held until a sync reads them;
+- no other row in the book (another wallet's row, an import, a custody
+  component's anchor, or an excluded row) has the same txid, so the
+  receiving wallet's delta is all of the owner's part in it. When another
+  connected wallet also took part, review the transaction with a custody
+  component instead; and
 - the kind is an acquisition kind. `deposit` says nothing about where the
   value came from and keeps the hold.
 
-`review cases` lists `kind_override` first in such a case's
-`supported_operations`, and the quarantine page leads with `classify`; the
-desktop opens the transaction's classification. For example, a wallet put in
+When everything but the classification holds, the hold's detail says
+`classifiable_receipt: true`, `review cases` lists `kind_override` first in
+its `supported_operations`, and the quarantine page leads with `classify`;
+the desktop opens the transaction's classification. Other inbound privacy
+holds are not offered it. For example, a wallet put in
 0.50568205 BTC and received 0.60568205 BTC while the counterparty paid the
 fee; its row is an inbound 0.1 BTC:
 

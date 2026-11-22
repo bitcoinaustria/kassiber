@@ -251,8 +251,8 @@
       },
       "privacyHopReceipt": {
         "title": "Gemeinsamer Eingang braucht eine Einordnung",
-        "why": "Du hast aus dieser gemeinsamen Transaktion (etwa einem Payjoin) mehr erhalten, als du eingebracht hast. Die Blockchain zeigt, wie viel du gewonnen hast, nicht wofür die andere Partei bezahlt hat.",
-        "provide": "Ordne den Eingang im Steuer-Tab der Transaktion ein (Einkommen, Kauf, …). Ihn auszuschließen würde einen echten Eingang verwerfen."
+        "why": "Diese Wallet hat aus der gemeinsamen Transaktion (etwa einem Payjoin) mehr erhalten, als sie eingebracht hat. Wofür die andere Partei bezahlt hat, zeigt die Blockchain nicht.",
+        "provide": "Gehören die anderen Eingänge nicht dir, ordne den Eingang im Steuer-Tab der Transaktion ein (Einkommen, Kauf, …). Gehören sie dir, füge stattdessen diese Wallet hinzu. Ihn auszuschließen würde einen echten Eingang verwerfen."
       },
       "privacyHop": {
         "title": "CoinJoin oder gemeinsame Transaktion braucht Nachweise",
