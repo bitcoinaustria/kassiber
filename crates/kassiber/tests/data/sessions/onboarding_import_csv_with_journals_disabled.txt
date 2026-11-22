@@ -11,7 +11,7 @@
 + chain_index_dirty ("transactions", 9, 36)
 + import_batch_transactions ("<uuid>", "<uuid>", 1)
 + import_batch_transactions ("<uuid>", "<uuid>", 2)
-+ import_batches ("<uuid>", "w", "p", "imports", "csv", "rows.csv", NULL, "<now>", 1, 2, 0, 0, "2025-03-01T00:00:00Z", "2025-03-02T00:00:00Z", 2, "b1a1d3c5cd8ef71f7ebef173fb440b16f0b5648c051f1418c8a6335c225ba407", 189)
++ import_batches ("<uuid>", "w", "p", "imports", "csv", "rows.csv", NULL, "<now>", 1, 2, 0, 0)
 - profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 1, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
 + profiles ("p", "w", "Book", "EUR", "at", 365, "FIFO", 0, 1, "global", 2, 0, 1, 0, NULL, 0, NULL, "2025", NULL)
 + transactions ("<uuid>", "w", "p", "imports", "csv-1", NULL, "272310147be00a8f2c9bca74caf7193609612fb531e5f761f6f04e3dd46a59a9", "2025-03-01T00:00:00Z", NULL, "inbound", "BTC", 25000000000, 0, 0, "EUR", 40000.0, 10000.0, "import", "40000", "10000.00", "generic_import", NULL, NULL, "2025-03-01T00:00:00Z", NULL, NULL, NULL, NULL, "provider_sample", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "First", NULL, NULL, 0, "{\"amount\": \"0.25\", \"asset\": \"BTC\", \"description\": \"First\", \"direction\": \"inbound\", \"fee\": \"0\", \"fiat_rate\": \"40000\", \"occurred_at\": \"2025-03-01T00:00:00Z\", \"txid\": \"csv-1\"}", NULL, NULL, NULL, NULL, "<now>")
