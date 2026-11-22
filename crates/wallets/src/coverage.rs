@@ -332,9 +332,19 @@ struct Rows {
 #[derive(Default)]
 struct Failure {
     failed: bool,
+    /// The newest sync stored its time but degraded results that block
+    /// reports (a partial silent-payment scan): no complete coverage.
+    incomplete: bool,
     code: Option<String>,
     at: Option<String>,
 }
+
+/// Import runs that read a file. An exchange API sync records its run without a
+/// file name (it imports with an empty file path): such a run is no file
+/// evidence, so it never makes a source a file snapshot or a hybrid and its rows
+/// never form a file range. A run without any recorded name (`NULL`, older
+/// books) still counts as a file run.
+const FILE_RUN: &str = "COALESCE(b.source_filename, '-') <> ''";
 
 fn imports(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Imports>, AppError> {
     let mut by_wallet: BTreeMap<String, Imports> = BTreeMap::new();
@@ -346,15 +356,15 @@ fn imports(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Imports>
     // importer never support it.
     let mut support: BTreeMap<(String, String), (Option<String>, Option<String>)> = BTreeMap::new();
     let mut members = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT b.wallet_id, COALESCE(b.source_format, ''), \
              MIN(NULLIF(t.occurred_at, ?2)), MAX(NULLIF(t.occurred_at, ?2)) \
              FROM import_batches b \
              JOIN import_batch_transactions bt ON bt.batch_id = b.id \
              JOIN transactions t ON t.id = bt.transaction_id AND t.wallet_id = b.wallet_id \
-             WHERE b.profile_id = ?1 AND b.wallet_id IS NOT NULL \
+             WHERE b.profile_id = ?1 AND b.wallet_id IS NOT NULL AND {FILE_RUN} \
              GROUP BY b.wallet_id, COALESCE(b.source_format, '')",
-        )
+        ))
         .map_err(database_error)?;
     let spans = members
         .query_map(params![profile, UNKNOWN_OCCURRED_AT], |row| {
@@ -372,12 +382,12 @@ fn imports(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Imports>
         support.insert(key, bounds);
     }
     let mut statement = conn
-        .prepare(
-            "SELECT wallet_id, imported_at, first_row_at, last_row_at, rows_read, rows_inserted, file_size, file_sha256, \
-             COALESCE(source_format, '') \
-             FROM import_batches WHERE profile_id = ? AND wallet_id IS NOT NULL \
-             ORDER BY import_sequence ASC, imported_at ASC, id ASC",
-        )
+        .prepare(&format!(
+            "SELECT b.wallet_id, b.imported_at, b.first_row_at, b.last_row_at, b.rows_read, b.rows_inserted, \
+             b.file_size, b.file_sha256, COALESCE(b.source_format, '') \
+             FROM import_batches b WHERE b.profile_id = ? AND b.wallet_id IS NOT NULL AND {FILE_RUN} \
+             ORDER BY b.import_sequence ASC, b.imported_at ASC, b.id ASC",
+        ))
         .map_err(database_error)?;
     let found = statement
         .query_map([profile], |row| {
@@ -421,14 +431,14 @@ fn imports(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Imports>
     }
     // Legacy runs (no recorded file range): the rows each created.
     let mut legacy = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT b.wallet_id, MIN(NULLIF(t.occurred_at, ?2)), MAX(NULLIF(t.occurred_at, ?2)) \
              FROM import_batches b \
              JOIN import_batch_transactions bt ON bt.batch_id = b.id \
              JOIN transactions t ON t.id = bt.transaction_id \
              WHERE b.profile_id = ?1 AND b.wallet_id IS NOT NULL AND b.rows_read IS NULL AND t.excluded = 0 \
-             GROUP BY b.wallet_id",
-        )
+             AND {FILE_RUN} GROUP BY b.wallet_id",
+        ))
         .map_err(database_error)?;
     let spans = legacy
         .query_map(params![profile, UNKNOWN_OCCURRED_AT], |row| {
@@ -481,7 +491,8 @@ fn transaction_rows(conn: &Connection, profile: &str) -> Result<BTreeMap<String,
 fn failures(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Failure>, AppError> {
     let mut statement = conn
         .prepare(
-            "SELECT source_key, status, last_success_at, last_error_at, last_error_code FROM freshness_source_states \
+            "SELECT source_key, status, last_success_at, last_error_at, last_error_code, blocking_reports \
+             FROM freshness_source_states \
              WHERE profile_id = ? AND (source_key LIKE 'onchain_wallet:%' OR source_key LIKE 'btcpay_wallet:%' \
              OR source_key LIKE 'btcpay_provenance:%')",
         )
@@ -494,12 +505,13 @@ fn failures(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Failure
                 row.get::<_, Option<String>>(2)?,
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<bool>>(5)?.unwrap_or(false),
             ))
         })
         .map_err(database_error)?;
     let mut by_wallet: BTreeMap<String, Failure> = BTreeMap::new();
     for item in found {
-        let (key, status, success, error_at, code) = item.map_err(database_error)?;
+        let (key, status, success, error_at, code, blocking) = item.map_err(database_error)?;
         let Some((_, wallet)) = key.split_once(':') else {
             continue;
         };
@@ -518,6 +530,8 @@ fn failures(conn: &Connection, profile: &str) -> Result<BTreeMap<String, Failure
                 entry.code = code;
             }
             entry.at = later(entry.at.take(), error_at);
+        } else if blocking || status.as_deref() == Some("blocking_reports") {
+            by_wallet.entry(wallet.to_owned()).or_default().incomplete = true;
         }
     }
     Ok(by_wallet)
@@ -709,6 +723,7 @@ pub fn sources(
             };
         let failure = failures.get(&id);
         let failed = exchange_failed || failure.is_some_and(|f| f.failed);
+        let incomplete = !failed && failure.is_some_and(|f| f.incomplete);
         let error_code = last_sync_error_code.or_else(|| failure.and_then(|f| f.code.clone()));
         let tx_first = row.and_then(|r| r.first.clone());
         let tx_last = row.and_then(|r| r.last.clone());
@@ -761,6 +776,8 @@ pub fn sources(
         };
         let (freshness_state, reason, action) = if failed {
             ("sync_failed", "last_sync_failed", "review_sync_error")
+        } else if incomplete {
+            ("sync_failed", "last_sync_incomplete", "review_sync_error")
         } else if source_mode == "manual" {
             if attested {
                 ("current", "attested", "none")
