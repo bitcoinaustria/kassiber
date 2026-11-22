@@ -1932,6 +1932,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   description, and the desktop Review card. Done when the regtest probes
   P2 and P3 of the 2026-11-21 Clams comparison book on review without an
   exclusion.
+- [ ] Teach the assistant's static texts the received-Payjoin path. The
+  `kind_override` bullet in `crates/ai/skill_references/journal-processing.md`
+  and the AI tool catalog's `kind` description still say "non-quarantined";
+  the review case's `supported_operations` and the `classify` action already
+  lead to it. Recorded sessions pin the skill-reference text and the MCP
+  registry golden pins the catalog, so the wording changes with a reviewed
+  re-record of the affected sessions and a test-data lock bump.
 - [ ] Offer a user-triggered "reprice from market rates" for
   `price_currency_mismatch` rows. A book whose currency changed holds every
   row priced in the old currency ([quarantines](docs/reference/tax.md#quarantines));

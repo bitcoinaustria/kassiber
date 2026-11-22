@@ -133,13 +133,8 @@ covers everything the user agreed to:
   only when the user says the two rows are not one movement.
 - `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,
   `classify_residual` with `classification`), `gap_id`, and a reason.
-- `kind_override`: an inbound kind (or null) for an inbound transaction
-  outside an active custody review. It also resolves a received Payjoin: a
-  `privacy_hop_unresolved` inbound case that lists `kind_override` first.
-  Its net amount books as the acquisition kind at market value when the
-  chain proves the wallet's delta and no other row shares the txid. Ask the
-  user what the counterparty paid for (`income`, `buy`, ...); `deposit`
-  keeps the hold, and an exclusion would drop a real receipt.
+- `kind_override`: an inbound kind (or null) for a non-quarantined inbound
+  transaction outside an active custody review.
 - `accept_coarse_prices`: a reason and optional `transaction_ids`. It accepts
   the daily or coarser price of `pricing_review_required` cases as it stands,
   bound to that exact price; a changed price is held again. Without ids the
