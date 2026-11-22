@@ -290,7 +290,7 @@ pub fn stored(
         .prepare(
             "SELECT id,wallet_id,asset,as_of,amount_msat,origin,scope,origin_ref,attachment_id,note,created_at \
              FROM balance_checkpoints WHERE profile_id=?1 AND (?2 IS NULL OR wallet_id=?2) \
-             ORDER BY as_of,created_at,id",
+             ORDER BY as_of,created_at,rowid",
         )
         .map_err(database_error)?;
     let rows = statement
@@ -620,7 +620,7 @@ pub fn node_checkpoint(
     let sync: Option<(String, String)> = conn
         .query_row(
             "SELECT id,completed_at FROM lightning_node_syncs WHERE profile_id=? AND wallet_id=? \
-             AND status='ok' AND completed_at IS NOT NULL ORDER BY completed_at DESC,id DESC LIMIT 1",
+             AND status='synced' AND completed_at IS NOT NULL ORDER BY completed_at DESC,id DESC LIMIT 1",
             [profile_id, wallet_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
@@ -699,6 +699,23 @@ pub fn report(
         }
     }
     let mut all = stored(conn, profile_id, wallet_id)?;
+    // Insertion order of the stored rows. `created_at` has second precision
+    // and ids are random, so a tie falls back to the rowid: each insert gets
+    // one above every row the table holds.
+    let mut inserted: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    {
+        let mut statement = conn
+            .prepare("SELECT id,rowid FROM balance_checkpoints WHERE profile_id=?1")
+            .map_err(database_error)?;
+        let rows = statement
+            .query_map([profile_id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(database_error)?;
+        for row in rows {
+            let (id, rowid) = row.map_err(database_error)?;
+            inserted.insert(id, rowid);
+        }
+    }
+    let order = |c: &Checkpoint| c.id.as_ref().and_then(|id| inserted.get(id)).copied();
     for wallet in &wallets {
         if let Some(node) = node_checkpoint(conn, profile_id, &wallet.0)? {
             all.push(node);
@@ -718,10 +735,11 @@ pub fn report(
             .filter(|c| c.wallet_id == *id)
             .map(|c| (time::parse(&c.as_of).unwrap_or(i64::MIN), c))
             .collect();
-        // Newest first; a later-created row wins a tie.
+        // Newest first; a later-created row wins a tie, then a later-inserted one.
         mine.sort_by(|(a, x), (b, y)| {
             b.cmp(a)
                 .then_with(|| y.created_at.cmp(&x.created_at))
+                .then_with(|| order(y).cmp(&order(x)))
                 .then_with(|| y.id.cmp(&x.id))
         });
         let mut seen: Vec<(&str, &str)> = vec![];
