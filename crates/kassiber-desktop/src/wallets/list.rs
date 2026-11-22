@@ -51,10 +51,20 @@ pub struct State {
     pub sort: Option<(SortKey, bool)>,
     pub popup: Option<Popup>,
     /// Coverage for the route's period (`ui.sources.coverage {period_end}`): the period it was read
-    /// for, and the report once answered (None while it loads or when it failed).
-    pub period_coverage: Option<(String, Option<Value>)>,
+    /// for and where that read stands.
+    pub period_coverage: Option<(String, PeriodCoverage)>,
     /// The book refresh cycle that read follows (`App::book_generation`).
     pub period_generation: u64,
+}
+
+/// A chosen period's coverage read. Until it answers (or when it fails) rows show no coverage:
+/// today's never stands in for the period (Codex 4660314511).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PeriodCoverage {
+    /// Reading; the report of the previous read for the same period while it refreshes.
+    Loading(Option<Value>),
+    Ready(Value),
+    Failed,
 }
 
 impl Default for State {
@@ -330,6 +340,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let total = total_btc(app, &conns);
     page.child(header(app, tk))
         .child(metrics(app, cx, tk, &conns, total))
+        .children(period_failure(app, tk))
         .child(
             surface(tk)
                 .w_full()
@@ -684,19 +695,68 @@ pub fn search(app: &App) -> coverage::Search {
     coverage::parse_search(app.route.0.split_once('?').map(|(_, q)| q).unwrap_or(""))
 }
 
-/// The coverage a row shows: the chosen period's (`ui.sources.coverage`), else today's.
+/// The coverage a row shows: with a chosen period, that period's (`ui.sources.coverage`) once
+/// read, and nothing while it loads or after it failed; else today's.
 fn row_coverage(app: &App, c: &Conn) -> Option<Value> {
-    let period = search(app).period;
-    period
-        .and_then(|p| {
-            let (read_for, report) = app.wallets.list.period_coverage.as_ref()?;
-            (*read_for == p).then_some(report.as_ref()?)?["sources"]
-                .as_array()?
-                .iter()
-                .find(|v| v["wallet_id"].as_str() == Some(c.id.as_str()))
-                .cloned()
-        })
-        .or_else(|| c.coverage.clone())
+    let Some(period) = search(app).period else {
+        return c.coverage.clone();
+    };
+    let (read_for, state) = app.wallets.list.period_coverage.as_ref()?;
+    let report = match state {
+        PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report)) => report,
+        _ => return None,
+    };
+    if *read_for != period {
+        return None;
+    }
+    report["sources"]
+        .as_array()?
+        .iter()
+        .find(|v| v["wallet_id"].as_str() == Some(c.id.as_str()))
+        .cloned()
+}
+
+/// The period's failed read, as an alert with a retry above the table.
+fn period_failure(app: &App, tk: &Tk) -> Option<El> {
+    let period = search(app).period?;
+    let (read_for, PeriodCoverage::Failed) = app.wallets.list.period_coverage.as_ref()? else {
+        return None;
+    };
+    (*read_for == period).then(|| {
+        row()
+            .key("wallets-period-coverage-failed")
+            .w_full()
+            .gap(tk.r(0.75))
+            .center_y()
+            .flex_wrap()
+            .child(
+                text(tr(
+                    "connections:coverage.periodLoadError",
+                    &[("period", &period)],
+                ))
+                .font(tk.tsm(400.0))
+                .color(tk.destructive)
+                .role("alert")
+                .wrap(),
+            )
+            .child(
+                crate::ui::button::button(
+                    tk,
+                    "wallets-period-coverage-retry",
+                    crate::ui::button::Variant::Outline,
+                    crate::ui::button::Size::Sm,
+                    None,
+                    &t("connections:coverage.retry"),
+                    true,
+                )
+                .on_press(retry_period),
+            )
+    })
+}
+
+/// Drop a failed period read so the next poll asks again.
+fn retry_period(a: &mut App) {
+    a.wallets.list.period_coverage = None;
 }
 
 /// `CoverageCell`: the state glyph in its tone, then the one-line summary.
@@ -1744,12 +1804,15 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
     if same && st.period_generation == app.book_generation {
         return false;
     }
-    let keep = if same {
-        st.period_coverage.as_ref().and_then(|(_, r)| r.clone())
-    } else {
-        None
+    let keep = match st.period_coverage.as_ref() {
+        Some((_, PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report))))
+            if same =>
+        {
+            Some(report.clone())
+        }
+        _ => None,
     };
-    app.wallets.list.period_coverage = Some((period.clone(), keep));
+    app.wallets.list.period_coverage = Some((period.clone(), PeriodCoverage::Loading(keep)));
     app.wallets.list.period_generation = app.book_generation;
     app.send(
         "ui.sources.coverage",
@@ -1764,10 +1827,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         return;
     }
     let period = r.data["period_end"].as_str().map(str::to_owned);
-    if let Some((p, report)) = app.wallets.list.period_coverage.as_mut()
+    if let Some((p, state)) = app.wallets.list.period_coverage.as_mut()
         && (r.error.is_some() || period.as_deref().is_none_or(|x| x == p))
     {
-        *report = r.error.is_none().then(|| r.data.clone());
+        *state = match r.error {
+            Some(_) => PeriodCoverage::Failed,
+            None => PeriodCoverage::Ready(r.data.clone()),
+        };
     }
 }
 
@@ -1917,6 +1983,50 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(fiat_value(&app, 0.5), "$50,000.00");
+    }
+
+    /// Codex 4660314511: a chosen period's coverage that fails to read is a
+    /// failure with a retry, never today's coverage standing in for the period.
+    #[test]
+    fn a_failed_period_read_never_falls_back_to_today() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/connections?period=2025-12-31".into());
+        let today = serde_json::json!({"wallet_id": "w", "freshness_state": "behind"});
+        let c = Conn {
+            id: "w".into(),
+            coverage: Some(today),
+            ..Default::default()
+        };
+        app.wallets.list.period_coverage =
+            Some(("2025-12-31".into(), PeriodCoverage::Loading(None)));
+        assert_eq!(row_coverage(&app, &c), None, "nothing while it loads");
+        on_reply(
+            &mut app,
+            "wallets.list.coverage",
+            &crate::app::Reply {
+                kind: "ui.sources.coverage".into(),
+                data: serde_json::Value::Null,
+                error: Some("boom".into()),
+                error_detail: serde_json::Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        assert!(matches!(
+            app.wallets.list.period_coverage,
+            Some((_, PeriodCoverage::Failed))
+        ));
+        assert_eq!(row_coverage(&app, &c), None, "no fallback to today");
+        assert!(filtered(&app, std::slice::from_ref(&c)).len() == 1);
+        // Retrying drops the failure so the next poll reads again.
+        retry_period(&mut app);
+        assert!(app.wallets.list.period_coverage.is_none());
+        // A period read that answers is the period's coverage.
+        let period = serde_json::json!({"wallet_id": "w", "freshness_state": "current"});
+        app.wallets.list.period_coverage = Some((
+            "2025-12-31".into(),
+            PeriodCoverage::Ready(serde_json::json!({"sources": [period.clone()]})),
+        ));
+        assert_eq!(row_coverage(&app, &c), Some(period));
     }
 
     #[test]

@@ -1192,6 +1192,7 @@ fn bull(conn: &Connection, mode: &str) -> Py {
                 at: 0,
             },
             None,
+            None,
         )
         .unwrap()
     }
@@ -1656,6 +1657,7 @@ fn coinfinity(conn: &Connection, mode: &str) -> Py {
                 identity: None,
                 at: 0,
             },
+            None,
             None,
         )
         .unwrap()
@@ -2341,6 +2343,7 @@ fn pocket(conn: &Connection, mode: &str) -> Py {
                 at: 0,
             },
             None,
+            None,
         )
         .unwrap()
     }
@@ -2546,6 +2549,7 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
             identity: None,
             at: 0,
         },
+        None,
         None,
     )
     .unwrap();
@@ -6209,4 +6213,36 @@ fn bisq_imports_only_into_a_bisq_wallet() {
     let result = execute(&conn, request("My escrow"), None).unwrap();
     assert_eq!(bisq_get(&result, "wallet"), "\"My escrow\"");
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// Codex 4660357770: a run records the file as it was parsed. The snapshot
+/// is taken before the rows are read and kept only when the file is
+/// unchanged once they are in; a file replaced meanwhile refuses the run, so
+/// its rows never pair with another file's hash or size.
+#[test]
+fn a_file_changed_while_it_was_imported_is_refused() {
+    let path = std::env::temp_dir().join(format!(
+        "kassiber-parsed-snapshot-{}-{:?}.csv",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::write(&path, "date,txid,direction,asset,amount,fee\n").unwrap();
+    let file = path.to_str().unwrap();
+    let before = file_snapshot(file);
+    assert!(before.sha256.is_some());
+    assert_eq!(parsed_snapshot(file, &before).unwrap(), before);
+    std::fs::write(
+        &path,
+        "date,txid,direction,asset,amount,fee\n2024-01-01,x,in,BTC,1,0\n",
+    )
+    .unwrap();
+    let error = parsed_snapshot(file, &before).unwrap_err();
+    assert_eq!(error.code.as_str(), "validation");
+    // An inline payload has no file to change.
+    let inline = file_snapshot("inline:{}");
+    assert_eq!(
+        parsed_snapshot("inline:{}", &inline).unwrap(),
+        FileSnapshot::default()
+    );
+    std::fs::remove_file(&path).unwrap();
 }

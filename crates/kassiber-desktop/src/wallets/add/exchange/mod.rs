@@ -150,7 +150,9 @@ pub fn submit(app: &mut App, label: &str) -> Result<Value, String> {
     }
     let mut args = model::credential_args(&c);
     args.insert("label".into(), json!(label));
-    if let Some(wallet) = stm(app).attach_wallet.take() {
+    // Building the request never consumes the target: validation builds it once before the
+    // request does. A save (or another choice) clears it (`clear_attach`).
+    if let Some(wallet) = st(app).attach_wallet.clone() {
         args.insert("wallet".into(), json!(wallet));
     }
     Ok(Value::Object(args))
@@ -165,6 +167,8 @@ pub fn clear_attach(app: &mut App) {
 /// A refused save: the CSV wallet the daemon names (`details.attachable_wallet_id`) can take
 /// the key instead.
 pub fn on_create_error(app: &mut App, detail: &Value) {
+    // The attempt that named a wallet is over; another needs the offer pressed again.
+    stm(app).attach_wallet = None;
     let d = &detail["details"];
     stm(app).attach_offer = d["attachable_wallet_id"].as_str().map(|id| {
         (
@@ -393,6 +397,14 @@ pub fn sync_prime(app: &mut App, c: &Conn) -> bool {
         "wallets.exchange.status",
     );
     true
+}
+
+/// Sync `c` from its exchange (`ui.connections.exchange.sync`), as its sync card's button does.
+pub fn sync_wallet(app: &mut App, c: &Conn) {
+    sync_prime(app, c);
+    if st(app).sync.wallet.as_deref() == Some(c.id.as_str()) {
+        run_sync(app);
+    }
 }
 
 /// Whether the shown wallet has a sync in flight.
@@ -1062,6 +1074,35 @@ mod test_reply_tests {
         };
         on_reply(&mut app, "wallets.exchange.status", &status);
         assert!(st(&app).sync.row.is_none());
+    }
+
+    /// Codex 4660315083: "Add key to …" submits through validation, which builds the request
+    /// once before the real build. The attachment target survives that first build, so the
+    /// request sent names the wallet; only a save or another choice clears it.
+    #[test]
+    fn the_attachment_target_survives_validation() {
+        let mut app = crate::app::tests::quiet_app();
+        reset(&mut app, "kraken");
+        let s = stm(&mut app);
+        s.api_key.text = "K".into();
+        s.api_secret.text = "S".into();
+        let c = credentials(st(&app));
+        stm(&mut app).outcome = Some(Outcome {
+            credentials: c,
+            result: Some((true, Some(true))),
+            error: None,
+        });
+        stm(&mut app).attach_wallet = Some("csv-wallet".into());
+        let validated = submit(&mut app, "Kraken").unwrap();
+        let sent = submit(&mut app, "Kraken").unwrap();
+        assert_eq!(validated["wallet"], json!("csv-wallet"));
+        assert_eq!(sent["wallet"], json!("csv-wallet"));
+        // A refused save ends the attempt; a save or another choice clears it too.
+        on_create_error(&mut app, &json!({"details": {}}));
+        assert!(submit(&mut app, "Kraken").unwrap().get("wallet").is_none());
+        stm(&mut app).attach_wallet = Some("csv-wallet".into());
+        clear_attach(&mut app);
+        assert!(submit(&mut app, "Kraken").unwrap().get("wallet").is_none());
     }
 
     /// A test for credentials A still out when Add connection closes and reopens: its answer

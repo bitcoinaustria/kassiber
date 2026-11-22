@@ -1547,6 +1547,8 @@
   },
   "coverage": {
     "column": "Coverage",
+    "periodLoadError": "Couldn't read coverage for {{period}}. Today's coverage is not shown in its place.",
+    "retry": "Retry",
     "mode": {
       "live": "Live",
       "file": "File",

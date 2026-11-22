@@ -1547,6 +1547,8 @@
   },
   "coverage": {
     "column": "Abdeckung",
+    "periodLoadError": "Die Abdeckung für {{period}} konnte nicht gelesen werden. Die heutige Abdeckung wird nicht an ihrer Stelle gezeigt.",
+    "retry": "Erneut versuchen",
     "mode": {
       "live": "Live",
       "file": "Datei",
