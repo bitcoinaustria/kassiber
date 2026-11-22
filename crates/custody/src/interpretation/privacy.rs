@@ -185,6 +185,7 @@ fn receipts<R: Row>(rows: &[R], context: &Context, excluded_txids: &[String]) ->
     (unclassified, classified)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn compute<R: Row>(
     rows: &[R],
     auto: &[Value],
@@ -402,7 +403,12 @@ mod tests {
         }
         // A user-excluded row the loader reports by its txid.
         let excluded = [format!(" {} ", RECEIPT_TXID.to_uppercase())];
-        let detail = held(&[receipt.clone()], &receipt_context(&[]), &excluded).unwrap();
+        let detail = held(
+            std::slice::from_ref(&receipt),
+            &receipt_context(&[]),
+            &excluded,
+        )
+        .unwrap();
         assert!(detail.get("classifiable_receipt").is_none());
         let elsewhere = ["2".repeat(64)];
         assert_eq!(held(&[receipt], &receipt_context(&[]), &elsewhere), None);
