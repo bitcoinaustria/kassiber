@@ -45,13 +45,18 @@ pub struct Shared {
 pub fn build(app: &App) -> Shared {
     if let Some(p) = &app.assistant.parked {
         let page = p.context.clone().unwrap_or_else(|| screen::current(app));
-        return compose(page, None, None);
+        return compose(page, None, None, None);
     }
     let item = match app.assistant.focus.clone() {
         Some(f) => Some((Part::Pinned, f)),
         None => open_item(app).map(|f| (Part::Open, f)),
     };
-    compose(screen::current(app), item, chart(app))
+    compose(
+        screen::current(app),
+        item,
+        chart(app),
+        app.assistant.hidden_open.as_deref(),
+    )
 }
 
 /// The id of the transaction open in the detail panel, once its record is read.
@@ -107,12 +112,28 @@ fn chart_filters(c: &ChartSel) -> Vec<(&'static str, Value)> {
 }
 
 /// The page's context with the item's entity and capability packs and the chart's filters
-/// added, and the chips that name each part.
-fn compose(mut screen: Value, item: Option<(Part, Focus)>, chart: Option<&ChartSel>) -> Shared {
+/// added, and the chips that name each part. `hidden`: a transaction the user removed from the
+/// tray; a page whose own address names it (`/source-of-funds?tx=`, `/review?tx=`) does not
+/// send it either. A transaction the page names that is still shared is said on the page chip.
+fn compose(
+    mut screen: Value,
+    item: Option<(Part, Focus)>,
+    chart: Option<&ChartSel>,
+    hidden: Option<&str>,
+) -> Shared {
     let mut chips = Vec::new();
     let item = item.filter(|(_, f)| {
         f.context["entity_type"].is_string() && f.context["entity_id"].is_string()
     });
+    if item.is_none()
+        && screen["entity_type"] == "transaction"
+        && hidden.is_some_and(|h| screen["entity_id"] == h)
+        && let Some(m) = screen.as_object_mut()
+    {
+        m.remove("entity_type");
+        m.remove("entity_id");
+    }
+    let page_item = item.is_none() && screen["entity_type"] == "transaction";
     if let Some((part, f)) = &item {
         screen["entity_type"] = f.context["entity_type"].clone();
         screen["entity_id"] = f.context["entity_id"].clone();
@@ -145,7 +166,11 @@ fn compose(mut screen: Value, item: Option<(Part, Focus)>, chart: Option<&ChartS
     chips.push(Chip {
         part: Part::Page,
         label: tr(
-            "assistant:panel.contextPage",
+            if page_item {
+                "assistant:panel.contextPageItem"
+            } else {
+                "assistant:panel.contextPage"
+            },
             &[("page", crate::shell::page_title(route))],
         ),
     });
@@ -159,7 +184,18 @@ fn compose(mut screen: Value, item: Option<(Part, Focus)>, chart: Option<&ChartS
 /// The chip's remove button: unpin, or keep the open transaction or chart selection out.
 pub fn remove(app: &mut App, part: Part) {
     match part {
-        Part::Pinned => app.assistant.focus = None,
+        Part::Pinned => {
+            // The same transaction open in the detail panel would otherwise take its place at
+            // once: one removal stops sharing it.
+            let pinned = app
+                .assistant
+                .focus
+                .take()
+                .and_then(|f| f.context["entity_id"].as_str().map(str::to_owned));
+            if pinned.is_some() && pinned.as_deref() == open_id(app) {
+                app.assistant.hidden_open = pinned;
+            }
+        }
         Part::Open => app.assistant.hidden_open = open_id(app).map(str::to_owned),
         Part::Chart => app.assistant.hidden_chart = app.txs.filters.chart.clone(),
         Part::Page => {}
@@ -213,7 +249,18 @@ mod tests {
         assert_eq!(has_item, s.item.is_some());
         match &s.item {
             Some(f) => assert_eq!(s.screen["entity_id"], f.context["entity_id"]),
-            None => assert!(s.screen["entity_type"] != "transaction"),
+            // A transaction the page itself names travels only when the page chip says so.
+            None => assert_eq!(
+                s.screen["entity_type"] == "transaction",
+                s.chips.last().unwrap().label
+                    == tr(
+                        "assistant:panel.contextPageItem",
+                        &[(
+                            "page",
+                            crate::shell::page_title(s.screen["route"].as_str().unwrap())
+                        )]
+                    )
+            ),
         }
         let chart = s.screen["filters"]["chart_flows"].is_string();
         assert_eq!(parts.contains(&Part::Chart), chart);
@@ -227,7 +274,12 @@ mod tests {
 
     #[test]
     fn the_page_alone() {
-        let s = compose(screen::context_for("/reports", "year=2024"), None, None);
+        let s = compose(
+            screen::context_for("/reports", "year=2024"),
+            None,
+            None,
+            None,
+        );
         assert_tray_is_json(&s);
         assert_eq!(s.chips.len(), 1);
         assert_eq!(
@@ -241,6 +293,7 @@ mod tests {
         let s = compose(
             screen::context_for("/reports", ""),
             Some((Part::Open, pin("tx-1", false))),
+            None,
             None,
         );
         assert_tray_is_json(&s);
@@ -258,6 +311,7 @@ mod tests {
             screen::context_for("/transactions", "tab=pricing"),
             Some((Part::Pinned, pin("tx-2", true))),
             Some(&sel()),
+            None,
         );
         assert_tray_is_json(&s);
         let parts: Vec<Part> = s.chips.iter().map(|c| c.part).collect();
@@ -284,12 +338,38 @@ mod tests {
         let mut c = sel();
         c.bucket_key = Some("2025 / Q1".into());
         c.segment = None;
-        let s = compose(screen::context_for("/transactions", ""), None, Some(&c));
+        let s = compose(
+            screen::context_for("/transactions", ""),
+            None,
+            Some(&c),
+            None,
+        );
         assert_tray_is_json(&s);
         assert_eq!(s.screen["filters"], json!({"chart_flows": "external"}));
-        let s = compose(screen::context_for("/reports", ""), None, Some(&c));
+        let s = compose(screen::context_for("/reports", ""), None, Some(&c), None);
         assert_tray_is_json(&s);
         assert_eq!(s.chips.len(), 1);
+    }
+
+    /// A page whose address names a transaction says so on its chip, and stops sending it once
+    /// the user removed that transaction from the tray.
+    #[test]
+    fn a_transaction_the_page_names_is_shown_or_removed() {
+        let page = || screen::context_for("/source-of-funds", "tx=tx-5");
+        let s = compose(page(), None, None, None);
+        assert_tray_is_json(&s);
+        assert_eq!(s.screen["entity_id"], "tx-5");
+        assert!(
+            s.item.is_none(),
+            "named by the page, not read for the model"
+        );
+        let s = compose(page(), None, None, Some("tx-5"));
+        assert_tray_is_json(&s);
+        assert_eq!(s.screen["entity_id"], Value::Null);
+        assert_eq!(s.screen["entity_type"], Value::Null);
+        // Another removed transaction leaves the page's own alone.
+        let s = compose(page(), None, None, Some("tx-6"));
+        assert_eq!(s.screen["entity_id"], "tx-5");
     }
 
     /// On the app: the open transaction joins on any route once the book is known, a removal
@@ -339,5 +419,13 @@ mod tests {
         assert_tray_is_json(&s);
         assert_eq!(s.chips[0].part, Part::Pinned);
         assert_eq!(s.screen["entity_id"], "tx-9");
+
+        // Unpinning the transaction that is also open stops sharing it in one click.
+        app.assistant.focus = Some(pin("tx-3", false));
+        remove(&mut app, Part::Pinned);
+        let s = build(&app);
+        assert_tray_is_json(&s);
+        assert!(s.item.is_none());
+        assert_eq!(s.screen["entity_id"], Value::Null);
     }
 }

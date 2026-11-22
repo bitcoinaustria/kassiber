@@ -699,6 +699,7 @@
     "seesLabel": "Der Assistent sieht:",
     "contextOpen": "Geöffnet · {{label}}",
     "contextPage": "Seite · {{page}}",
+    "contextPageItem": "Seite · {{page}} und die angezeigte Transaktion",
     "removeContext": "{{label}} nicht teilen",
     "askAbout": "Dazu fragen",
     "askAboutTransactionPrompt": "Erkläre diese Transaktion und ob ich mich um etwas davon kümmern muss.",
