@@ -1092,3 +1092,34 @@ fn bitpanda_without_a_latest_balance_still_imports_the_history() {
         &s("incomplete")
     );
 }
+
+/// A BTC leg without a usable wallet id still imports, but its wallet's
+/// balance is unknown, so no total is reported: the identified wallets alone
+/// would understate it.
+#[test]
+fn bitpanda_btc_leg_without_a_wallet_id_withholds_the_total() {
+    for wallet in [Some(json!("")), Some(json!("  ")), None] {
+        let mut script = Script::new();
+        let savings = script
+            .operations
+            .iter()
+            .position(|o| o["operation_id"] == "op-savings")
+            .unwrap();
+        let leg = &mut script.operations[savings]["transactions"][0];
+        match &wallet {
+            Some(value) => leg["wallet_id"] = value.clone(),
+            None => {
+                leg.as_object_mut().unwrap().remove("wallet_id");
+            }
+        }
+        let (_, run) = sync(script);
+        let result = run.result.unwrap();
+        assert_eq!(at(&result, "imported"), &Py::from(6), "{wallet:?}");
+        assert_eq!(at(&result, "reported_balance"), &Py::Null, "{wallet:?}");
+        assert_eq!(
+            at(at(&result, "reported_balance_unavailable"), "reason"),
+            &s("incomplete"),
+            "{wallet:?}"
+        );
+    }
+}

@@ -118,10 +118,12 @@ and `wallet` is required. A row names its wallet by `wallet_id` when that id
 is in this book, else by `wallet` (id or label; a label export prefixed
 with `'` is also found without it); an ambiguous label is refused. Every row
 is checked before any is stored; one bad row refuses the file (the message
-names the row). Imported rows are `manual` checkpoints with `origin_ref`
-`csv:<file>`: a balance read from a file is the user's statement, not an API
-or chain fact, so an `origin` column other than `manual` is kept only as a
-note prefix (`imported api checkpoint: ...`). Export writes stored
+names the row), and so does a row with more or fewer fields than the header
+(an unquoted decimal comma such as `0,5` splits into two). Imported rows
+are `manual` checkpoints with `origin_ref` `csv:<file>`: a balance read
+from a file is the user's statement, not an API or chain fact, so an
+`origin` column other than `manual` is kept only as a note prefix
+(`imported api checkpoint: ...`). Export writes stored
 checkpoints oldest first; a wallet label or note starting with `=`, `+`, `-`
 or `@` is prefixed with `'` so a spreadsheet does not run it. A row this book exported
 names its checkpoint (`checkpoint_id`); when that stored row still has the
