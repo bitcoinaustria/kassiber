@@ -6,7 +6,7 @@
 //! Python base. Provider fetching requires a separate, exact-action grant.
 mod csv;
 mod desktop;
-pub use desktop::{coverage, run as desktop_command};
+pub use desktop::{coverage, coverage_settling, run as desktop_command, Settled};
 
 /// The packaged Kraken seed directory as Python's `resources.files("kassiber")`
 /// names it: the compiled-in location with `..` resolved lexically.

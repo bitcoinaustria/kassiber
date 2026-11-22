@@ -278,7 +278,7 @@ quarantined:
 | Category | Meaning | Typical next step |
 | --- | --- | --- |
 | `missing_wallet_history` | Part of the movement happened in a wallet whose history is not in the book (sending wallet not synced, intermediate wallet missing, channel sweep wallet). | Sync or connect that wallet; import its history. |
-| `missing_chain_evidence` | The stored graph cannot prove amounts (no input values, confidential outputs, file-only side, pending or replaced). | Sync again from the chain; wait for confirmation. |
+| `missing_chain_evidence` | The stored graph cannot prove amounts (no input values, confidential outputs, file-only side, pending, or a conflicting spend no confirmation has settled). A transaction a confirmed spend replaced is not held; see [tax](tax.md#quarantines). | Sync again from the chain; wait for confirmation. |
 | `missing_price` | No usable price for the valuation date. | Refresh rates or enter the price. |
 | `missing_acquisition_history` | A disposal needs earlier acquisitions Kassiber has not seen or priced. | Import purchase history or connect the source wallet. |
 | `needs_decision` | The evidence has more than one valid reading. | Pair, classify or review the component. |
