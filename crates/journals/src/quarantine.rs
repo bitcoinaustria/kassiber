@@ -180,6 +180,17 @@ fn reason(reason: &str) -> Info {
 
 /// `quarantine_catalog.reason_info`, resolving the quantity umbrella.
 fn reason_info(name: &str, detail: &Py) -> Info {
+    // A collaborative receipt (a Payjoin the owner received, say) that
+    // custody found provable apart from its classification clears when the
+    // owner classifies its net amount; see custody-resolution.md.
+    if name == "privacy_hop_unresolved"
+        && matches!(get(detail, "classifiable_receipt"), Some(Py::Bool(true)))
+    {
+        return info(
+            "needs_decision",
+            &["classify", "connect_wallet", "attach_evidence"],
+        );
+    }
     if name != "custody_quantity_unresolved" {
         return reason(name);
     }
@@ -1938,6 +1949,29 @@ mod tests {
             ["restore_pairing", "pair_transfer", "sync_wallet"]
         );
         assert!(!info.downstream());
+    }
+
+    #[test]
+    fn a_held_collaborative_receipt_leads_with_classifying_it() {
+        let held = |classifiable: Option<bool>| {
+            let mut detail = vec![("direction", s("inbound"))];
+            if let Some(flag) = classifiable {
+                detail.push(("classifiable_receipt", Py::Bool(flag)));
+            }
+            reason_info("privacy_hop_unresolved", &dict(detail))
+        };
+        assert_eq!(
+            held(Some(true)).actions,
+            ["classify", "connect_wallet", "attach_evidence"]
+        );
+        assert_eq!(held(Some(true)).category, "needs_decision");
+        // An inbound hold custody did not find provable is not offered it.
+        for classifiable in [None, Some(false)] {
+            assert_eq!(
+                held(classifiable).actions,
+                ["connect_wallet", "attach_evidence"]
+            );
+        }
     }
 
     #[test]

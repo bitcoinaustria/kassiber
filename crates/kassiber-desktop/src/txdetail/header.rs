@@ -562,7 +562,14 @@ pub fn header(app: &App, tk: &Tk, o: &Open, r: &Value, sheet: bool) -> El {
             .gap(tk.r(0.25))
             .center_y()
             .child(ic(&I::CALENDAR_CLOCK, tk.r(0.875), tk.muted_fg))
-            .child(text(s(r, "date").to_owned()).font(muted).color(tk.muted_fg)),
+            .child(
+                text(crate::format::tx_date(
+                    s(r, "date"),
+                    f(r, "conf").unwrap_or(0.0) > 0.0,
+                ))
+                .font(muted)
+                .color(tk.muted_fg),
+            ),
     );
 
     // `SheetHeader border-b`: `px-4 pt-5 pb-4 sm:px-6 sm:pt-6`, `justify-between gap-4`; chips

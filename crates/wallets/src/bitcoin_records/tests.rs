@@ -80,6 +80,32 @@ fn electrum_raw_graph_preserves_python_decimal_json_bytes() {
 }
 
 #[test]
+fn an_electrum_mempool_row_with_a_server_time_stays_unconfirmed() {
+    // Only a positive history height confirms; a server's own time on a
+    // mempool row only dates it.
+    let tx = json!({"vin":[],"vout":[{"scriptpubkey":"51","value_sats":1000}]});
+    let scripts = BTreeSet::from(["51".into()]);
+    let at = "2023-11-14T22:13:20Z";
+    let record = |in_block| {
+        from_electrum_history("tx", &tx, at, in_block, &scripts, "fixture")
+            .unwrap()
+            .unwrap()
+    };
+    let raw = |record: &Value| -> Value {
+        serde_json::from_str(record["raw_json"].as_str().unwrap()).unwrap()
+    };
+    let mempool = record(false);
+    assert_eq!(raw(&mempool)["status"], json!({"confirmed":false}));
+    assert_eq!(
+        (&mempool["occurred_at"], &mempool["confirmed_at"]),
+        (&json!(at), &Value::Null)
+    );
+    let mined = record(true);
+    assert_eq!(raw(&mined)["status"], json!({"confirmed":true}));
+    assert_eq!(mined["confirmed_at"], json!(at));
+}
+
+#[test]
 fn bitcoin_malformed_graphs_refuse_before_projecting_related_outputs() {
     let scripts = BTreeSet::from(["51".into()]);
     for tx in [

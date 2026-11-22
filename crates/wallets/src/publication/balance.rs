@@ -7,7 +7,7 @@ use kassiber_envelope::{dict, get, s, truthy, AppError};
 use kassiber_pyjson::Value;
 use std::collections::BTreeMap;
 
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 
 fn int(value: &Value) -> Result<i128> {
     if !truthy(value) {

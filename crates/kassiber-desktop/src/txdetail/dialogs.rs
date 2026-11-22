@@ -442,7 +442,8 @@ pub fn reuse_candidates(app: &App) -> Vec<(String, String)> {
             } else {
                 t.external_id.clone()
             };
-            (t.id.clone(), format!("{txn} · {} · {}", t.date, t.account))
+            let date = crate::format::tx_date(&t.date, t.conf > 0.0);
+            (t.id.clone(), format!("{txn} · {date} · {}", t.account))
         })
         .collect()
 }
