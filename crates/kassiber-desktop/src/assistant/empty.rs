@@ -83,10 +83,9 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, host: Host, layer: &mut Vec<El
         c = c.child(card);
     }
 
-    let mut box_col = col().w_full();
-    if let Some(chip) = composer::focus_chip(app, tk, true) {
-        box_col = box_col.child(chip.mb(tk.r(0.5)));
-    }
+    let mut box_col = col()
+        .w_full()
+        .child(composer::context_tray(app, tk, true).mb(tk.r(0.5)));
     box_col = box_col.child(composer::view(
         app,
         cx,
