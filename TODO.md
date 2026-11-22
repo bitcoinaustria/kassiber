@@ -2092,8 +2092,9 @@ See [tax countries](docs/reference/tax-countries.md) and
   finds no card and skips `refresh_reads`); resolve each leg's own row before
   rendering an applied pair named by external txids (the reverse-pair view can
   otherwise show the already-linked counterpart); a "Change" action on proposal cards;
-  native cards for unpair, dismissal delete, quarantine resolve, custody and
-  component applies, source-of-funds and the chain-analysis consents.
+  native cards for unpair, dismissal delete, component applies, source-of-funds
+  and the chain-analysis consents (quarantine resolve and custody applies have
+  theirs).
 - [ ] Make the desktop scene check (`packaging/ci/rune-checks.sh --scenes-only`,
   `src/checks.rs`) finish and pass, then run it in CI's "Desktop app" job. On an
   empty `kassiber init` book each Transactions scene waits out
