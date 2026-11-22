@@ -1477,16 +1477,25 @@ suggesting a link (`ui.transfers.dismiss`) and editing a transaction
 open book has them (read with `ui.transactions.resolve`, a local read), the
 kind and tax treatment of a link or each field an edit sets with its current
 value, and the assistant's reason; **Apply** and **Decline** are the same
-consent answer as **Approve** and **Decline**. Arguments outside the tool's
-schema keep the generic row. None of the three is plan-bound: the daemon
-validates and computes when the approved call runs. Once applied, the card says
-**Applied with the assistant**. When a result's `undo` names a book mutation
+consent answer as **Approve** and **Decline**. App-defined values (review
+status, the Austrian tax classification, the recorded kind) read in the
+interface's language; `at_regime` and `at_category` are one tax-classification
+row. Arguments outside the tool's schema keep the generic row, and so does any
+edit the card cannot state field by field: one that sets a pricing field (the
+core replaces the whole pricing group and clears the fields omitted), half a tax
+classification, or a value the app has no label for. None of the three is
+plan-bound: the daemon validates and computes when the approved call runs. Once
+applied, the card says **Applied with the assistant**, keeps the permission-mode
+badge when the change ran without asking, and every completed change makes the
+cards read their transactions again, so a later card shows current values. When a result's `undo` names a book mutation
 the desktop may send itself (its `ALLOWED_DAEMON_KINDS`, such as
 `ui.transfers.unpair`, `ui.transfers.dismissals.delete` or
 `ui.transactions.history.revert`), that card, or the generic tool card, offers
 **Undo**: the desktop sends the hinted kind with the hint's arguments and the
 open book's `expected_scope`, as the user's own action, shows the outcome and
-re-reads the screen. A hint that names a plan tool (component, custody gap and
+re-reads the screen. Undo state belongs to the card (its message and call id, as
+providers may reuse a call id across turns), and nothing is undone into another
+book than the conversation's. A hint that names a plan tool (component, custody gap and
 import rollback inverses), carries its own `expected_scope`, or names a kind
 outside the allowlist gets no button; the assistant can still take it back.
 

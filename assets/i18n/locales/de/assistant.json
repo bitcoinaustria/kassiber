@@ -1122,14 +1122,7 @@
         "excluded": "Aus Berichten ausgenommen",
         "taxable": "Steuerpflichtig",
         "review_status": "Prüfstatus",
-        "at_regime": "Österreichisches Regime",
-        "at_category": "Österreichische Kategorie",
-        "fiat_rate": "Kurs",
-        "fiat_value": "Wert",
-        "fiat_currency": "Währung",
-        "pricing_source_kind": "Preisquelle",
-        "pricing_quality": "Preisqualität",
-        "pricing_external_ref": "Preisreferenz"
+        "tax": "Steuerliche Klassifizierung"
       }
     },
     "undo": {

@@ -1122,14 +1122,7 @@
         "excluded": "Excluded from reports",
         "taxable": "Taxable",
         "review_status": "Review status",
-        "at_regime": "Austrian regime",
-        "at_category": "Austrian category",
-        "fiat_rate": "Price",
-        "fiat_value": "Value",
-        "fiat_currency": "Currency",
-        "pricing_source_kind": "Price source",
-        "pricing_quality": "Price quality",
-        "pricing_external_ref": "Price reference"
+        "tax": "Tax classification"
       }
     },
     "undo": {

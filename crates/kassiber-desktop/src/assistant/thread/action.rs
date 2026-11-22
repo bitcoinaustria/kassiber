@@ -42,9 +42,15 @@ const PAIR_KINDS: [&str; 9] = [
 
 const POLICIES: [&str; 2] = ["carrying-value", "taxable"];
 
-/// The fields `ui.transactions.metadata.update` sets, in the order the card lists them, with the
-/// key the resolved transaction keeps the current value under.
-const EDIT_FIELDS: [(&str, Option<&str>); 14] = [
+/// The fields `ui.transactions.metadata.update` sets that the card describes, in the order it
+/// lists them, with the key the resolved transaction keeps the current value under.
+///
+/// Pricing is left out on purpose: any one pricing argument makes the core replace the whole
+/// pricing group (`fiat_currency`, `fiat_rate`, `fiat_value`, `pricing_source_kind`,
+/// `pricing_quality`, `pricing_external_ref`), clearing the ones omitted, so a field-by-field card
+/// would misstate the effect. Such an edit keeps the generic row with its raw arguments.
+/// `at_regime` and `at_category` are set together and shown as one tax classification.
+const EDIT_FIELDS: [(&str, Option<&str>); 8] = [
     ("note", Some("note")),
     ("tags", Some("tags")),
     ("kind", Some("kindOverride")),
@@ -53,16 +59,10 @@ const EDIT_FIELDS: [(&str, Option<&str>); 14] = [
     ("review_status", Some("reviewStatus")),
     ("at_regime", Some("atRegime")),
     ("at_category", Some("atCategory")),
-    ("fiat_rate", Some("rate")),
-    ("fiat_value", None),
-    ("fiat_currency", Some("fiatCurrency")),
-    ("pricing_source_kind", Some("pricingSourceKind")),
-    ("pricing_quality", Some("pricingQuality")),
-    ("pricing_external_ref", Some("pricingExternalRef")),
 ];
 
-/// Amounts shown behind the privacy blur.
-const SENSITIVE_FIELDS: [&str; 2] = ["fiat_rate", "fiat_value"];
+/// The review statuses the card names (`draft::status_key`).
+const REVIEW_STATUSES: [&str; 4] = ["completed", "failed", "pending", "review"];
 
 /// A change the assistant proposes, as its tool's arguments describe it.
 #[derive(Clone, Debug, PartialEq)]
@@ -150,9 +150,16 @@ fn edit_value_ok(field: &str, v: &Value) -> bool {
             .is_some_and(|a| a.len() <= 50 && a.iter().all(Value::is_string)),
         "excluded" => v.is_boolean(),
         "taxable" => v.is_boolean() || v.is_null(),
-        "fiat_rate" | "fiat_value" => v.is_string() || v.is_number() || v.is_null(),
+        "review_status" => v.as_str().is_some_and(|s| REVIEW_STATUSES.contains(&s)),
         _ => v.is_string() || v.is_null(),
     }
+}
+
+/// The app's tax classification an `at_regime` / `at_category` pair names, if any.
+fn tax_choice(regime: &str, category: &str) -> Option<&'static crate::txdetail::draft::TaxOption> {
+    crate::txdetail::draft::TAX_OPTIONS
+        .iter()
+        .find(|o| o.regime == regime && o.category == category)
 }
 
 /// The tool call as a native card, or `None` (an unknown tool or arguments outside its schema:
@@ -210,8 +217,16 @@ pub fn parse(name: &str, args: &Value) -> Option<Action> {
                     if !edit_value_ok(field, v) {
                         return None;
                     }
-                    fields.push((field, v.clone()));
+                    if field != "at_regime" {
+                        fields.push((field, v.clone()));
+                    }
                 }
+            }
+            // One tax classification: both halves, naming one of the app's options.
+            match (o.get("at_regime"), o.get("at_category")) {
+                (None, None) => {}
+                (Some(Value::String(r)), Some(Value::String(c))) if tax_choice(r, c).is_some() => {}
+                _ => return None,
             }
             if fields.is_empty() {
                 return None;
@@ -303,27 +318,39 @@ pub struct State {
     pub legs_book: Option<Book>,
     /// Leg reads in flight: request id → transaction id.
     pub leg_ids: Vec<(String, String)>,
-    /// Undo by call id.
+    /// Undo by card (`undo_key`: its message and call id; providers may reuse a call id across
+    /// turns).
     pub undo: HashMap<String, UndoState>,
-    /// Undos in flight: request id → call id.
+    /// Undos in flight: request id → card key.
     pub undo_ids: Vec<(String, String)>,
 }
 
-/// Undo pressed on the card of `call_id`.
-pub fn start_undo(app: &mut App, call_id: &str) {
+/// The key of a card's Undo state: the owning message and the call.
+pub fn undo_key(msg_id: &str, call_id: &str) -> String {
+    format!("{msg_id}\u{1f}{call_id}")
+}
+
+/// The call a card shows: `call_id` within message `msg_id`.
+fn card_call<'a>(app: &'a App, msg_id: &str, call_id: &str) -> Option<&'a ToolCall> {
+    app.assistant
+        .messages
+        .iter()
+        .find(|m| m.id == msg_id)?
+        .tool_calls
+        .iter()
+        .find(|c| c.call_id == call_id)
+}
+
+/// Undo pressed on the card of `call_id` in message `msg_id`.
+pub fn start_undo(app: &mut App, msg_id: &str, call_id: &str) {
+    let key = undo_key(msg_id, call_id);
     if matches!(
-        app.assistant.thread.actions.undo.get(call_id),
+        app.assistant.thread.actions.undo.get(&key),
         Some(UndoState::Running | UndoState::Done)
     ) {
         return;
     }
-    let Some(call) = app
-        .assistant
-        .messages
-        .iter()
-        .flat_map(|m| &m.tool_calls)
-        .find(|c| c.call_id == call_id)
-    else {
+    let Some(call) = card_call(app, msg_id, call_id) else {
         return;
     };
     let Some((kind, args)) = undo_request(app, call) else {
@@ -335,21 +362,26 @@ pub fn start_undo(app: &mut App, call_id: &str) {
             .thread
             .actions
             .undo
-            .insert(call_id.to_owned(), UndoState::Done);
+            .insert(key, UndoState::Done);
         return;
     }
     app.assistant
         .thread
         .actions
         .undo
-        .insert(call_id.to_owned(), UndoState::Running);
+        .insert(key.clone(), UndoState::Running);
     if let Some(id) = app.send(kind, args, "assistant.action.undo") {
-        app.assistant
-            .thread
-            .actions
-            .undo_ids
-            .push((id, call_id.to_owned()));
+        app.assistant.thread.actions.undo_ids.push((id, key));
     }
+}
+
+/// Drop the cards' transaction reads after the book changed (an applied change, an undo), so a
+/// later card shows current values rather than the ones read before. Reads still in flight are
+/// forgotten too: their replies describe the book before the change.
+pub fn invalidate_legs(app: &mut App) {
+    let st = &mut app.assistant.thread.actions;
+    st.legs.clear();
+    st.leg_ids.clear();
 }
 
 /// The one of `list` whose request is no longer pending: the reply being handled now.
@@ -375,7 +407,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             app.assistant.thread.actions.undo.insert(call, state);
             if done {
                 // The book changed: the cards' transactions and every screen read again.
-                app.assistant.thread.actions.legs.clear();
+                invalidate_legs(app);
                 app.refresh_reads();
             }
         }
@@ -577,16 +609,23 @@ fn field_text(field: &str, v: &Value, before: bool) -> String {
             .join(", "),
         Value::String(s) if s.is_empty() => field_text(field, &Value::Null, before),
         Value::String(s) if field == "kind" => crate::txdetail::draft::kind_label(s),
+        Value::String(s) if field == "review_status" && REVIEW_STATUSES.contains(&s.as_str()) => {
+            t(crate::txdetail::draft::status_key(s))
+        }
+        // The app's own classification label; a category it has no option for (an older book)
+        // is shown as stored.
+        Value::String(s) if field == "at_category" => crate::txdetail::draft::TAX_OPTIONS
+            .iter()
+            .find(|o| o.category == s)
+            .map_or_else(|| s.clone(), crate::txdetail::draft::tax_label),
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
         Value::Object(_) => String::new(),
     }
 }
 
-fn edit_row(app: &App, tk: &Tk, field: &str, after: &Value, current: Option<&Value>) -> El {
-    let hide = app.prefs.hide_sensitive() && SENSITIVE_FIELDS.contains(&field);
-    let shown =
-        |s: String| crate::ui::sensitive(s, tk.tsm(500.0).features("'tnum' 1"), tk.fg, hide).wrap();
+fn edit_row(tk: &Tk, field: &str, after: &Value, current: Option<&Value>) -> El {
+    let shown = |s: String| text(s).font(tk.tsm(500.0)).color(tk.fg).wrap();
     let mut v = row().flex_wrap().gap(tk.r(0.5)).center_y();
     if let Some(b) = current {
         v = v.child(shown(field_text(field, b, true))).child(
@@ -594,11 +633,13 @@ fn edit_row(app: &App, tk: &Tk, field: &str, after: &Value, current: Option<&Val
                 .label(t("assistant:review.effects.becomes")),
         );
     }
-    fact(
-        tk,
-        t(&format!("assistant:action.edit.field.{field}")),
-        v.child(shown(field_text(field, after, false))),
-    )
+    // `at_category` carries the whole classification (its regime is implied).
+    let label = if field == "at_category" {
+        t("assistant:action.edit.field.tax")
+    } else {
+        t(&format!("assistant:action.edit.field.{field}"))
+    };
+    fact(tk, label, v.child(shown(field_text(field, after, false))))
 }
 
 /// What the change does, in plain terms. `pending`: before it ran (current values shown).
@@ -700,7 +741,7 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
                     .and_then(|(_, k)| *k)
                     .filter(|_| pending)
                     .and_then(|k| tx.map(|tx| &tx[k]));
-                c = c.child(edit_row(app, tk, field, after, current));
+                c = c.child(edit_row(tk, field, after, current));
             }
             reason.as_deref()
         }
@@ -717,9 +758,14 @@ pub fn body(app: &App, tk: &Tk, a: &Action, pending: bool) -> El {
 }
 
 /// The Undo control of an applied change: the button, its progress, or its outcome.
-pub fn undo_control(app: &App, tk: &Tk, key: &str, c: &ToolCall) -> Option<El> {
+pub fn undo_control(app: &App, tk: &Tk, key: &str, msg_id: &str, c: &ToolCall) -> Option<El> {
     desktop_undo(c)?;
-    let state = app.assistant.thread.actions.undo.get(&c.call_id);
+    let state = app
+        .assistant
+        .thread
+        .actions
+        .undo
+        .get(&undo_key(msg_id, &c.call_id));
     if state == Some(&UndoState::Done) {
         let s = t("assistant:action.undo.done");
         return Some(
@@ -750,8 +796,8 @@ pub fn undo_control(app: &App, tk: &Tk, key: &str, c: &ToolCall) -> Option<El> {
     )
     .label(t("assistant:action.undo.label"));
     if enabled {
-        let id = c.call_id.clone();
-        b = b.on_press(move |a: &mut App| start_undo(a, &id));
+        let (m, id) = (msg_id.to_owned(), c.call_id.clone());
+        b = b.on_press(move |a: &mut App| start_undo(a, &m, &id));
     }
     let mut r = row().flex_wrap().gap(tk.r(0.5)).center_y().child(b);
     if let Some(UndoState::Failed(e)) = state {
@@ -767,8 +813,13 @@ pub fn undo_control(app: &App, tk: &Tk, key: &str, c: &ToolCall) -> Option<El> {
 }
 
 /// "Applied with the assistant", with Undo where the desktop can send it.
-pub fn applied_line(app: &App, tk: &Tk, key: &str, c: &ToolCall) -> El {
-    let mut line = row().w_full().flex_wrap().gap(tk.r(0.5)).center_y().child(
+pub fn applied_line(app: &App, tk: &Tk, key: &str, msg_id: &str, c: &ToolCall) -> El {
+    let mut line = row().w_full().flex_wrap().gap(tk.r(0.5)).center_y();
+    // Why it ran without asking (a permission mode or chat-wide allowance), as on any tool card.
+    if let Some(b) = super::tool::approval_badge(tk, c) {
+        line = line.child(b);
+    }
+    line = line.child(
         row()
             .gap(tk.r(0.25))
             .center_y()
@@ -779,7 +830,7 @@ pub fn applied_line(app: &App, tk: &Tk, key: &str, c: &ToolCall) -> El {
                     .color(tk.muted_fg),
             ),
     );
-    if let Some(u) = undo_control(app, tk, key, c) {
+    if let Some(u) = undo_control(app, tk, key, msg_id, c) {
         line = line.child(u);
     }
     line
@@ -793,12 +844,12 @@ pub fn shows_applied(c: &ToolCall) -> bool {
 }
 
 /// A finished native change: what it did, "Applied with the assistant" and Undo.
-pub fn applied_card(app: &App, tk: &Tk, c: &ToolCall) -> Option<El> {
+pub fn applied_card(app: &App, tk: &Tk, msg_id: &str, c: &ToolCall) -> Option<El> {
     if c.status != ToolStatus::Done {
         return None;
     }
     let a = parse(&c.name, &c.arguments)?;
-    let key = format!("asst-action-{}", c.call_id);
+    let key = format!("asst-action-{msg_id}-{}", c.call_id);
     let title = a.title();
     Some(
         col()
@@ -830,7 +881,7 @@ pub fn applied_card(app: &App, tk: &Tk, c: &ToolCall) -> Option<El> {
                     ),
             )
             .child(body(app, tk, &a, false))
-            .child(applied_line(app, tk, &key, c)),
+            .child(applied_line(app, tk, &key, msg_id, c)),
     )
 }
 
@@ -949,9 +1000,51 @@ mod tests {
             field_text("excluded", &json!(true), false),
             t("assistant:action.yes")
         );
+        // App-defined values read in the interface's language, never as codes.
         assert_eq!(
-            field_text("fiat_rate", &json!("58210.40"), false),
-            "58210.40"
+            field_text("review_status", &json!("completed"), false),
+            t("transactions:status.completed")
+        );
+        assert_eq!(
+            field_text("at_category", &json!("income_general"), false),
+            t("transactions:taxClassification.incomeGeneral.label")
+        );
+    }
+
+    /// Edits the card cannot describe field by field keep the generic row: any pricing argument
+    /// (the core replaces the whole pricing group), half a tax classification, or a status or
+    /// classification the app has no label for.
+    #[test]
+    fn edits_the_card_cannot_state_accurately_stay_raw() {
+        let edit = |args: Value| parse("ui.transactions.metadata.update", &args);
+        for pricing in [
+            json!({"transaction": "t", "fiat_rate": "58210.40"}),
+            json!({"transaction": "t", "note": "n", "pricing_quality": "exact"}),
+            json!({"transaction": "t", "fiat_currency": "EUR"}),
+        ] {
+            assert_eq!(edit(pricing), None);
+        }
+        assert_eq!(edit(json!({"transaction": "t", "at_regime": "neu"})), None);
+        assert_eq!(
+            edit(json!({"transaction": "t", "at_regime": "alt", "at_category": "neu_gain"})),
+            None
+        );
+        assert_eq!(
+            edit(json!({"transaction": "t", "review_status": "archived"})),
+            None
+        );
+        // A whole classification is one row, carried by its category.
+        let Some(Action::Edit { fields, .. }) = edit(json!({"transaction": "t",
+            "at_regime": "neu", "at_category": "income_general", "review_status": "completed"}))
+        else {
+            panic!("a native edit card");
+        };
+        assert_eq!(
+            fields,
+            vec![
+                ("review_status", json!("completed")),
+                ("at_category", json!("income_general"))
+            ]
         );
     }
 
@@ -1028,9 +1121,13 @@ mod tests {
             crate::assistant::model::Msg::new("a1", crate::assistant::model::Role::Assistant, "");
         m.tool_calls = vec![call];
         app.assistant.messages = vec![m];
-        start_undo(&mut app, "call-1");
+        start_undo(&mut app, "a1", "call-1");
         assert_eq!(
-            app.assistant.thread.actions.undo.get("call-1"),
+            app.assistant
+                .thread
+                .actions
+                .undo
+                .get(&undo_key("a1", "call-1")),
             Some(&UndoState::Running)
         );
         assert_eq!(
@@ -1041,7 +1138,7 @@ mod tests {
             1
         );
         // A second press while it runs sends nothing more.
-        start_undo(&mut app, "call-1");
+        start_undo(&mut app, "a1", "call-1");
         assert_eq!(app.assistant.thread.actions.undo_ids.len(), 1);
     }
 
@@ -1071,6 +1168,93 @@ mod tests {
         assert!(!shows_applied(&running));
         // A native change shows as its own card even without an undo.
         assert!(shows_applied(&foreign));
+    }
+
+    /// A provider without call ids gets synthesized ones per turn (`call_1_0`), so two turns can
+    /// hold the same id: Undo on the later card reverses the later change only.
+    #[test]
+    fn undo_follows_the_card_when_turns_reuse_a_call_id() {
+        let mut app = quiet_app();
+        with_book(&mut app);
+        let applied = |pair: &str| {
+            done(
+                "ui.transfers.pair",
+                json!({"tx_out": "a", "tx_in": "b"}),
+                json!({"id": pair, "undo": {"tool": "ui_transfers_unpair", "arguments": {"pair_id": pair}}}),
+            )
+        };
+        let mut m1 =
+            crate::assistant::model::Msg::new("a1", crate::assistant::model::Role::Assistant, "");
+        m1.tool_calls = vec![applied("pair-early")];
+        let mut m2 =
+            crate::assistant::model::Msg::new("a2", crate::assistant::model::Role::Assistant, "");
+        m2.tool_calls = vec![applied("pair-late")];
+        app.assistant.messages = vec![m1, m2];
+        let picked = card_call(&app, "a2", "call-1").expect("the later card's call");
+        assert_eq!(
+            desktop_undo(picked).map(|(_, args)| args["pair_id"].clone()),
+            Some(json!("pair-late"))
+        );
+        start_undo(&mut app, "a2", "call-1");
+        assert_eq!(
+            app.assistant.thread.actions.undo_ids.len(),
+            1,
+            "one undo sent"
+        );
+        assert_eq!(
+            app.assistant.thread.actions.undo_ids[0].1,
+            undo_key("a2", "call-1")
+        );
+        let undo = &app.assistant.thread.actions.undo;
+        assert_eq!(
+            undo.get(&undo_key("a2", "call-1")),
+            Some(&UndoState::Running)
+        );
+        assert_eq!(
+            undo.get(&undo_key("a1", "call-1")),
+            None,
+            "the earlier card is untouched"
+        );
+    }
+
+    /// After a change lands, the cards read their transactions again: a later proposal for the
+    /// same transaction shows the value the book has now.
+    #[test]
+    fn applied_changes_drop_the_cards_reads() {
+        let mut app = quiet_app();
+        app.assistant.thread.actions.legs.insert(
+            "t".into(),
+            Leg {
+                loading: false,
+                failed: false,
+                tx: Some(json!({"id": "t", "note": "A"})),
+            },
+        );
+        app.assistant.thread.actions.leg_ids = vec![("r1".into(), "t".into())];
+        invalidate_legs(&mut app);
+        assert!(app.assistant.thread.actions.legs.is_empty());
+        assert!(app.assistant.thread.actions.leg_ids.is_empty());
+    }
+
+    /// An applied change keeps the reason it ran without asking (auto mode, full access, a
+    /// chat-wide allowance); an explicit approval needs no badge.
+    #[test]
+    fn applied_cards_keep_the_approval_mode_badge() {
+        let app = quiet_app();
+        let tk = app.tk();
+        let mut c = done(
+            "ui.transfers.dismiss",
+            json!({"tx_out": "a", "tx_in": "b"}),
+            json!({}),
+        );
+        assert!(super::super::tool::approval_badge(&tk, &c).is_none());
+        for mode in ["auto", "full_access", "session"] {
+            c.approval = Some(mode.into());
+            assert!(
+                super::super::tool::approval_badge(&tk, &c).is_some(),
+                "{mode}"
+            );
+        }
     }
 
     #[test]
@@ -1111,9 +1295,11 @@ mod tests {
         for r in &app.assistant.pending_consents {
             c = c.child(super::super::approval::pending_row(app, &tk, r, &mut layer));
         }
-        for call in app.assistant.messages.iter().flat_map(|m| &m.tool_calls) {
-            if call.status == ToolStatus::Done {
-                c = c.child(super::super::tool::card(app, &tk, call));
+        for m in &app.assistant.messages {
+            for call in &m.tool_calls {
+                if call.status == ToolStatus::Done {
+                    c = c.child(super::super::tool::card(app, &tk, &m.id, call));
+                }
             }
         }
         rune_kit::root(c, layer)
@@ -1217,7 +1403,7 @@ mod tests {
         );
         // Undo on the applied link sends the hinted kind; the plan-bound one has no button.
         assert!(rt.find("asst-tool-y3-undo").is_none());
-        press(&mut rt, "asst-action-y1-undo");
+        press(&mut rt, "asst-action-a8-y1-undo");
         assert!(
             rt.state
                 .pending
@@ -1225,7 +1411,12 @@ mod tests {
                 .any(|(tag, k, _)| k == "ui.transfers.unpair" && *tag == "assistant.action.undo")
         );
         assert_eq!(
-            rt.state.assistant.thread.actions.undo.get("y1"),
+            rt.state
+                .assistant
+                .thread
+                .actions
+                .undo
+                .get(&undo_key("a8", "y1")),
             Some(&UndoState::Running)
         );
     }

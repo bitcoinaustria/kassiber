@@ -505,7 +505,8 @@ fn actions() -> (Vec<Msg>, Vec<Consent>) {
             json!({"kind": "ui.transfers.dismiss", "data": {"id": "dismissal-0320", "undo": {"tool": "ui_transfers_dismissals_delete", "arguments": {"dismissal_id": "dismissal-0320"}}}}),
         ),
     );
-    dismissed.approval = Some("required".into());
+    // Ran under the chat's auto mode: the applied card keeps the mode's badge.
+    dismissed.approval = Some("auto".into());
     // A plan-bound inverse: the assistant shows the plan first, so there is no Undo button.
     let mut component = call(
         "y3",
