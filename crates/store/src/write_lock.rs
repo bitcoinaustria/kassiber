@@ -60,10 +60,7 @@ pub fn begin_write_savepoint(conn: &Connection, name: &str) -> rusqlite::Result<
 }
 
 /// A named write savepoint ([`begin_write_savepoint`]) that rolls back when
-/// dropped unless committed. Code that must read the book under the write
-/// lock (a check a concurrent writer could invalidate before this one
-/// writes) takes `&WriteLock` instead of a `Connection`, so it cannot run
-/// before the lock is held.
+/// dropped unless committed.
 #[must_use = "dropping a WriteLock rolls its writes back"]
 pub struct WriteLock<'c> {
     conn: &'c Connection,

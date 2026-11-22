@@ -549,12 +549,7 @@ fn allowed() -> BTreeMap<(&'static str, &'static str), &'static str> {
         .collect()
 }
 
-/// Hand-written `ROLLBACK TO` statements per product file, as they stood when
-/// `kassiber_store::WriteLock` arrived. A write held by a `WriteLock` rolls
-/// back on every early return and commits once; a hand-rolled savepoint has
-/// to repeat that on each path, and a missed path commits a partial write.
-/// The counts may only fall: lower an entry when its file moves to WriteLock.
-const HAND_ROLLED_ROLLBACKS: &[(&str, usize)] = &[
+const ROLLBACK_TO_CEILINGS: &[(&str, usize)] = &[
     ("crates/imports/src/lib.rs", 1),
     ("crates/journals/src/persistence.rs", 1),
     ("crates/journals/src/prebuild.rs", 1),
@@ -626,7 +621,7 @@ fn hand_rolled_rollbacks() -> BTreeMap<String, usize> {
 
 #[test]
 fn new_write_savepoints_roll_back_through_write_lock() {
-    let baseline: BTreeMap<String, usize> = HAND_ROLLED_ROLLBACKS
+    let baseline: BTreeMap<String, usize> = ROLLBACK_TO_CEILINGS
         .iter()
         .map(|(file, count)| ((*file).to_owned(), *count))
         .collect();
@@ -638,7 +633,8 @@ fn new_write_savepoints_roll_back_through_write_lock() {
     assert!(
         grown.is_empty(),
         "hold the write with kassiber_store::WriteLock::begin (it rolls back when dropped and \
-         commits once with commit()) instead of a hand-written ROLLBACK TO: {grown:?}"
+         commits once with commit()) instead of a hand-written ROLLBACK TO, which every early \
+         return must repeat or it commits a partial write: {grown:?}"
     );
     let shrunk: Vec<_> = baseline
         .iter()
@@ -646,7 +642,7 @@ fn new_write_savepoints_roll_back_through_write_lock() {
         .collect();
     assert!(
         shrunk.is_empty(),
-        "lower these HAND_ROLLED_ROLLBACKS entries to their current counts: {shrunk:?}"
+        "lower these ROLLBACK_TO_CEILINGS entries to their current counts: {shrunk:?}"
     );
 }
 

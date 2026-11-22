@@ -1492,8 +1492,6 @@ pub enum DesktopImport {
     Samourai(samourai::Request),
 }
 
-/// The `wallet_file_import` savepoint while it is open: dropped open (an
-/// early return), it is rolled back and released.
 fn run(
     conn: &Connection,
     request: Request,
