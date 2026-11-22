@@ -603,16 +603,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn document_pdf_subprocess_timeout_kills_reaps_and_joins_capture_threads() {
-        use std::os::unix::fs::PermissionsExt;
         let root = files::Temp::new("pdf-timeout").unwrap();
         let tool = root.path().join("fake-poppler");
         // `exec` keeps one process, so the kill reaches the sleeper itself.
-        fs::write(
+        kassiber_test_support::write_executable(
             &tool,
             "#!/bin/sh\necho $$\necho diagnostic >&2\nexec sleep 10\n",
         )
         .unwrap();
-        fs::set_permissions(&tool, fs::Permissions::from_mode(0o700)).unwrap();
         for inspection in [true, false] {
             let start = Instant::now();
             let error = run(&tool, &[], Duration::from_millis(100), inspection)
@@ -633,7 +631,7 @@ mod tests {
                 &Py::from(30)
             );
         }
-        fs::write(
+        kassiber_test_support::write_executable(
             &tool,
             "#!/bin/sh\nprintf 'Pages: 1\\r\\n'\nprintf 'local\\rdiagnostic' >&2\n",
         )

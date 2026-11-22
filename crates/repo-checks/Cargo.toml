@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 serde = "1"
 serde_json = "1"
 # Already compiled into the workspace through Typst (typst-library,

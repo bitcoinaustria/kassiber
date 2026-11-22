@@ -340,11 +340,10 @@ fn an_unreadable_cwd_fails_instead_of_using_the_brokers() {
 #[cfg(unix)]
 #[test]
 fn broker_starts_in_the_package_location_not_the_callers_directory() {
-    use std::os::unix::fs::PermissionsExt;
     let install = tempfile::tempdir().unwrap();
     let report = install.path().join("started-in");
     let executable = install.path().join("kassiber");
-    std::fs::write(
+    kassiber_test_support::write_executable(
         &executable,
         format!(
             "#!/bin/sh\nprintf '%s|%s|%s' \"$PWD\" \"$1\" \"${{KASSIBER_OPERATOR_DIRECT-unset}}\" > '{}'\n",
@@ -352,7 +351,6 @@ fn broker_starts_in_the_package_location_not_the_callers_directory() {
         ),
     )
     .unwrap();
-    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
     let mut host = kassiber_operator::client::SystemHost::new(this_build());
     host.executable = executable;
     use kassiber_operator::client::Host;
