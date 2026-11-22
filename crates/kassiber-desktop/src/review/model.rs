@@ -537,6 +537,12 @@ pub fn unlinked_automatic_pair(reason: &str, actions: &[Action]) -> bool {
             .any(|a| a.kind == "restore_pairing" && a.dismissal_id.is_some())
 }
 
+/// A held collaborative receipt (a Payjoin the owner received): classifying
+/// its net amount on the transaction's Tax tab releases it.
+pub fn classifiable_receipt(reason: &str, actions: &[Action]) -> bool {
+    reason == "privacy_hop_unresolved" && actions.iter().any(|a| a.kind == "classify")
+}
+
 pub fn category_for_reason(reason: &str, evidence: &Value, detail: &Value) -> &'static str {
     cause_key(reason, evidence, detail)
         .map(cause_category)
@@ -586,6 +592,8 @@ pub fn cause_copy_full(
 ) -> CauseCopy {
     let key = if unlinked_automatic_pair(reason, actions) {
         Some("unlinkedAutomaticPair")
+    } else if classifiable_receipt(reason, actions) {
+        Some("privacyHopReceipt")
     } else {
         cause_key(reason, evidence, &Value::Null)
     };

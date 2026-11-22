@@ -224,8 +224,23 @@ pub fn from_electrum(
     scripts: &BTreeSet<String>,
     backend: &str,
 ) -> Result<Option<Value>> {
+    from_electrum_history(txid, tx, occurred_at, true, scripts, backend)
+}
+
+/// [`from_electrum`] for a history row: only a positive history height
+/// (`in_block`) confirms it. A server's own time on a mempool row dates it
+/// but confirms nothing, since custody settles replaced spends on a stored
+/// confirmation.
+pub(crate) fn from_electrum_history(
+    txid: &str,
+    tx: &Value,
+    occurred_at: &str,
+    in_block: bool,
+    scripts: &BTreeSet<String>,
+    backend: &str,
+) -> Result<Option<Value>> {
     validate_graph(tx)?;
-    let time = (occurred_at != UNKNOWN).then_some(occurred_at);
+    let time = (in_block && occurred_at != UNKNOWN).then_some(occurred_at);
     let mut graph = tx.clone();
     // `_normalize_electrum_bitcoin_graph_for_storage` stamps the current graph
     // version whatever the input carried (1ec7e7da0).

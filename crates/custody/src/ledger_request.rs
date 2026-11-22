@@ -432,6 +432,16 @@ fn privacy(row: &impl RequestRow) -> bool {
             "coinjoin" | "collaborative" | "payjoin" | "payment_in_coinjoin" | "sweep"
         )
 }
+/// A collaborative receipt the owner classified whose observation is still
+/// the authoritative chain observation. The interpreter has already required
+/// that no other row shares the transaction; this keeps the engine's own
+/// privacy hold for anything that arrives here without that proof.
+fn classified_receipt(row: &impl RequestRow) -> bool {
+    let row = row.json();
+    crate::interpretation::privacy::classified_receipt(row.as_ref())
+        && crate::evidence::authority(row.as_ref())
+            .is_ok_and(|authority| codec::truth(&authority["authoritative"]))
+}
 fn decimal(values: &[&Value]) -> Result<Value, ()> {
     for v in values {
         if empty(v) {
@@ -811,7 +821,10 @@ fn request_row(
         ("regime_override".into(), regime),
         ("category_override".into(), category),
         ("taxability_off".into(), Value::Bool(taxability)),
-        ("privacy_hop".into(), Value::Bool(privacy(row))),
+        (
+            "privacy_hop".into(),
+            Value::Bool(privacy(row) && !classified_receipt(row)),
+        ),
         ("hold".into(), hold),
         ("chain_order".into(), order),
     ])))

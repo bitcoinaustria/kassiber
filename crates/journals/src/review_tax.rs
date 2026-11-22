@@ -49,7 +49,8 @@ fn report_blocker_ids(conn: &Connection, profile: &Value) -> Result<Vec<String>,
     use kassiber_workspace::readiness;
     let (context, active) = readiness::scope(conn, None)?;
     let health = readiness::health(conn, &context, active.as_ref())?;
-    let coverage = kassiber_rates::coverage(conn, &dict([("limit", Value::Int(10.into()))]))?;
+    let coverage =
+        report_blockers::rates_coverage(conn, &dict([("limit", Value::Int(10.into()))]))?;
     let snapshot = report_blockers::snapshot(conn, health, coverage)?;
     let active = get(&snapshot, "health")
         .and_then(|health| get(health, "profile"))
