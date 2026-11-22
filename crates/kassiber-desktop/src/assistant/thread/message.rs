@@ -254,6 +254,7 @@ fn needs_attention(c: &ToolCall) -> bool {
         ]
         .contains(&c.name.as_str())
             && c.status == ToolStatus::Done)
+        || super::action::shows_applied(c)
 }
 
 /// `chatMessageRounds` + `workLogItems`.

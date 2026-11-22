@@ -290,7 +290,8 @@ fn pretty(v: &Value) -> String {
     }
 }
 
-/// The reverse call a finished change names (`data.undo`): only read to say it can be undone.
+/// The reverse call a finished change names (`data.undo`): Undo where the desktop may send it
+/// (`action::desktop_undo`), else only a note that the assistant can take it back.
 fn undoable(c: &ToolCall) -> bool {
     c.status == ToolStatus::Done
         && c.result
@@ -320,6 +321,9 @@ pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
         return e;
     }
     if let Some(e) = super::approval::wallet_request_card(app, tk, call) {
+        return e;
+    }
+    if let Some(e) = super::action::applied_card(app, tk, call) {
         return e;
     }
     let key = format!("asst-tool-{}", call.call_id);
@@ -391,6 +395,8 @@ pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
         _ => None,
     };
     let undo = undoable(call);
+    // An undo the desktop can send itself: "Applied with the assistant" and an Undo button.
+    let direct = super::action::desktop_undo(call).is_some();
     if approval_key.is_some() || undo {
         let mut line = row()
             .w_full()
@@ -431,7 +437,9 @@ pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
                     .child(text(t(k)).font(tk.t2xs(400.0)).color(tk.muted_fg)),
             );
         }
-        if undo {
+        if direct {
+            line = line.child(super::action::applied_line(app, tk, &key, call));
+        } else if undo {
             line = line.child(
                 row()
                     .gap(tk.r(0.25))
