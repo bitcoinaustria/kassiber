@@ -26,8 +26,10 @@ pub fn is_unknown(value: &str) -> bool {
     value.trim() == UNKNOWN
 }
 
-/// The wording for a placeholder time: "unconfirmed" unless the row says it
-/// was confirmed (a real `confirmed_at`), then "unknown date".
+/// The wording for a placeholder time, given the row's `confirmed_at`:
+/// "unconfirmed" when it is null or empty, otherwise "unknown date". A set
+/// `confirmed_at` may itself be the placeholder: LND stores it in both fields
+/// for a settled payment without a timestamp.
 pub fn label(confirmed_at: Option<&str>) -> &'static str {
     match confirmed_at.map(str::trim) {
         Some(at) if !at.is_empty() => UNKNOWN_DATE_LABEL,
@@ -50,18 +52,34 @@ fn is_time_key(key: &str) -> bool {
 }
 
 /// Replace placeholder times in every dict of `value` (recursively) with
-/// their wording, using the sibling `confirmed_at` to choose it. Only for
-/// human formats: JSON and CSV keep the stored value.
+/// their wording. The wording follows the nearest `confirmed_at`: the dict's
+/// own, else the closest enclosing dict's. A row with no `confirmed_at`
+/// anywhere above it carries no confirmation signal, so its placeholder reads
+/// "unknown date" rather than guessing "unconfirmed". Only for human formats:
+/// JSON and CSV keep the stored value.
 pub fn humanize(value: Value) -> Value {
+    humanize_in(value, None)
+}
+
+/// `inherited` is `None` when no enclosing dict has a `confirmed_at` key,
+/// and `Some(text)` (`Some(None)` for null or non-text) when one does.
+fn humanize_in(value: Value, inherited: Option<Option<String>>) -> Value {
     match value {
-        Value::List(items) => Value::List(items.into_iter().map(humanize).collect()),
+        Value::List(items) => Value::List(
+            items
+                .into_iter()
+                .map(|item| humanize_in(item, inherited.clone()))
+                .collect(),
+        ),
         Value::Dict(pairs) => {
-            let confirmed = pairs.iter().find_map(|(key, item)| match (key, item) {
-                (Key::Str(name), Value::Str(text)) if name.as_str() == Some("confirmed_at") => {
-                    text.as_str().map(str::to_owned)
-                }
+            let own = pairs.iter().find_map(|(key, item)| match key {
+                Key::Str(name) if name.as_str() == Some("confirmed_at") => Some(match item {
+                    Value::Str(text) => text.as_str().map(str::to_owned),
+                    _ => None,
+                }),
                 _ => None,
             });
+            let confirmed = own.or(inherited);
             Value::Dict(
                 pairs
                     .into_iter()
@@ -74,13 +92,13 @@ pub fn humanize(value: Value) -> Value {
                             {
                                 let is_confirmed_key = matches!(&key, Key::Str(name)
                                     if name.as_str() == Some("confirmed_at"));
-                                Value::from(if is_confirmed_key {
-                                    UNKNOWN_DATE_LABEL
-                                } else {
-                                    label(confirmed.as_deref())
+                                Value::from(match &confirmed {
+                                    _ if is_confirmed_key => UNKNOWN_DATE_LABEL,
+                                    Some(at) => label(at.as_deref()),
+                                    None => UNKNOWN_DATE_LABEL,
                                 })
                             }
-                            other => humanize(other),
+                            other => humanize_in(other, confirmed.clone()),
                         };
                         (key, item)
                     })
@@ -123,7 +141,8 @@ mod tests {
                  "note":"1970-01-01T00:00:00Z"},
                 {"occurred_at":"1970-01-01T00:00:00Z","confirmed_at":"1970-01-01T00:00:00Z"},
                 {"payout_occurred_at":"1970-01-01T00:00:00Z","confirmed_at":"2026-01-01T00:00:00Z"},
-                {"occurred_at":"2026-11-21T20:11:40Z","confirmed_at":null}]"#,
+                {"occurred_at":"2026-11-21T20:11:40Z","confirmed_at":null},
+                {"transaction_id":"t","occurred_at":"1970-01-01T00:00:00Z"}]"#,
         )
         .unwrap();
         let expected = loads(
@@ -133,7 +152,8 @@ mod tests {
                  "note":"1970-01-01T00:00:00Z"},
                 {"occurred_at":"unknown date","confirmed_at":"unknown date"},
                 {"payout_occurred_at":"unknown date","confirmed_at":"2026-01-01T00:00:00Z"},
-                {"occurred_at":"2026-11-21T20:11:40Z","confirmed_at":null}]"#,
+                {"occurred_at":"2026-11-21T20:11:40Z","confirmed_at":null},
+                {"transaction_id":"t","occurred_at":"unknown date"}]"#,
         )
         .unwrap();
         assert_eq!(humanize(payload), expected);

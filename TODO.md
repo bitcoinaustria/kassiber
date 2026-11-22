@@ -1961,6 +1961,12 @@ See [tax countries](docs/reference/tax-countries.md) and
   height), but the stored status is wrong. The overview's
   `fiat.completeness.missingPriceCount` (`crates/workspace/src/overview.rs`)
   still counts the replaced row; report readiness and rate coverage do not.
+  Readiness also derives the replacement only from the missing-price row's own
+  status: when an older confirmed observation of a txid lacks a price and a
+  newer unconfirmed one is priced, rate coverage still asks for a price the
+  journals never book. Derive the replaced set from the full observation
+  chronology, as the hold stage does, before filtering missing-price
+  candidates (`crates/journals/src/loader/direct.rs`; Codex on #807).
 - [ ] Offer a user-triggered "reprice from market rates" for
   `price_currency_mismatch` rows. A book whose currency changed holds every
   row priced in the old currency ([quarantines](docs/reference/tax.md#quarantines));
@@ -2147,6 +2153,25 @@ See [tax countries](docs/reference/tax-countries.md) and
   placeholder. AI tool results still carry the raw value with `conf`/
   `confirmed_at`; recorded sessions pin those reads and the skill references, so
   a model-facing hint needs the opt-in projection route.
+  Also from the #813 desktop review:
+  - **Portfolio chart:** it still starts in 1970 in a book without cached
+    daily prices. The overview series fallback emits a placeholder-day point
+    (`crates/workspace/src/overview.rs`), and `history_bounds` takes it as the
+    lower bound, so the 4Y/10Y chips appear. With prices, an unconfirmed
+    spend lowers the balance from the first price day. The backend should skip
+    placeholder days, or the chart's `build`/`history_bounds` should ignore
+    them.
+  - **Unconfirmed rows sort as the oldest:**
+    - the transactions table's client date sort (`transactions/model.rs`);
+    - overview recent activity, where `ORDER BY occurred_at DESC LIMIT 40`
+      drops them in books with more than 40 rows;
+    - the transactions period chips' `earliest`.
+  - **Drift check:** the desktop copies the placeholder constant
+    (`format.rs`). Add a test that it matches `crates/envelope/src/occurred_at.rs`.
+  - **Labels that ignore confirmation:** the assistant focus label and the
+    review root label always say "Unconfirmed". They should pass or receive
+    the row's confirmation state, so settled untimed rows say "Unknown".
+  - **Wiring tests:** `recent_rows` and review `row_meta` have none.
 
 - [x] Adopt the Rune desktop as the desktop app: moved to
   `crates/kassiber-desktop` (own workspace and lockfile, excluded from the root
