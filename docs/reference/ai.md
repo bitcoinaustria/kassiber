@@ -1386,14 +1386,17 @@ model context as exact local data, so answers use program-derived facts. That au
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
 
-An item the user asked about (pinned with "Ask about this" or the transaction
-panel's Assistant surface) is read too. A transaction that is only open in the
-detail panel is shared as its typed entity and not read: in a check with four
-models through a CLI proxy, every model read the shown transaction itself when
-the question was about it, while reading it up front made unrelated questions
+An item the user asked about (a transaction or custody gap pinned with "Ask
+about this", or the transaction panel's Assistant surface) is read too. An item
+that is only open (the transaction in the detail panel, the custody gap under
+review) is shared as its typed entity and not read: in a check with four models
+through a CLI proxy, every model read the shown transaction itself when the
+question was about it, while reading it up front made unrelated questions
 slower and larger. When the desktop sends
 `read_pinned_entity: true` with a `screen_context` whose entity the daemon kept
-(a `transaction` of the open book, or a `custody_gap`), the router runs that
+(a `transaction` of the open book, or a `custody_gap` the open book's gap
+search finds; a gap is checked only for such a request, because the check is a
+gap search, so a gap named without the flag stays in the context as before), the router runs that
 item's own review read first: `ui.transactions.review_context` or
 `ui.custody.gaps.review_context`, both local, read-only and non-egressing,
 through the same advertised-tool gate as every other auto-read, and streamed to
@@ -1679,10 +1682,12 @@ read tool. The desktop composer shows what the next question shares in a
 "The assistant sees:" tray, built from the app's typed state by one function
 (`tray::build` in `crates/kassiber-desktop/src/assistant/tray.rs`) that also
 produces the `screen_context`, so the chips and the request cannot disagree.
-In order it lists the item (a transaction pinned with "Ask about this" for the
-following turns until the user removes it; with nothing pinned, the
-transaction open in the detail panel on any page, which the user can remove
-until another transaction opens), the Transactions chart selection (as the
+In order it lists the item (a transaction, or a custody gap from its review on
+the Transfers page, pinned with "Ask about this" for the following turns until
+the user removes it; with nothing pinned, the transaction open in the detail
+panel on any page, else the custody gap under review once its review packet
+has named it in the open book; the user can remove that open item until another
+one opens, and removing it also stops the page's address from naming it), the Transactions chart selection (as the
 bounded filters `chart_flows`, `chart_segment` and `chart_bucket`, removable
 until the selection changes), and the page (not removable). The item adds its
 typed entity and capability pack to the page's route and filters; a pinned

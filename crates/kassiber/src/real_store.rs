@@ -2778,8 +2778,26 @@ impl Book for RealBook {
                 conn, scope, workspace, profile,
             )
         };
+        // A gap is the book's when its own gap search finds it; a book the
+        // search refuses (mixed networks) has none to name.
+        let gap_in_profile = |conn: &Connection, workspace: &str, profile: &str, gap: &str| {
+            let found = kassiber_transfers::execute(
+                conn,
+                &kassiber_transfers::Scope {
+                    workspace_id: workspace,
+                    profile_id: profile,
+                },
+                "transfers.gaps.review",
+                &kassiber_envelope::dict([("gap_id", Value::Str(gap.into()))]),
+            );
+            Ok(matches!(
+                found.as_ref().ok().and_then(|v| kassiber_envelope::get(v, "gaps")),
+                Some(Value::List(gaps)) if !gaps.is_empty()
+            ))
+        };
         let binding = kassiber_ai::chat::store::ScreenBinding {
             transaction_in_profile: &in_profile,
+            custody_gap_in_profile: &gap_in_profile,
             bind_metrics_scope: &bind,
         };
         let mut resolve = || self.resolve_scope(None, None);

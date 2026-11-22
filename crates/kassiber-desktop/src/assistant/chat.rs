@@ -395,7 +395,7 @@ fn live_pin(app: &App, pin: Option<&Focus>) -> Option<Focus> {
 /// item is this turn's context; the daemon reads it for the model (`read_pinned_entity`) only
 /// then, and only for an item the user asked about (`Focus::read`). An item of another book is
 /// dropped, never sent.
-fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
+pub(super) fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
     match (page, item) {
         (Some(page), _) => (page, false),
         (None, Some(true)) => (asked, true),

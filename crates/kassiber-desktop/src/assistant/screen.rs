@@ -269,6 +269,14 @@ pub fn item_context(tx_id: &str, quarantine: bool) -> Option<Value> {
     Some(Value::Object(m))
 }
 
+/// A custody gap's context: its typed entity and the custody capability packs.
+pub fn gap_context(gap_id: &str) -> Option<Value> {
+    let id = safe_entity_id(Some(gap_id))?;
+    let mut m = ctx("/transfers", &["transfers", "transactions", "wallets"]);
+    entity(&mut m, "custody_gap", Some(id));
+    Some(Value::Object(m))
+}
+
 /// The page on screen now: the route with its own query, or Settings while its dialog is open.
 pub fn current_location(app: &App) -> (String, String) {
     if app.shell.settings_open {

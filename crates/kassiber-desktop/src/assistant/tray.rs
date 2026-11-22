@@ -1,7 +1,8 @@
 //! "The assistant sees: …": what the next question shares, built from typed state so the tray
 //! the composer shows and the `screen_context` the turn sends are one value.
 //!
-//! In order: the item (the pinned one, or else the transaction open in the detail panel), the
+//! In order: the item (the pinned one, or else the transaction open in the detail panel, or else
+//! the custody gap under review on the Transfers page), the
 //! Transactions chart selection as bounded filters, and the page. Every part but the page is
 //! removable. Chip labels name things in plain words and stay on this device; only the typed
 //! entity, the route's capability packs and bounded filters travel, and nothing travels before
@@ -9,7 +10,7 @@
 
 use serde_json::{Map, Value, json};
 
-use super::{Focus, screen, transaction_focus};
+use super::{Focus, Kind, gap_focus, screen, transaction_focus};
 use crate::app::App;
 use crate::i18n::tr;
 use crate::transactions::model::ChartSel;
@@ -18,7 +19,8 @@ use crate::transactions::model::ChartSel;
 pub enum Part {
     /// "Ask about this" pinned it; removing it unpins.
     Pinned,
-    /// Open in the detail panel; removing it keeps it out until another transaction opens.
+    /// Open in the detail panel, or the gap under review; removing it keeps it out until another
+    /// item opens.
     Open,
     /// The Transactions chart selection; removing it keeps it out until the selection changes.
     Chart,
@@ -55,7 +57,7 @@ pub fn build(app: &App) -> Shared {
         screen::current(app),
         item,
         chart(app),
-        app.assistant.hidden_open.as_deref(),
+        app.assistant.hidden_open.as_ref(),
     )
 }
 
@@ -68,18 +70,33 @@ pub fn open_id(app: &App) -> Option<&str> {
         .filter(|id| !id.is_empty())
 }
 
-/// The open transaction, unless the user removed it; its book is the open book now (none while
-/// the book's ids are unknown).
+/// The open item: the transaction open in the detail panel, else the custody gap under review.
+pub fn open_entity(app: &App) -> Option<(Kind, String)> {
+    open_id(app)
+        .map(|id| (Kind::Transaction, id.to_owned()))
+        .or_else(|| crate::custody::gaps::open_gap(app).map(|(id, _)| (Kind::CustodyGap, id)))
+}
+
+/// The open item, unless the user removed it; its book is the open book now (none while the
+/// book's ids are unknown).
 fn open_item(app: &App) -> Option<Focus> {
     use crate::txdetail::draft::opt_s;
-    let id = open_id(app)?;
-    if app.assistant.hidden_open.as_deref() == Some(id) {
+    let open = open_entity(app)?;
+    if app.assistant.hidden_open.as_ref() == Some(&open) {
         return None;
     }
-    let r = app.detail.open.as_ref()?.record.as_ref()?;
-    let held = opt_s(r, "quarantineReason").is_some();
     let book = super::chat::book_now(app)?;
-    let mut item = transaction_focus(id, opt_s(r, "date").as_deref(), held, book)?;
+    let mut item = match open.0 {
+        Kind::Transaction => {
+            let r = app.detail.open.as_ref()?.record.as_ref()?;
+            let held = opt_s(r, "quarantineReason").is_some();
+            transaction_focus(&open.1, opt_s(r, "date").as_deref(), held, book)
+        }
+        Kind::CustodyGap => {
+            let (id, started) = crate::custody::gaps::open_gap(app)?;
+            gap_focus(&id, started.as_deref(), book)
+        }
+    }?;
     item.read = false;
     Some(item)
 }
@@ -114,22 +131,24 @@ fn chart_filters(c: &ChartSel) -> Vec<(&'static str, Value)> {
 }
 
 /// The page's context with the item's entity and capability packs and the chart's filters
-/// added, and the chips that name each part. `hidden`: a transaction the user removed from the
-/// tray; a page whose own address names it (`/source-of-funds?tx=`, `/review?tx=`) does not
-/// send it either. A transaction the page names that is still shared is said on the page chip.
+/// added, and the chips that name each part. `hidden`: an item the user removed from the tray;
+/// a page whose own address names it (`/source-of-funds?tx=`, `/review?tx=`,
+/// `/transfers?…&gap=`) does not send it either. A transaction the page names that is still
+/// shared is said on the page chip.
 fn compose(
     mut screen: Value,
     item: Option<(Part, Focus)>,
     chart: Option<&ChartSel>,
-    hidden: Option<&str>,
+    hidden: Option<&(Kind, String)>,
 ) -> Shared {
     let mut chips = Vec::new();
     let item = item.filter(|(_, f)| {
         f.context["entity_type"].is_string() && f.context["entity_id"].is_string()
     });
     if item.is_none()
-        && screen["entity_type"] == "transaction"
-        && hidden.is_some_and(|h| screen["entity_id"] == h)
+        && hidden.is_some_and(|(k, id)| {
+            screen["entity_type"] == k.entity_type() && screen["entity_id"] == id.as_str()
+        })
         && let Some(m) = screen.as_object_mut()
     {
         m.remove("entity_type");
@@ -183,32 +202,28 @@ fn compose(
     }
 }
 
-/// The chip's remove button: unpin, or keep the open transaction or chart selection out.
+/// The chip's remove button: unpin, or keep the open item or chart selection out.
 pub fn remove(app: &mut App, part: Part) {
     match part {
         Part::Pinned => {
-            // The same transaction open in the detail panel would otherwise take its place at
-            // once: one removal stops sharing it.
-            let pinned = app
-                .assistant
-                .focus
-                .take()
-                .and_then(|f| f.context["entity_id"].as_str().map(str::to_owned));
-            if pinned.is_some() && pinned.as_deref() == open_id(app) {
+            // The same item open would otherwise take its place at once: one removal stops
+            // sharing it.
+            let pinned = app.assistant.focus.take().map(|f| (f.kind, f.id));
+            if pinned.is_some() && pinned == open_entity(app) {
                 app.assistant.hidden_open = pinned;
             }
         }
-        Part::Open => app.assistant.hidden_open = open_id(app).map(str::to_owned),
+        Part::Open => app.assistant.hidden_open = open_entity(app),
         Part::Chart => app.assistant.hidden_chart = app.txs.filters.chart.clone(),
         Part::Page => {}
     }
 }
 
-/// Forget a removal once what it removed is gone: another transaction opened, the selection
-/// changed. True when anything changed.
+/// Forget a removal once what it removed is gone: another item opened, the selection changed.
+/// True when anything changed.
 pub fn poll(app: &mut App) -> bool {
     let mut changed = false;
-    if app.assistant.hidden_open.is_some() && app.assistant.hidden_open.as_deref() != open_id(app) {
+    if app.assistant.hidden_open.is_some() && app.assistant.hidden_open != open_entity(app) {
         app.assistant.hidden_open = None;
         changed = true;
     }
@@ -232,6 +247,33 @@ mod tests {
 
     fn pin(id: &str, held: bool) -> Focus {
         transaction_focus(id, Some("2025-03-05 10:00"), held, book()).expect("safe id")
+    }
+
+    /// The open book's ids, as the profiles snapshot reports them.
+    fn open_book(app: &mut App, profile: &str) {
+        app.reads.insert(
+            "ui.profiles.snapshot".into(),
+            crate::app::Reply {
+                kind: "ui.profiles.snapshot".into(),
+                data: json!({"activeWorkspaceId": "w", "activeProfileId": profile}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+    }
+
+    /// The gap `id` under review on the Transfers page; `read`: its review packet named it.
+    fn review_gap(app: &mut App, id: &str, read: bool) {
+        app.prefs.developer_tools = true;
+        app.route = crate::app::Route(format!("/transfers?section=advanced&tab=gaps&gap={id}"));
+        let mut d = crate::custody::gaps::Detail::new(id);
+        if read {
+            d.ctx = Some(Ok(
+                json!({"gaps": [{"gap_id": id, "started_at": "2024-01-01T00:00:00Z"}]}),
+            ));
+        }
+        app.custody.gaps.detail = Some(d);
     }
 
     fn sel() -> ChartSel {
@@ -271,6 +313,7 @@ mod tests {
         assert!(s.chips.last().unwrap().label.contains(page));
         for c in &s.chips {
             assert!(!c.label.contains("tx-"), "no raw id in a chip: {}", c.label);
+            assert!(!c.label.contains("cg_"), "no raw id in a chip: {}", c.label);
         }
     }
 
@@ -365,25 +408,37 @@ mod tests {
             s.item.is_none(),
             "named by the page, not read for the model"
         );
-        let s = compose(page(), None, None, Some("tx-5"));
+        let hidden = |id: &str| (Kind::Transaction, id.to_owned());
+        let s = compose(page(), None, None, Some(&hidden("tx-5")));
         assert_tray_is_json(&s);
         assert_eq!(s.screen["entity_id"], Value::Null);
         assert_eq!(s.screen["entity_type"], Value::Null);
         // Another removed transaction leaves the page's own alone.
-        let s = compose(page(), None, None, Some("tx-6"));
+        let s = compose(page(), None, None, Some(&hidden("tx-6")));
+        // A removed gap of the same id is another item.
+        let s2 = compose(page(), None, None, Some(&(Kind::CustodyGap, "tx-5".into())));
+        assert_eq!(s2.screen["entity_id"], "tx-5");
         assert_eq!(s.screen["entity_id"], "tx-5");
     }
 
     /// The tray as the composer draws it, headless, in both languages: every chip and remove
-    /// button is labelled (the scene check's own rules) and no string is missing.
+    /// button is labelled (the scene check's own rules) and no string is missing. Once with a
+    /// pinned held transaction and the chart selection, once with the gap under review.
     #[test]
     fn the_tray_is_labelled_and_translated() {
-        fn tray_app() -> App {
+        fn tx_app() -> App {
             let mut app = crate::app::tests::quiet_app();
             app.route = crate::app::Route("/transactions".into());
             app.prefs.ai_features = true;
             app.assistant.focus = Some(pin("tx-2", true));
             app.txs.filters.chart = Some(sel());
+            app
+        }
+        fn gap_app() -> App {
+            let mut app = crate::app::tests::quiet_app();
+            app.prefs.ai_features = true;
+            open_book(&mut app, "p");
+            review_gap(&mut app, "cg_1", true);
             app
         }
         fn tray_view(app: &App, _cx: &mut rune::Cx<App>) -> rune::El {
@@ -397,32 +452,111 @@ mod tests {
                 vec![],
             )
         }
-        for lang in [crate::i18n::Lang::En, crate::i18n::Lang::De] {
-            let mut rt = rune::App::new(rune::AppSpec::new(
-                "tray",
-                (900.0, 400.0),
-                tray_app,
-                tray_view,
-            ))
-            .headless_runtime((900.0, 400.0), rune::Env::new(true, 1.0));
-            rt.state.prefs.lang = lang;
-            for _ in 0..3 {
-                rt.frame(1.0 / 60.0);
+        type Make = fn() -> App;
+        let cases: [(Make, &str, &str); 2] = [
+            (tx_app, "2025-03-05", "tx-2"),
+            (gap_app, "2024-01-01", "cg_1"),
+        ];
+        for (make, day, id) in cases {
+            for lang in [crate::i18n::Lang::En, crate::i18n::Lang::De] {
+                let mut rt =
+                    rune::App::new(rune::AppSpec::new("tray", (900.0, 400.0), make, tray_view))
+                        .headless_runtime((900.0, 400.0), rune::Env::new(true, 1.0));
+                rt.state.prefs.lang = lang;
+                for _ in 0..3 {
+                    rt.frame(1.0 / 60.0);
+                }
+                let found = crate::checks::a11y_findings(&rt.accessibility_json(), &rt.elements());
+                assert!(found.is_empty(), "{lang:?}: {found:?}");
+                let missing: Vec<String> = crate::i18n::missing()
+                    .into_iter()
+                    .filter(|k| k.contains("assistant:panel."))
+                    .collect();
+                assert!(missing.is_empty(), "{lang:?}: {missing:?}");
+                let tree = rt.accessibility_json().to_string();
+                assert!(tree.contains(day), "{lang:?}: the item's chip");
+                assert!(!tree.contains(id), "{lang:?}: no raw id on screen");
+                if id == "cg_1" {
+                    let word = match lang {
+                        crate::i18n::Lang::En => "Custody gap",
+                        crate::i18n::Lang::De => "Verwahrungslücke",
+                    };
+                    assert!(tree.contains(word), "{lang:?}: the gap's chip names it");
+                }
             }
-            let found = crate::checks::a11y_findings(&rt.accessibility_json(), &rt.elements());
-            assert!(found.is_empty(), "{lang:?}: {found:?}");
-            let missing: Vec<String> = crate::i18n::missing()
-                .into_iter()
-                .filter(|k| k.contains("assistant:panel."))
-                .collect();
-            assert!(missing.is_empty(), "{lang:?}: {missing:?}");
-            let tree = rt.accessibility_json().to_string();
-            assert!(
-                tree.contains("2025-03-05"),
-                "{lang:?}: the pinned item's chip"
-            );
-            assert!(!tree.contains("tx-2"), "{lang:?}: no raw id on screen");
         }
+    }
+
+    /// On the app: the custody gap under review joins once its packet named it in the open
+    /// book, a removal keeps it out (the page's own gap too) until another opens, an open
+    /// transaction or a pin wins over it, and a book switch takes it away.
+    #[test]
+    fn the_gap_under_review_is_an_item() {
+        let mut app = crate::app::tests::quiet_app();
+        open_book(&mut app, "p");
+        review_gap(&mut app, "cg_1", false);
+        let s = build(&app);
+        assert!(s.item.is_none(), "not before its packet named it");
+        assert_eq!(s.screen["entity_type"], "custody_gap", "the page names it");
+
+        review_gap(&mut app, "cg_1", true);
+        let s = build(&app);
+        assert_tray_is_json(&s);
+        assert_eq!(s.chips[0].part, Part::Open);
+        assert!(s.chips[0].label.contains("2024-01-01"));
+        let f = s.item.as_ref().unwrap();
+        assert_eq!((f.kind, f.id.as_str()), (Kind::CustodyGap, "cg_1"));
+        assert_eq!(f.book, book());
+        assert_eq!(s.screen["entity_type"], "custody_gap");
+        assert_eq!(s.screen["entity_id"], "cg_1");
+
+        remove(&mut app, Part::Open);
+        assert!(!poll(&mut app));
+        let s = build(&app);
+        assert_tray_is_json(&s);
+        assert!(s.item.is_none());
+        assert_eq!(s.screen["entity_id"], Value::Null);
+        assert_eq!(s.screen["entity_type"], Value::Null);
+
+        review_gap(&mut app, "cg_2", true);
+        assert!(poll(&mut app));
+        // The turn sends it as its entity; only open, it is not read for the model.
+        let s = build(&app);
+        assert!(!s.item.as_ref().unwrap().read);
+        let live = s.item.as_ref().map(|_| true);
+        let (screen, is_context) = super::super::chat::turn_context(None, s.screen, live);
+        assert!(is_context);
+        assert_eq!(
+            (&screen["entity_type"], &screen["entity_id"]),
+            (&json!("custody_gap"), &json!("cg_2"))
+        );
+
+        // A transaction open in the detail panel comes first.
+        let mut o = crate::txdetail::Open::new("tx-1", crate::txdetail::Tab::Details, vec![]);
+        o.record = Some(json!({"id": "tx-1", "date": "2025-03-05 10:00"}));
+        app.detail.open = Some(Box::new(o));
+        assert_eq!(build(&app).item.unwrap().kind, Kind::Transaction);
+        app.detail.open = None;
+
+        // Pinned with "Ask about this": unpinning the gap that is also open stops sharing it.
+        assert!(super::super::pin(&mut app, |b| gap_focus("cg_2", None, b)));
+        let s = build(&app);
+        assert_eq!(s.chips[0].part, Part::Pinned);
+        assert!(s.item.as_ref().unwrap().read, "an asked-about gap is read");
+        assert!(s.chips[0].label.contains('—'));
+        remove(&mut app, Part::Pinned);
+        let s = build(&app);
+        assert!(s.item.is_none());
+        assert_eq!(s.screen["entity_id"], Value::Null);
+
+        // Another book: the pin is dropped and the review state is gone.
+        assert!(super::super::pin(&mut app, |b| gap_focus("cg_2", None, b)));
+        open_book(&mut app, "q");
+        super::super::chat::poll(&mut app);
+        assert!(app.assistant.focus.is_none());
+        app.reset_book_state();
+        open_book(&mut app, "q");
+        assert!(build(&app).item.is_none());
     }
 
     /// On the app: the open transaction joins on any route once the book is known, a removal
@@ -441,16 +575,7 @@ mod tests {
             build(&app).item.is_none(),
             "no item before the book is known"
         );
-        app.reads.insert(
-            "ui.profiles.snapshot".into(),
-            crate::app::Reply {
-                kind: "ui.profiles.snapshot".into(),
-                data: json!({"activeWorkspaceId": "w", "activeProfileId": "p"}),
-                error: None,
-                error_detail: Value::Null,
-                elapsed: std::time::Duration::ZERO,
-            },
-        );
+        open_book(&mut app, "p");
         let s = build(&app);
         assert_tray_is_json(&s);
         assert_eq!(s.chips[0].part, Part::Open);

@@ -114,11 +114,31 @@ pub enum Front {
     Detail,
 }
 
+/// What an item is: the `entity_type` the daemon binds it to the open book as and reads for
+/// the model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Transaction,
+    CustodyGap,
+}
+
+impl Kind {
+    pub fn entity_type(self) -> &'static str {
+        match self {
+            Kind::Transaction => "transaction",
+            Kind::CustodyGap => "custody_gap",
+        }
+    }
+}
+
 /// The item a turn is about (`AssistantFocus` + its book): the one "Ask about this" pinned, or
-/// the transaction open in the detail panel. Its typed entity joins the page's context
-/// (`tray::build`); the label stays on the local chip and is never sent.
+/// the one open (the transaction in the detail panel, else the custody gap under review). Its
+/// typed entity joins the page's context (`tray::build`); the label stays on the local chip and
+/// is never sent.
 #[derive(Clone, Debug)]
 pub struct Focus {
+    pub kind: Kind,
+    pub id: String,
     pub label: String,
     pub context: Value,
     pub book: chat::Book,
@@ -169,8 +189,8 @@ pub struct Ui {
     pub chat_modes: std::collections::HashMap<String, PermissionMode>,
     /// The last page the user was on (the assistant page answers about it).
     pub last_screen: Option<Value>,
-    /// The open transaction the user removed from the tray, kept out until another opens.
-    pub hidden_open: Option<String>,
+    /// The open item the user removed from the tray, kept out until another opens.
+    pub hidden_open: Option<(Kind, String)>,
     /// The Transactions chart selection removed from the tray, kept out until it changes.
     pub hidden_chart: Option<crate::transactions::model::ChartSel>,
     /// Bumped by every fresh conversation (`generationRef`) and every submit (`promptRevisionRef`).
@@ -954,13 +974,43 @@ pub fn pin_transaction(app: &mut App, tx_id: &str, date: Option<&str>, quarantin
     if screen::item_context(tx_id, quarantine).is_none() {
         return false;
     }
+    pin(app, |book| transaction_focus(tx_id, date, quarantine, book))
+}
+
+/// Pin an item `make` builds for the open book, as `pin_transaction` does.
+fn pin(app: &mut App, make: impl FnOnce(chat::Book) -> Option<Focus>) -> bool {
     // `captureBook()`: not taken before the open book's ids are known.
     let Some(book) = chat::book_now(app) else {
         chat::refuse_book_loading(app, None);
         return false;
     };
-    app.assistant.focus = transaction_focus(tx_id, date, quarantine, book);
-    app.assistant.focus.is_some()
+    let Some(focus) = make(book) else {
+        return false;
+    };
+    app.assistant.focus = Some(focus);
+    true
+}
+
+/// "Ask about this" on a custody gap under review: pin it, prefill the question and open the
+/// panel, as `ask_about` does for a transaction.
+pub fn ask_about_gap(app: &mut App, gap_id: &str, started: Option<&str>) {
+    if screen::gap_context(gap_id).is_none() || !pin(app, |book| gap_focus(gap_id, started, book)) {
+        return;
+    }
+    let prompt = crate::i18n::t("assistant:panel.askAboutGapPrompt");
+    chat::replace_draft(app, &prompt, true);
+    open_panel(app);
+}
+
+/// The chip's day: the first ten characters of a date ("unconfirmed" for a placeholder time),
+/// or a dash.
+fn day(date: Option<&str>) -> String {
+    date.map(|d| match crate::format::is_unknown_time(d) {
+        true => crate::format::tx_date(d, false),
+        false => d.chars().take(10).collect::<String>(),
+    })
+    .filter(|d| !d.is_empty())
+    .unwrap_or_else(|| "—".into())
 }
 
 /// A transaction as the item of a turn: its typed context, its date label (the chip's words,
@@ -972,20 +1022,29 @@ pub fn transaction_focus(
     book: chat::Book,
 ) -> Option<Focus> {
     let context = screen::item_context(tx_id, quarantine)?;
-    let day = date
-        .map(|d| match crate::format::is_unknown_time(d) {
-            true => crate::format::tx_date(d, false),
-            false => d.chars().take(10).collect::<String>(),
-        })
-        .filter(|d| !d.is_empty())
-        .unwrap_or_else(|| "—".into());
     let label_key = if quarantine {
         "assistant:panel.focusQuarantine"
     } else {
         "assistant:panel.focusTransaction"
     };
     Some(Focus {
-        label: crate::i18n::tr(label_key, &[("date", &day)]),
+        kind: Kind::Transaction,
+        id: context["entity_id"].as_str()?.to_owned(),
+        label: crate::i18n::tr(label_key, &[("date", &day(date))]),
+        context,
+        book,
+        read: true,
+    })
+}
+
+/// A custody gap as the item of a turn, labelled by the day it started (never its id or its
+/// wallets). None for an unsafe id.
+pub fn gap_focus(gap_id: &str, started: Option<&str>, book: chat::Book) -> Option<Focus> {
+    let context = screen::gap_context(gap_id)?;
+    Some(Focus {
+        kind: Kind::CustodyGap,
+        id: context["entity_id"].as_str()?.to_owned(),
+        label: crate::i18n::tr("assistant:panel.focusGap", &[("date", &day(started))]),
         context,
         book,
         read: true,
