@@ -520,11 +520,12 @@ mod tests {
 
         review_gap(&mut app, "cg_2", true);
         assert!(poll(&mut app));
-        // The turn sends it as its entity and asks the daemon to read it.
+        // The turn sends it as its entity; only open, it is not read for the model.
         let s = build(&app);
+        assert!(!s.item.as_ref().unwrap().read);
         let live = s.item.as_ref().map(|_| true);
-        let (screen, read) = super::super::chat::turn_context(None, s.screen, live);
-        assert!(read);
+        let (screen, is_context) = super::super::chat::turn_context(None, s.screen, live);
+        assert!(is_context);
         assert_eq!(
             (&screen["entity_type"], &screen["entity_id"]),
             (&json!("custody_gap"), &json!("cg_2"))
@@ -541,6 +542,7 @@ mod tests {
         assert!(super::super::pin(&mut app, |b| gap_focus("cg_2", None, b)));
         let s = build(&app);
         assert_eq!(s.chips[0].part, Part::Pinned);
+        assert!(s.item.as_ref().unwrap().read, "an asked-about gap is read");
         assert!(s.chips[0].label.contains('—'));
         remove(&mut app, Part::Pinned);
         let s = build(&app);
