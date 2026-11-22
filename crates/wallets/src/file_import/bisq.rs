@@ -92,7 +92,9 @@ struct OnChain {
 /// The book the timeline reads: owned on-chain rows by txid, earlier legs,
 /// and its tax calendar.
 pub(super) struct Book<'a> {
-    pub conn: &'a Connection,
+    /// Read under the import's write lock: a concurrent import cannot book
+    /// the same trade between this check and this import's writes.
+    pub conn: &'a kassiber_store::WriteLock<'a>,
     pub profile: &'a str,
     /// The escrow wallet, whose own legs are not on-chain evidence.
     pub escrow: &'a str,

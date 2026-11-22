@@ -52,13 +52,69 @@ pub fn begin_write_savepoint(conn: &Connection, name: &str) -> rusqlite::Result<
     conn.execute_batch(&format!("SAVEPOINT {name}"))?;
     if let Some(mut statement) = reservation {
         if let Err(error) = statement.execute([]) {
-            let _ = conn.execute_batch(&format!(
-                "ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}"
-            ));
+            let _ = conn.execute_batch(&rollback(name));
             return Err(error);
         }
     }
     Ok(())
+}
+
+/// A named write savepoint ([`begin_write_savepoint`]) that rolls back when
+/// dropped unless committed. Code that must read the book under the write
+/// lock (a check a concurrent writer could invalidate before this one
+/// writes) takes `&WriteLock` instead of a `Connection`, so it cannot run
+/// before the lock is held.
+#[must_use = "dropping a WriteLock rolls its writes back"]
+pub struct WriteLock<'c> {
+    conn: &'c Connection,
+    name: &'static str,
+    open: bool,
+}
+
+impl<'c> WriteLock<'c> {
+    pub fn begin(conn: &'c Connection, name: &'static str) -> rusqlite::Result<Self> {
+        begin_write_savepoint(conn, name)?;
+        Ok(Self {
+            conn,
+            name,
+            open: true,
+        })
+    }
+
+    pub fn conn(&self) -> &'c Connection {
+        self.conn
+    }
+
+    /// Releases the savepoint: commits when it is the outermost transaction.
+    pub fn commit(mut self) -> rusqlite::Result<()> {
+        self.open = false;
+        self.conn.execute_batch(&format!("RELEASE {}", self.name))
+    }
+
+    pub fn rollback(mut self) -> rusqlite::Result<()> {
+        self.open = false;
+        self.conn.execute_batch(&rollback(self.name))
+    }
+}
+
+impl std::ops::Deref for WriteLock<'_> {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        self.conn
+    }
+}
+
+impl Drop for WriteLock<'_> {
+    fn drop(&mut self) {
+        if self.open {
+            let _ = self.conn.execute_batch(&rollback(self.name));
+        }
+    }
+}
+
+fn rollback(name: &str) -> String {
+    format!("ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}")
 }
 
 /// [`begin_write_savepoint`] as a rusqlite [`Savepoint`]: committed by

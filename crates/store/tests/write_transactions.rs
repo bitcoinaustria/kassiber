@@ -549,6 +549,107 @@ fn allowed() -> BTreeMap<(&'static str, &'static str), &'static str> {
         .collect()
 }
 
+/// Hand-written `ROLLBACK TO` statements per product file, as they stood when
+/// `kassiber_store::WriteLock` arrived. A write held by a `WriteLock` rolls
+/// back on every early return and commits once; a hand-rolled savepoint has
+/// to repeat that on each path, and a missed path commits a partial write.
+/// The counts may only fall: lower an entry when its file moves to WriteLock.
+const HAND_ROLLED_ROLLBACKS: &[(&str, usize)] = &[
+    ("crates/imports/src/lib.rs", 1),
+    ("crates/journals/src/persistence.rs", 1),
+    ("crates/journals/src/prebuild.rs", 1),
+    ("crates/journals/src/review_apply.rs", 1),
+    ("crates/journals/src/review_tax.rs", 1),
+    ("crates/kassiber/src/real_store.rs", 1),
+    ("crates/rates/src/lib.rs", 1),
+    ("crates/reports/src/artifact_csv.rs", 1),
+    ("crates/reports/src/artifact_xlsx.rs", 1),
+    ("crates/reports/src/austrian_xlsx.rs", 1),
+    ("crates/reports/src/cross_check.rs", 1),
+    ("crates/reports/src/exit_tax.rs", 1),
+    ("crates/reports/src/export.rs", 2),
+    ("crates/reports/src/export_preview.rs", 1),
+    ("crates/reports/src/full_xlsx.rs", 1),
+    ("crates/reports/src/lib.rs", 1),
+    ("crates/reports/src/platform_csv.rs", 1),
+    ("crates/reports/src/privacy_mirror.rs", 1),
+    ("crates/reports/src/snapshot_write.rs", 3),
+    ("crates/reports/src/source_funds_batch.rs", 1),
+    ("crates/reports/src/source_funds_cases.rs", 1),
+    ("crates/reports/src/source_funds_suggest.rs", 1),
+    ("crates/reports/src/year_handoff_xlsx.rs", 3),
+    ("crates/setup/src/book_reset.rs", 2),
+    ("crates/setup/src/book_settings.rs", 1),
+    ("crates/setup/src/networks.rs", 1),
+    ("crates/transactions/src/sql.rs", 2),
+    ("crates/transfers/src/legacy_refresh.rs", 1),
+    ("crates/transfers/src/pairing_commands.rs", 1),
+    ("crates/transfers/src/sql.rs", 2),
+    ("crates/wallets/src/analysis_index/reads.rs", 1),
+    ("crates/wallets/src/analysis_ops.rs", 2),
+    ("crates/wallets/src/btcpay/provenance.rs", 1),
+    ("crates/wallets/src/btcpay/setup.rs", 1),
+    ("crates/wallets/src/file_import/attachment.rs", 1),
+    ("crates/wallets/src/file_import/document/coordinator.rs", 1),
+    ("crates/wallets/src/file_import/document_chat.rs", 2),
+    ("crates/wallets/src/file_import/exchange_api.rs", 1),
+    ("crates/wallets/src/file_import/samourai.rs", 1),
+    ("crates/wallets/src/lifecycle.rs", 1),
+    ("crates/wallets/src/sync/btcpay.rs", 1),
+];
+
+fn hand_rolled_rollbacks() -> BTreeMap<String, usize> {
+    let root = workspace();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(root.join("crates")).unwrap() {
+        let src = entry.unwrap().path().join("src");
+        if src.is_dir() {
+            product_sources(&src, &mut files);
+        }
+    }
+    files
+        .into_iter()
+        .filter_map(|path| {
+            let file = path
+                .strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            let count = std::fs::read_to_string(&path)
+                .unwrap()
+                .matches("ROLLBACK TO")
+                .count();
+            (count > 0 && file != "crates/store/src/write_lock.rs").then_some((file, count))
+        })
+        .collect()
+}
+
+#[test]
+fn new_write_savepoints_roll_back_through_write_lock() {
+    let baseline: BTreeMap<String, usize> = HAND_ROLLED_ROLLBACKS
+        .iter()
+        .map(|(file, count)| ((*file).to_owned(), *count))
+        .collect();
+    let live = hand_rolled_rollbacks();
+    let grown: Vec<_> = live
+        .iter()
+        .filter(|(file, count)| baseline.get(*file).is_none_or(|b| *count > b))
+        .collect();
+    assert!(
+        grown.is_empty(),
+        "hold the write with kassiber_store::WriteLock::begin (it rolls back when dropped and \
+         commits once with commit()) instead of a hand-written ROLLBACK TO: {grown:?}"
+    );
+    let shrunk: Vec<_> = baseline
+        .iter()
+        .filter(|(file, count)| live.get(*file).is_none_or(|l| l < *count))
+        .collect();
+    assert!(
+        shrunk.is_empty(),
+        "lower these HAND_ROLLED_ROLLBACKS entries to their current counts: {shrunk:?}"
+    );
+}
+
 #[test]
 fn writes_never_begin_deferred() {
     let allowed = allowed();

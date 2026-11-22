@@ -35,6 +35,14 @@ A write transaction opens in one of these ways:
   transaction), when it cannot write (read-only or `query_only`, such as an
   MCP pin, where no upgrade can follow), or when it has no `settings` table
   (partial test schemas, as Python's `63047edfe` checks).
+- `kassiber_store::WriteLock::begin(conn, name)`: the same savepoint as a
+  guard that rolls back when dropped and commits once with `commit()`. A
+  check that a concurrent writer could invalidate before this transaction
+  writes takes `&WriteLock`, so it cannot run before the lock is held: the
+  Bisq import's `bisq::Book` does (`d66e2ece2`, where two imports both read a
+  trade as absent and both booked it). New code uses it instead of a
+  hand-written `ROLLBACK TO`, which has to be repeated on every early
+  return; the scan counts those per file and only lets the counts fall.
 - `kassiber_store::write_savepoint(&mut conn)`: the same, as a rusqlite
   `Savepoint`. It commits on `commit()` and rolls back when dropped.
 - `kassiber_store::write_transaction(conn)`: an unchecked `BEGIN IMMEDIATE`.
@@ -189,7 +197,7 @@ connection can reach). Each row lists the opener as it now stands.
 | `wallets/src/sync.rs` | `sync_local` | `write_savepoint` (was `savepoint()`; merged with connections) | write |
 | `wallets/src/sync/btcpay.rs` | `nested` | `begin_write_savepoint` (was `SAVEPOINT`; merged with connections) | write |
 | `wallets/src/analysis_ops/watches.rs` | `acknowledge` | `BEGIN IMMEDIATE` (was `BEGIN`) | write |
-| `wallets/src/file_import.rs` | `run` | `begin_write_savepoint` (was `SAVEPOINT`) | write |
+| `wallets/src/file_import.rs` | `run` | `WriteLock` (was `SAVEPOINT`, then `begin_write_savepoint`) | write |
 | `wallets/src/file_import/samourai.rs` | `execute` | `begin_write_savepoint` (was `SAVEPOINT`) | write |
 | `wallets/src/file_import/document/coordinator.rs` | `import_draft` | `begin_write_savepoint` (was `SAVEPOINT`) | write |
 | `wallets/src/freshness/execution.rs` | `begin` | `BEGIN IMMEDIATE` (was `BEGIN DEFERRED`) | write |
