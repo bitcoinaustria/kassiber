@@ -1001,11 +1001,15 @@ pub fn ask_about_gap(app: &mut App, gap_id: &str, started: Option<&str>) {
     open_panel(app);
 }
 
-/// The chip's day: the first ten characters of a date, or a dash.
+/// The chip's day: the first ten characters of a date ("unconfirmed" for a placeholder time),
+/// or a dash.
 fn day(date: Option<&str>) -> String {
-    date.map(|d| d.chars().take(10).collect::<String>())
-        .filter(|d| !d.is_empty())
-        .unwrap_or_else(|| "—".into())
+    date.map(|d| match crate::format::is_unknown_time(d) {
+        true => crate::format::tx_date(d, false),
+        false => d.chars().take(10).collect::<String>(),
+    })
+    .filter(|d| !d.is_empty())
+    .unwrap_or_else(|| "—".into())
 }
 
 /// A transaction as the item of a turn: its typed context, its date label (the chip's words,

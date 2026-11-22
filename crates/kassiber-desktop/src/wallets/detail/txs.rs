@@ -231,7 +231,10 @@ fn parse_row(tx: &Value) -> RowData {
         .unwrap_or_else(|| short_txid(s(tx, "externalId").or_else(|| s(tx, "id")).unwrap_or("")));
     RowData {
         id: s(tx, "id").unwrap_or("").to_owned(),
-        date: s(tx, "date").unwrap_or("").to_owned(),
+        date: crate::format::tx_date(
+            s(tx, "date").unwrap_or(""),
+            f(tx, "conf").unwrap_or(0.0) > 0.0,
+        ),
         flow,
         type_label,
         counterparty,

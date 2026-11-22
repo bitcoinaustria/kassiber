@@ -207,3 +207,75 @@ fn report_csv_publication_follows_explicit_output_symlinks() {
     )
     .is_err());
 }
+
+/// Table and plain output name the stored placeholder time instead of
+/// showing 1970; JSON and CSV keep the stored value for machine consumers.
+#[test]
+fn human_formats_hide_the_placeholder_transaction_time() {
+    let payload = || {
+        kassiber_pytext::loads(
+            r#"[{"occurred_at":"1970-01-01T00:00:00Z","confirmed_at":null,"wallet":"spending"},
+                {"occurred_at":"2026-11-21T20:11:40Z","confirmed_at":"2026-11-21T20:11:40Z","wallet":"cold"}]"#,
+        )
+        .unwrap()
+    };
+    let render = |format: Format| {
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        let mut sink = Sink {
+            output: None,
+            home: None,
+            stdout: &mut out,
+            stderr: &mut err,
+        };
+        emit(&mut sink, format, "transactions.list", payload()).unwrap();
+        String::from_utf8(out).unwrap()
+    };
+    assert_eq!(
+        render(Format::Table),
+        concat!(
+            "occurred_at           confirmed_at          wallet  \n",
+            "--------------------  --------------------  --------\n",
+            "unconfirmed                                 spending\n",
+            "2026-11-21T20:11:40Z  2026-11-21T20:11:40Z  cold    \n",
+        )
+    );
+    assert_eq!(
+        render(Format::Plain),
+        concat!(
+            "occurred_at: unconfirmed\nconfirmed_at: \nwallet: spending\n\n",
+            "occurred_at: 2026-11-21T20:11:40Z\nconfirmed_at: 2026-11-21T20:11:40Z\nwallet: cold\n",
+        )
+    );
+    assert!(render(Format::Json).contains("\"occurred_at\": \"1970-01-01T00:00:00Z\""));
+    assert!(render(Format::Csv).contains("1970-01-01T00:00:00Z,,spending"));
+}
+
+/// A `review cases` row carries no `confirmed_at`, so its placeholder must not
+/// claim "unconfirmed": an untimed settled Lightning payment reaches review
+/// that way too. An LND row that keeps the placeholder in both fields says
+/// "unknown date" as well.
+#[test]
+fn placeholder_without_confirmation_signal_reads_unknown_date() {
+    let payload = kassiber_pytext::loads(
+        r#"[{"transaction_id":"ln","occurred_at":"1970-01-01T00:00:00Z","reason":"x"},
+            {"transaction_id":"lnd","occurred_at":"1970-01-01T00:00:00Z","confirmed_at":"1970-01-01T00:00:00Z","reason":"y"}]"#,
+    )
+    .unwrap();
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut sink = Sink {
+        output: None,
+        home: None,
+        stdout: &mut out,
+        stderr: &mut err,
+    };
+    emit(&mut sink, Format::Plain, "review.cases", payload).unwrap();
+    assert_eq!(
+        String::from_utf8(out).unwrap(),
+        concat!(
+            "transaction_id: ln\noccurred_at: unknown date\nreason: x\n\n",
+            "transaction_id: lnd\noccurred_at: unknown date\nconfirmed_at: unknown date\nreason: y\n",
+        )
+    );
+}

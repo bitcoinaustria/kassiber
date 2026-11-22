@@ -249,6 +249,11 @@
         "why": "Mehr als 1 % (mindestens 2.500 Sats) dieses Transfers ist weder durch den Eingang noch durch die Gebühr erklärt.",
         "provide": "Ging ein Teil an eine andere Wallet von dir, verbinde sie; sonst verknüpfe den richtigen Eingang oder erfasse die Differenz."
       },
+      "privacyHopReceipt": {
+        "title": "Gemeinsamer Eingang braucht eine Einordnung",
+        "why": "Diese Wallet hat aus der gemeinsamen Transaktion (etwa einem Payjoin) mehr erhalten, als sie eingebracht hat. Wofür die andere Partei bezahlt hat, zeigt die Blockchain nicht.",
+        "provide": "Gehören die anderen Eingänge nicht dir, ordne den Eingang im Steuer-Tab der Transaktion ein (Einkommen, Kauf, …). Gehören sie dir, füge stattdessen diese Wallet hinzu. Ihn auszuschließen würde einen echten Eingang verwerfen."
+      },
       "privacyHop": {
         "title": "CoinJoin oder gemeinsame Transaktion braucht Nachweise",
         "why": "Diese Zeile gehört zu einer gemeinsamen Transaktion. Aus der Blockchain ist nicht erkennbar, welcher Teil dir gehört, eine Zahlung oder eine Gebühr war.",

@@ -13,7 +13,7 @@ type Result<T> = std::result::Result<T, AppError>;
 use kassiber_envelope::AppError;
 
 const NULL: Value = Value::Null;
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 const GENESIS: &str = "2009-01-03T00:00:00Z";
 pub(crate) const SCAN_FILE_FIELDS: [&str; 2] = ["silent_payment_scan_file", "sp_scan_file"];
 pub(crate) const SCAN_PATH_FIELDS: [&str; 2] = ["silent_payment_scan_path", "sp_scan_path"];

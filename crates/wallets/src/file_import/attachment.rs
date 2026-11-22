@@ -33,7 +33,7 @@ pub const NEW_WALLET_KIND: &str = "custom";
 pub const MAX_WALLET_LABEL_CHARS: usize = 120;
 const SAVEPOINT: &str = "attachment_import_plan";
 const PLAN_TOOL: &str = "ui_wallets_import_attachment_plan";
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 /// Blockers that leave nothing to simulate.
 const NO_SIMULATION: [&str; 6] = [
     "attachment_not_tabular",
