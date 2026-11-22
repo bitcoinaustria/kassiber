@@ -11,7 +11,7 @@ mod tests;
 mod worklist;
 
 use kassiber_pyjson::{Key, Options, Value};
-use kassiber_store::rusqlite::{self, types::ValueRef, Connection, Params};
+use kassiber_store::rusqlite::{self, types::ValueRef, Connection, OptionalExtension, Params};
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ fn app_refusal(error: kassiber_envelope::AppError) -> Error {
 }
 
 mod direct;
-pub use direct::{load, load_read_snapshot, LoadedSnapshot};
+pub use direct::{load, load_read_snapshot, replaced_among, LoadedSnapshot};
 pub use ownership::{forget_derivations, owned_index, owned_index_and_wallets};
 
 pub(super) fn convert(value: Value) -> Result<serde_json::Value> {

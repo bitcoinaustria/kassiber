@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use std::time::{Duration, Instant};
 
 const CLN_IMPORT_SOURCE: &str = "core-lightning";
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 
 /// What a node route needs beyond the book: the gate its process calls pass.
 pub(crate) struct Context<'a> {

@@ -591,6 +591,21 @@ fn component_blocker(conn: &Connection, scope: &Scope<'_>) -> Result<Option<Valu
     Ok(Some(output))
 }
 
+/// `ui.rates.coverage` as readiness reads it: a transaction a confirmed
+/// conflicting spend replaced never books, so it needs no price. The hold
+/// stage's own rule decides which rows those are; every row that can book
+/// still needs its price.
+pub fn rates_coverage(conn: &Connection, args: &Value) -> Result<Value> {
+    kassiber_rates::coverage_settling(conn, args, &|profile, missing| {
+        match crate::loader::replaced_among(conn, profile, missing) {
+            Ok(replaced) => Ok(replaced),
+            Err(crate::loader::Error::Database(error)) => Err(sql_error(error)),
+            // Facts the hold stage would refuse settle nothing.
+            Err(_) => Ok(BTreeSet::new()),
+        }
+    })
+}
+
 /// `build_report_blockers_snapshot(conn)` over the caller's workspace health
 /// and `build_rates_coverage_snapshot(conn, {"limit": 10})`.
 pub fn snapshot(conn: &Connection, health: Value, rates_coverage: Value) -> Result<Value> {
@@ -900,8 +915,7 @@ mod tests {
         let (context, active) = kassiber_workspace::readiness::scope(conn, None).unwrap();
         let health =
             kassiber_workspace::readiness::health(conn, &context, active.as_ref()).unwrap();
-        let coverage =
-            kassiber_rates::coverage(conn, &dict([("limit", Value::Int(10.into()))])).unwrap();
+        let coverage = rates_coverage(conn, &dict([("limit", Value::Int(10.into()))])).unwrap();
         let payload = snapshot(conn, health, coverage).unwrap();
         let blockers = match get(&payload, "blockers") {
             Some(Value::List(items)) => items.clone(),
@@ -921,6 +935,100 @@ mod tests {
         assert_eq!(
             int(&val(&val(stale, "edit_history"), "edit_count")).unwrap(),
             2.into()
+        );
+        drop(book);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A transaction a confirmed fee bump replaced never books, so readiness
+    /// does not ask for its price (the compatibility Electrum observer leaves
+    /// it at the epoch, where no rate exists). Every other unpriced row still
+    /// counts, and an imported confirmation claim settles nothing.
+    #[test]
+    fn a_replaced_spend_needs_no_price_but_every_bookable_row_does() {
+        use serde_json::json;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "kassiber-replaced-coverage-{}-{nanos}",
+            std::process::id()
+        ));
+        let book = kassiber_store::Book::create(&dir, None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../../transactions/tests/data/desktop.sql"))
+            .unwrap();
+        let spend = |id: &str,
+                     txid: char,
+                     status: serde_json::Value,
+                     priced: bool,
+                     observed: bool| {
+            let txid = txid.to_string().repeat(64);
+            let raw = json!({"txid":txid,"vin":[{"txid":"b".repeat(64),"vout":1,
+                "prevout":{"value_sats":13,"scriptpubkey":"00141111111111111111111111111111111111111111"}}],
+                "vout":[{"n":0,"value_sats":10,"scriptpubkey":"00142222222222222222222222222222222222222222"}],
+                "status":status}).to_string();
+            let price = if priced { "1" } else { "NULL" };
+            conn.execute(
+                &format!("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,occurred_at,created_at,fiat_rate,fiat_value,raw_json) VALUES(?1,'w','p','cold',?1,?2,'BTC','outbound',10000,0,'1970-01-01T00:00:00Z','2025',{price},{price},?3)"),
+                [id, &txid, &raw],
+            )
+            .unwrap();
+            if observed {
+                let row = json!({"wallet_id":"cold","external_id":txid,"direction":"outbound",
+                    "asset":"BTC","amount":10000,"fee":0});
+                let graph = kassiber_custody::evidence::graph_hash(&json!(raw))
+                    .unwrap()
+                    .0;
+                let quantity = kassiber_custody::evidence::observed_hash(&row).unwrap().0;
+                conn.execute(
+                    "INSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES(?1,'w','p','cold',1,'[]','[\"electrum\"]','bitcoin','regtest','test',?2,?3,'exact','2026-01-02T00:00:00Z','2026')",
+                    [id, &graph, &quantity],
+                )
+                .unwrap();
+            }
+        };
+        let missing = |coverage: &Value| {
+            int(&val(
+                &val(coverage, "summary"),
+                "missing_price_transactions",
+            ))
+            .unwrap()
+        };
+        let limit = dict([("limit", Value::Int(100.into()))]);
+        let baseline = missing(&kassiber_rates::coverage(conn, &limit).unwrap());
+        spend(
+            "bump",
+            'a',
+            json!({"confirmed":true,"block_height":100}),
+            true,
+            true,
+        );
+        spend("original", 'c', json!({"confirmed":false}), false, true);
+        let coverage = rates_coverage(conn, &limit).unwrap();
+        assert_eq!(missing(&coverage), baseline);
+        assert_eq!(
+            missing(&kassiber_rates::coverage(conn, &limit).unwrap()),
+            baseline.clone() + BigInt::from(1)
+        );
+        let listed: Vec<_> = match val(&coverage, "items") {
+            Value::List(items) => items.iter().map(|item| py_str(&val(item, "id"))).collect(),
+            _ => Vec::new(),
+        };
+        assert!(!listed.contains(&"original".to_owned()), "{listed:?}");
+        // An imported spend claiming confirmation of the same prevout
+        // contradicts the observed winner: nothing is settled.
+        spend(
+            "claim",
+            'd',
+            json!({"confirmed":true,"block_height":101}),
+            true,
+            false,
+        );
+        assert_eq!(
+            missing(&rates_coverage(conn, &limit).unwrap()),
+            baseline + BigInt::from(1)
         );
         drop(book);
         let _ = std::fs::remove_dir_all(&dir);
