@@ -392,6 +392,7 @@ ui-tauri/src-tauri/bin/kassiber.exe
 /tests/data/sessions/blobs-05.tar.gz
 /tests/data/sessions/blobs-06.tar.gz
 /tests/data/sessions/blobs-07.tar.gz
+/tests/data/sessions/blobs-08.tar.gz
 /tests/data/sessions/dropped.tsv
 /tests/data/sessions/sessions.tar.gz
 /tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
