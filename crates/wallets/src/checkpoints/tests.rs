@@ -268,8 +268,9 @@ fn node_checkpoints_read_the_last_successful_sync_only() {
     assert_eq!(node_checkpoint(&conn, "p", "n").unwrap(), None);
     conn.execute_batch(
         "INSERT INTO lightning_node_syncs(id,workspace_id,profile_id,wallet_id,backend_name,started_at,completed_at,status,created_at) VALUES
-           ('s1','ws','p','n','cln','2025-01-01T00:00:00Z','2025-01-01T00:01:00Z','ok','x'),
-           ('s2','ws','p','n','cln','2025-02-01T00:00:00Z','2025-02-01T00:01:00Z','error','x');
+           ('s1','ws','p','n','cln','2025-01-01T00:00:00Z','2025-01-01T00:01:00Z','synced','x'),
+           ('s2','ws','p','n','cln','2025-02-01T00:00:00Z','2025-02-01T00:01:00Z','error','x'),
+           ('s3','ws','p','n','cln','2025-03-01T00:00:00Z','2025-03-01T00:01:00Z','partial','x');
          INSERT INTO lightning_node_records(id,workspace_id,profile_id,wallet_id,backend_name,record_type,external_id,occurred_at,amount_msat,sync_id,first_seen_at,updated_at) VALUES
            ('r1','ws','p','n','cln','balance_snapshot','wallet','2025-01-01T00:00:00Z',1000,'s1','x','x'),
            ('r2','ws','p','n','cln','balance_snapshot','chan','2025-01-01T00:00:00Z',234,'s1','x','x'),

@@ -607,7 +607,7 @@ pub fn node_checkpoint(
     let sync: Option<(String, String)> = conn
         .query_row(
             "SELECT id,completed_at FROM lightning_node_syncs WHERE profile_id=? AND wallet_id=? \
-             AND status='ok' AND completed_at IS NOT NULL ORDER BY completed_at DESC,id DESC LIMIT 1",
+             AND status='synced' AND completed_at IS NOT NULL ORDER BY completed_at DESC,id DESC LIMIT 1",
             [profile_id, wallet_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
