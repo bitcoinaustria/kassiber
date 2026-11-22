@@ -394,7 +394,7 @@ fn live_pin(app: &App, pin: Option<&Focus>) -> Option<Focus> {
 /// `item` says whether that item is still of the open book (`None`: no item). The flag says the
 /// item is this turn's context, the only case in which the daemon reads it for the model
 /// (`read_pinned_entity`); an item of another book is dropped, never sent.
-fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
+pub(super) fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
     match (page, item) {
         (Some(page), _) => (page, false),
         (None, Some(true)) => (asked, true),
