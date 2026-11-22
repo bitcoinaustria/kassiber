@@ -730,11 +730,14 @@ fn period_failure(app: &App, tk: &Tk) -> Option<El> {
             .center_y()
             .flex_wrap()
             .child(
-                text(tr("connections:coverage.periodLoadError", &[("period", &period)]))
-                    .font(tk.tsm(400.0))
-                    .color(tk.destructive)
-                    .role("alert")
-                    .wrap(),
+                text(tr(
+                    "connections:coverage.periodLoadError",
+                    &[("period", &period)],
+                ))
+                .font(tk.tsm(400.0))
+                .color(tk.destructive)
+                .role("alert")
+                .wrap(),
             )
             .child(
                 crate::ui::button::button(
@@ -1802,7 +1805,9 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
         return false;
     }
     let keep = match st.period_coverage.as_ref() {
-        Some((_, PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report)))) if same => {
+        Some((_, PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report))))
+            if same =>
+        {
             Some(report.clone())
         }
         _ => None,
