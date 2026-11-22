@@ -609,6 +609,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     changed |= picker::poll(app, tx);
     changed |= closed::poll(app, tx);
     changed |= thread::poll_thought(app, tx);
+    changed |= thread::action::poll(app);
     changed |= chat::poll(app);
     changed |= evidence::poll(app, tx);
     if std::mem::take(&mut app.assistant.thread.anchor_new_turn) {
@@ -1314,6 +1315,12 @@ pub const SCENES: &[crate::app::Scene] = &[
         scene_model(a);
         scene_page(a);
         synthetic::load_approvals(a);
+    }),
+    // SYNTHETIC: the common changes as native cards (Apply waiting, Undo after).
+    ("assistant-thread-actions", |a| {
+        scene_model(a);
+        scene_page(a);
+        synthetic::load_actions(a);
     }),
     ("assistant-picker", picker::scene_open),
     ("assistant-picker-model", picker::scene_model),

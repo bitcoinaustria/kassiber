@@ -1077,5 +1077,60 @@
     "useAria": "{{name}} verwenden",
     "other": "Lokale Modelle, Server und API-Schlüssel richtest du in den Einstellungen ein.",
     "openSettings": "Einstellungen öffnen"
+  },
+  "action": {
+    "proposed": "Vom Assistenten vorgeschlagen",
+    "applied": "Mit dem Assistenten angewendet",
+    "apply": "Anwenden",
+    "changes": "Was sich ändert",
+    "reason": "Begründung des Assistenten: {{reason}}",
+    "yes": "Ja",
+    "no": "Nein",
+    "leg": {
+      "from": "Von",
+      "to": "Nach",
+      "loading": "Transaktion wird gelesen…",
+      "missing": "Diese Transaktion ist nicht im offenen Buch.",
+      "otherDirection": "Diese Referenz bezeichnet auch eine Transaktion in die andere Richtung, daher kann die Karte nicht zeigen, welche die Änderung verwendet.",
+      "noWallet": "Keine Wallet"
+    },
+    "pair": {
+      "title": "Zwei Transaktionen als eine Übertragung verknüpfen",
+      "kind": "Art",
+      "policy": "Steuerliche Behandlung",
+      "policyDefault": "Kassibers Standard für diese Art",
+      "partial": "Verknüpfter Betrag",
+      "notes": "Notiz"
+    },
+    "dismiss": {
+      "title": "Diese zwei nicht mehr als Übertragung vorschlagen",
+      "until": "Ausgeblendet für",
+      "defaultDays": "90 Tage (Standard)",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
+    },
+    "edit": {
+      "title": "Transaktion bearbeiten",
+      "transaction": "Transaktion",
+      "cleared": "Entfernt",
+      "unset": "Nicht gesetzt",
+      "noTags": "Keine Tags",
+      "field": {
+        "note": "Notiz",
+        "tags": "Tags",
+        "kind": "Erfasst als",
+        "excluded": "Aus Berichten ausgenommen",
+        "taxable": "Steuerpflichtig",
+        "review_status": "Prüfstatus",
+        "tax": "Steuerliche Klassifizierung"
+      }
+    },
+    "undo": {
+      "action": "Rückgängig machen",
+      "running": "Wird rückgängig gemacht…",
+      "done": "Rückgängig gemacht",
+      "failed": "Rückgängig machen fehlgeschlagen: {{message}}",
+      "label": "Diese Änderung rückgängig machen"
+    }
   }
 }

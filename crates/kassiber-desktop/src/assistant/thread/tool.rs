@@ -127,7 +127,7 @@ pub fn is_active(c: &ToolCall) -> bool {
 }
 
 /// "Used N tools": a run of routine calls folded into one row; open, their cards behind a rule.
-pub fn group(app: &App, tk: &Tk, key: &str, calls: &[&ToolCall]) -> El {
+pub fn group(app: &App, tk: &Tk, key: &str, msg_id: &str, calls: &[&ToolCall]) -> El {
     let open = is_open(app, key, false);
     let active = calls.iter().find(|c| is_active(c));
     let n = calls.len();
@@ -190,7 +190,7 @@ pub fn group(app: &App, tk: &Tk, key: &str, calls: &[&ToolCall]) -> El {
             .pl(tk.r(0.75))
             .border_sides([0.0, 0.0, 0.0, 1.0], tk.border.alpha(tk.border.a * 0.7));
         for call in calls {
-            list = list.child(card(app, tk, call));
+            list = list.child(card(app, tk, msg_id, call));
         }
         c = c.child(list);
     }
@@ -290,7 +290,8 @@ fn pretty(v: &Value) -> String {
     }
 }
 
-/// The reverse call a finished change names (`data.undo`): only read to say it can be undone.
+/// The reverse call a finished change names (`data.undo`): Undo where the desktop may send it
+/// (`action::desktop_undo`), else only a note that the assistant can take it back.
 fn undoable(c: &ToolCall) -> bool {
     c.status == ToolStatus::Done
         && c.result
@@ -313,13 +314,57 @@ pub fn local_reference(c: &ToolCall) -> Option<String> {
         .flatten()
 }
 
+/// Why a change ran without asking: the permission mode or chat-wide allowance it ran under
+/// (`auto`, `full_access`, `session`), as a small badge. `None` for an explicit approval.
+pub fn approval_badge(tk: &Tk, call: &ToolCall) -> Option<El> {
+    let k = match call.approval.as_deref() {
+        Some("auto") => "assistant:tool.approval.auto",
+        Some("full_access") => "assistant:tool.approval.full_access",
+        Some("session") => "assistant:tool.approval.session",
+        _ => return None,
+    };
+    let amber = if tk.dark {
+        rune::color::hex("#fbbf24")
+    } else {
+        rune::color::hex("#d97706")
+    }
+    .unwrap_or(tk.warn.solid);
+    Some(
+        row()
+            .gap(tk.r(0.25))
+            .center_y()
+            .radius(999.0)
+            .border(1.0, tk.border.alpha(tk.border.a * 0.7))
+            .border_layout()
+            .fill(tk.background.alpha(0.6))
+            .px(tk.r(0.375))
+            .py(1.0)
+            .child(
+                ic(
+                    &I::SHIELD_CHECK,
+                    tk.r(0.75),
+                    if call.approval.as_deref() == Some("full_access") {
+                        amber
+                    } else {
+                        tk.muted_fg
+                    },
+                )
+                .a11y_hidden(),
+            )
+            .child(text(t(k)).font(tk.t2xs(400.0)).color(tk.muted_fg)),
+    )
+}
+
 /// A tool call's card: header (state icon, name, badge, chevron), the approval / undo line, the
 /// open-transaction link, and — open — its arguments, summary or result, and reason or error.
-pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
+pub fn card(app: &App, tk: &Tk, msg_id: &str, call: &ToolCall) -> El {
     if let Some(e) = super::approval::evidence_card(app, tk, call) {
         return e;
     }
     if let Some(e) = super::approval::wallet_request_card(app, tk, call) {
+        return e;
+    }
+    if let Some(e) = super::action::applied_card(app, tk, msg_id, call) {
         return e;
     }
     let key = format!("asst-tool-{}", call.call_id);
@@ -384,14 +429,11 @@ pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
         })
         .clip_rounded(tk.r(0.375))
         .child(header);
-    let approval_key = match call.approval.as_deref() {
-        Some("auto") => Some("assistant:tool.approval.auto"),
-        Some("full_access") => Some("assistant:tool.approval.full_access"),
-        Some("session") => Some("assistant:tool.approval.session"),
-        _ => None,
-    };
+    let badge = approval_badge(tk, call);
     let undo = undoable(call);
-    if approval_key.is_some() || undo {
+    // An undo the desktop can send itself: "Applied with the assistant" and an Undo button.
+    let direct = super::action::desktop_undo(call).is_some();
+    if badge.is_some() || undo {
         let mut line = row()
             .w_full()
             .flex_wrap()
@@ -399,39 +441,13 @@ pub fn card(app: &App, tk: &Tk, call: &ToolCall) -> El {
             .center_y()
             .px(tk.r(0.5))
             .pb(tk.r(0.375));
-        if let Some(k) = approval_key {
-            let amber = if tk.dark {
-                rune::color::hex("#fbbf24")
-            } else {
-                rune::color::hex("#d97706")
-            }
-            .unwrap_or(tk.warn.solid);
-            line = line.child(
-                row()
-                    .gap(tk.r(0.25))
-                    .center_y()
-                    .radius(999.0)
-                    .border(1.0, tk.border.alpha(tk.border.a * 0.7))
-                    .border_layout()
-                    .fill(tk.background.alpha(0.6))
-                    .px(tk.r(0.375))
-                    .py(1.0)
-                    .child(
-                        ic(
-                            &I::SHIELD_CHECK,
-                            tk.r(0.75),
-                            if call.approval.as_deref() == Some("full_access") {
-                                amber
-                            } else {
-                                tk.muted_fg
-                            },
-                        )
-                        .a11y_hidden(),
-                    )
-                    .child(text(t(k)).font(tk.t2xs(400.0)).color(tk.muted_fg)),
-            );
+        // `applied_line` carries the badge itself.
+        if let Some(b) = badge.filter(|_| !direct) {
+            line = line.child(b);
         }
-        if undo {
+        if direct {
+            line = line.child(super::action::applied_line(app, tk, &key, msg_id, call));
+        } else if undo {
             line = line.child(
                 row()
                     .gap(tk.r(0.25))

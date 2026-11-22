@@ -293,7 +293,7 @@ fn unnamed(node: &Value, path: &str, out: &mut Vec<String>) {
 }
 
 /// `a11y-check.py`'s three checks over one rendered frame.
-fn a11y_findings(tree: &Value, elements: &[rune::ElementInfo]) -> Vec<String> {
+pub(crate) fn a11y_findings(tree: &Value, elements: &[rune::ElementInfo]) -> Vec<String> {
     let mut problems = Vec::new();
     unnamed(tree, "", &mut problems);
     let named = |x: &rune::ElementInfo| {

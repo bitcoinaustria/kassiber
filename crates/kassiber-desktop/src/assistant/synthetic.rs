@@ -418,6 +418,153 @@ fn approvals() -> (Vec<Msg>, Vec<Consent>) {
     (vec![u3, a3, u4, a4, u5, a5, u6, a6], consents)
 }
 
+/// The common changes as native cards: a link and an edit waiting for Apply, and finished
+/// changes with and without an Undo the desktop can send (results shaped as the daemon's, with
+/// their `undo` hints).
+fn actions() -> (Vec<Msg>, Vec<Consent>) {
+    let u7 = Msg::new(
+        "u7",
+        Role::User,
+        "Link the Kraken withdrawal to my cold wallet deposit, and note that it went to cold storage.",
+    );
+    let mut a7 = assistant("a7", "");
+    a7.status = MsgStatus::Streaming;
+    a7.thinking_segments = vec![seg(
+        "s7",
+        "One candidate matches: same amount less the network fee, 14 minutes apart.",
+    )];
+    let pair_args = json!({"tx_out": "tx-2025-0402-out", "tx_in": "tx-2025-0402-in", "kind": "manual", "policy": "carrying-value"});
+    let edit_args = json!({"transaction": "tx-2025-0402-out", "note": "Kraken withdrawal to cold storage", "tags": ["cold-storage"], "reason": "The owner said where it went."});
+    let mut pair = call(
+        "x1",
+        "ui.transfers.pair",
+        ToolStatus::AwaitingConsent,
+        pair_args.clone(),
+        None,
+    );
+    pair.needs_consent = true;
+    pair.segment_id = Some("s7".into());
+    let mut edit = call(
+        "x2",
+        "ui.transactions.metadata.update",
+        ToolStatus::AwaitingConsent,
+        edit_args.clone(),
+        None,
+    );
+    edit.needs_consent = true;
+    edit.segment_id = Some("s7".into());
+    a7.tool_calls = vec![pair, edit];
+    let consents = vec![
+        Consent {
+            call_id: "x1".into(),
+            name: "ui.transfers.pair".into(),
+            summary: "Pair transfer legs tx-2025-0402-out -> tx-2025-0402-in".into(),
+            arguments_preview: pair_args,
+            review_preview: None,
+            reversible: true,
+            egresses: false,
+            can_allow_session: true,
+        },
+        Consent {
+            call_id: "x2".into(),
+            name: "ui.transactions.metadata.update".into(),
+            summary: "Update transaction metadata tx-2025-0402-out".into(),
+            arguments_preview: edit_args,
+            review_preview: None,
+            reversible: true,
+            egresses: false,
+            can_allow_session: true,
+        },
+    ];
+
+    let u8 = Msg::new(
+        "u8",
+        Role::User,
+        "Stop suggesting the March pair, and link the April one.",
+    );
+    let mut a8 = assistant(
+        "a8",
+        "Done: the April transfer is linked and the March suggestion is hidden for 30 days.",
+    );
+    let mut linked = call(
+        "y1",
+        "ui.transfers.pair",
+        ToolStatus::Done,
+        json!({"tx_out": "tx-2025-0402-out", "tx_in": "tx-2025-0402-in"}),
+        Some(
+            json!({"kind": "ui.transfers.pair", "data": {"id": "pair-0402", "undo": {"tool": "ui_transfers_unpair", "arguments": {"pair_id": "pair-0402"}}}}),
+        ),
+    );
+    linked.approval = Some("required".into());
+    let mut dismissed = call(
+        "y2",
+        "ui.transfers.dismiss",
+        ToolStatus::Done,
+        json!({"tx_out": "tx-2025-0320-out", "tx_in": "tx-2025-0320-in", "expires_in_days": 30, "reason": "Different amounts"}),
+        Some(
+            json!({"kind": "ui.transfers.dismiss", "data": {"id": "dismissal-0320", "undo": {"tool": "ui_transfers_dismissals_delete", "arguments": {"dismissal_id": "dismissal-0320"}}}}),
+        ),
+    );
+    // Ran under the chat's auto mode: the applied card keeps the mode's badge.
+    dismissed.approval = Some("auto".into());
+    // A plan-bound inverse: the assistant shows the plan first, so there is no Undo button.
+    let mut component = call(
+        "y3",
+        "ui.transfers.components.apply",
+        ToolStatus::Done,
+        json!({"action": "create"}),
+        Some(
+            json!({"kind": "ui.transfers.components.apply", "data": {"component": {"id": "comp-1", "state": "active"}, "undo": {"tool": "ui_transfers_components_plan", "arguments": {"action": "supersede", "component_id": "comp-1"}}}}),
+        ),
+    );
+    component.approval = Some("auto".into());
+    a8.tool_calls = vec![linked, dismissed, component];
+    (vec![u8, a8, u7, a7], consents)
+}
+
+/// The transactions the action cards name, as `ui.transactions.resolve` returns them.
+fn action_legs() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "tx-2025-0402-out",
+            json!({"id": "tx-2025-0402-out", "date": "2025-04-02 09:14", "account": "Kraken", "asset": "BTC", "amountSat": -25_000_000, "feeSat": 0, "note": "", "tags": []}),
+        ),
+        (
+            "tx-2025-0402-in",
+            json!({"id": "tx-2025-0402-in", "date": "2025-04-02 09:28", "account": "Cold wallet", "asset": "BTC", "amountSat": 24_998_590, "feeSat": 0}),
+        ),
+        (
+            "tx-2025-0320-out",
+            json!({"id": "tx-2025-0320-out", "date": "2025-03-20 17:02", "account": "Spending", "asset": "BTC", "amountSat": -1_200_000}),
+        ),
+        (
+            "tx-2025-0320-in",
+            json!({"id": "tx-2025-0320-in", "date": "2025-03-20 17:40", "account": "Cold wallet", "asset": "BTC", "amountSat": 950_000}),
+        ),
+    ]
+}
+
+pub fn load_actions(a: &mut App) {
+    let (m, c) = actions();
+    a.assistant.messages = m;
+    a.assistant.pending_consents = c;
+    a.assistant.streaming = true;
+    a.assistant.synthetic = true;
+    let book = super::chat::book_now(a);
+    let st = &mut a.assistant.thread.actions;
+    st.legs_book = book;
+    for (id, tx) in action_legs() {
+        st.legs.insert(
+            id.into(),
+            super::thread::action::Leg {
+                loading: false,
+                failed: false,
+                tx: Some(tx),
+            },
+        );
+    }
+}
+
 /// Binds the fixtures' book-scoped packets to the open book, so they read as this book's.
 fn bind_scope(a: &mut App) {
     let scope = a.expected_scope();
@@ -594,7 +741,7 @@ pub fn sessions() -> SessionList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assistant::thread::{approval, visual};
+    use crate::assistant::thread::{action, approval, visual};
 
     #[test]
     fn every_fixture_passes_the_web_validators() {
@@ -610,5 +757,27 @@ mod tests {
                 .any(|c| approval::review_result(c).is_some())
         );
         assert_eq!(c.len(), 2);
+        let (m, c) = actions();
+        for r in &c {
+            assert!(
+                action::parse(&r.name, &r.arguments_preview).is_some(),
+                "{} shows as a native card",
+                r.name
+            );
+        }
+        let applied: Vec<_> = m[1]
+            .tool_calls
+            .iter()
+            .filter(|c| action::shows_applied(c))
+            .collect();
+        assert_eq!(applied.len(), 2, "the two native changes");
+        assert_eq!(
+            m[1].tool_calls
+                .iter()
+                .filter(|c| action::desktop_undo(c).is_some())
+                .count(),
+            2,
+            "no Undo for the plan-bound inverse"
+        );
     }
 }

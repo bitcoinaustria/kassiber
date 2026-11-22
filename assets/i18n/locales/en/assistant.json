@@ -1077,5 +1077,60 @@
     "useAria": "Use {{name}}",
     "other": "Local models, servers and API keys are set up in Settings.",
     "openSettings": "Open Settings"
+  },
+  "action": {
+    "proposed": "Proposed by the assistant",
+    "applied": "Applied with the assistant",
+    "apply": "Apply",
+    "changes": "What changes",
+    "reason": "The assistant's reason: {{reason}}",
+    "yes": "Yes",
+    "no": "No",
+    "leg": {
+      "from": "From",
+      "to": "To",
+      "loading": "Reading the transaction…",
+      "missing": "This transaction isn't in the open book.",
+      "otherDirection": "This reference also names a transaction in the other direction, so the card can't show which one the change uses.",
+      "noWallet": "No wallet"
+    },
+    "pair": {
+      "title": "Link two transactions as one transfer",
+      "kind": "Kind",
+      "policy": "Tax treatment",
+      "policyDefault": "Kassiber's default for this kind",
+      "partial": "Amount linked",
+      "notes": "Note"
+    },
+    "dismiss": {
+      "title": "Stop suggesting these two as a transfer",
+      "until": "Hidden for",
+      "defaultDays": "90 days (default)",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "edit": {
+      "title": "Edit a transaction",
+      "transaction": "Transaction",
+      "cleared": "Cleared",
+      "unset": "Not set",
+      "noTags": "No tags",
+      "field": {
+        "note": "Note",
+        "tags": "Tags",
+        "kind": "Recorded as",
+        "excluded": "Excluded from reports",
+        "taxable": "Taxable",
+        "review_status": "Review status",
+        "tax": "Tax classification"
+      }
+    },
+    "undo": {
+      "action": "Undo",
+      "running": "Undoing…",
+      "done": "Undone",
+      "failed": "Couldn't undo: {{message}}",
+      "label": "Undo this change"
+    }
   }
 }

@@ -665,6 +665,8 @@ pub fn on_progress(app: &mut App, tag: &str, envelope: &Value) {
 
 /// `invalidateDaemonQueriesForMutation`: a change the assistant made shows on every screen.
 fn on_mutation(app: &mut App, _kind: &str) {
+    // The change cards' "current" values are reads of the book as it was: read them again.
+    super::thread::action::invalidate_legs(app);
     app.refresh_reads();
 }
 
