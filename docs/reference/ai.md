@@ -1385,6 +1385,22 @@ Matching read-only tool results are streamed to the UI and inserted into the
 model context as exact local data, so answers use program-derived facts. That auto-read context is sent as
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
+
+An item pinned with "Ask about this" is read too. When the desktop sends
+`read_pinned_entity: true` with a `screen_context` whose entity the daemon kept
+(a `transaction` of the open book, or a `custody_gap`), the router runs that
+item's own review read first: `ui.transactions.review_context` or
+`ui.custody.gaps.review_context`, both local, read-only and non-egressing,
+through the same advertised-tool gate as every other auto-read, and streamed to
+the UI as an ordinary tool card. Its entry gets most of the message budget
+(`PINNED_CONTEXT_ENTRY_MAX_CHARS`, 16,000 of 24,000 characters); an oversized
+packet drops its largest review sections first (never the row, next actions,
+local reference or safety note) and names them in `omitted_sections`, so the
+model can read one with the tool's own flags. The flag is opt-in: a request
+without it, a request that is not for Kassiber's own system prompt, or a pin the
+daemon unbound because the item is not in the open book reads exactly as before.
+The desktop sends it only when the pin is that turn's context, not when a page
+request or evidence continuation brings its own.
 When one of those reads needs current reports or journal-derived state,
 Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
@@ -1654,8 +1670,11 @@ The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
 read tool. An "Ask about this" action pins a typed entity for the following
-turns until the user removes it; the item's identity travels only as that
-typed entity, never interpolated into the prompt text. A question queued
+turns until the user removes it, and the daemon reads the pinned item for the
+model each turn (see the pre-read router above); the item's identity travels
+only as that typed entity, never interpolated into the prompt text. The
+transaction panel's Assistant surface pins the transaction on screen the same
+way without replacing the user's draft. A question queued
 while an answer streams, or held until the open book's provider settings have
 seeded the reasoning effort, keeps the pin that was active when it was
 submitted and the page it was asked on (route, capability hints, and counts

@@ -382,6 +382,22 @@ fn live_pin(app: &App, pin: Option<&Focus>) -> Option<Focus> {
     pin.filter(|p| same_book(&p.book, now.as_ref())).cloned()
 }
 
+/// A turn's screen context, most specific first: a page request's or evidence continuation's
+/// own, then the pin, then the page the question was asked on (`None`: the page on screen now).
+/// The flag says the pin is this turn's context, the only case in which the daemon reads the
+/// pinned item for the model (`read_pinned_entity`).
+fn turn_context(
+    page: Option<Value>,
+    pin: Option<Value>,
+    asked: Option<Value>,
+) -> (Option<Value>, bool) {
+    match (page, pin) {
+        (Some(page), _) => (Some(page), false),
+        (None, Some(pin)) => (Some(pin), true),
+        (None, None) => (asked, false),
+    }
+}
+
 /// `runTurn`: one chat turn against an explicit conversation base and saved chat.
 pub fn run_turn(
     app: &mut App,
@@ -506,7 +522,7 @@ pub fn run_turn(
             .map_or(app.assistant.focus.as_ref(), |a| a.pin.as_ref()),
     )
     .map(|p| p.context);
-    let screen = evidence
+    let page_ctx = evidence
         .as_ref()
         .and_then(|e| e.context.clone())
         .or_else(|| {
@@ -514,10 +530,10 @@ pub fn run_turn(
                 .as_ref()
                 .filter(|a| a.handoff)
                 .map(|a| a.context.clone())
-        })
-        .or(pin_ctx)
-        .or_else(|| asked.as_ref().map(|a| a.context.clone()))
-        .unwrap_or_else(|| super::screen::current(app));
+        });
+    let (screen, read_pin) =
+        turn_context(page_ctx, pin_ctx, asked.as_ref().map(|a| a.context.clone()));
+    let screen = screen.unwrap_or_else(|| super::screen::current(app));
     let no_persist = app.assistant.incognito && session.is_none();
     let mut args = json!({
         "provider": provider,
@@ -531,6 +547,9 @@ pub fn run_turn(
         "persist": if no_persist { json!(false) } else { json!("auto") },
         "screen_context": screen,
     });
+    if read_pin {
+        args["read_pinned_entity"] = json!(true);
+    }
     if !options.is_null() {
         args["options"] = options;
     }
@@ -1269,6 +1288,29 @@ mod tests {
             entries("one\n \n\ntwo\n"),
             vec!["one".to_owned(), "two".to_owned()]
         );
+    }
+
+    #[test]
+    fn only_a_pin_that_is_the_turns_context_is_read() {
+        let (page, pin, asked) = (
+            json!({"route": "/review"}),
+            json!({"entity_id": "t"}),
+            json!({"route": "/overview"}),
+        );
+        assert_eq!(
+            turn_context(None, Some(pin.clone()), Some(asked.clone())),
+            (Some(pin.clone()), true)
+        );
+        // A page request or evidence continuation brings its own context: no pinned read.
+        assert_eq!(
+            turn_context(Some(page.clone()), Some(pin), Some(asked.clone())),
+            (Some(page), false)
+        );
+        assert_eq!(
+            turn_context(None, None, Some(asked.clone())),
+            (Some(asked), false)
+        );
+        assert_eq!(turn_context(None, None, None), (None, false));
     }
 
     #[test]

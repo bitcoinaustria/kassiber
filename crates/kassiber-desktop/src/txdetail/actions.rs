@@ -1150,6 +1150,45 @@ mod tests {
         assert_eq!(bad.len(), 2);
     }
 
+    /// The panel's "Assistant" surface pins the transaction on screen (as its own "Ask about
+    /// this" does) and leaves the user's draft alone; with the book's ids unknown it pins
+    /// nothing.
+    #[test]
+    fn the_assistant_surface_pins_the_open_transaction() {
+        let mut app = crate::app::tests::quiet_app();
+        let mut o = super::super::Open::new("tx-9", super::super::Tab::Details, vec![]);
+        o.record = Some(
+            json!({"id": "tx-9", "date": "2025-03-05 10:00", "quarantineReason": "missing_price"}),
+        );
+        app.detail.open = Some(Box::new(o));
+        app.assistant.draft = rune::TextEdit::new("my own words");
+        crate::assistant::open_about_detail(&mut app);
+        assert!(
+            app.assistant.focus.is_none(),
+            "no pin before the book's ids are known"
+        );
+        app.reads.insert(
+            "ui.profiles.snapshot".into(),
+            crate::app::Reply {
+                kind: "ui.profiles.snapshot".into(),
+                data: json!({"activeWorkspaceId": "w", "activeProfileId": "p"}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        crate::assistant::open_about_detail(&mut app);
+        let focus = app.assistant.focus.as_ref().expect("pinned");
+        assert_eq!(focus.context["entity_type"], "transaction");
+        assert_eq!(focus.context["entity_id"], "tx-9");
+        // A held transaction pins on the review route, like the header's button.
+        assert_eq!(focus.context["route"], "/review");
+        assert_eq!(focus.book, ("w".to_owned(), "p".to_owned()));
+        assert_eq!(app.assistant.draft.text, "my own words");
+        assert!(app.assistant.tab_open);
+        assert!(app.assistant.draft.focused, "the composer takes the caret");
+    }
+
     /// Saving transaction A, then switching to tab B before the reply: the reply completes A's
     /// parked panel and leaves B's edits alone.
     #[test]

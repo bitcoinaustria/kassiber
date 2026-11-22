@@ -339,7 +339,10 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             t("assistant:panel.title"),
             "A",
             assistant_available(app),
-            |a| crate::assistant::panel::open_surface(a, 0),
+            |a| {
+                a.detail.add_open = false;
+                crate::assistant::open_about_detail(a);
+            },
         ),
         (
             &I::LIST_CHECKS,
@@ -436,7 +439,7 @@ fn add_menu(app: &App, tk: &Tk, layer: &mut Vec<El>) {
             let Some(t) = target else { return false };
             a.detail.add_open = false;
             match t {
-                0 => crate::assistant::panel::open_surface(a, 0),
+                0 => crate::assistant::open_about_detail(a),
                 1 => a.navigate("/review"),
                 2 => crate::assistant::panel::open_surface(a, 2),
                 3 => crate::assistant::panel::open_surface(a, 3),
