@@ -31,6 +31,7 @@ pub mod stream;
 pub mod synthetic;
 pub mod think;
 pub mod thread;
+pub mod tray;
 
 use rune::{Cx, El, Key, KeyEvent, TextEdit, Tx};
 use serde_json::{Value, json};
@@ -113,8 +114,9 @@ pub enum Front {
     Detail,
 }
 
-/// The item "Ask about this" pinned (`AssistantFocus` + its book): the typed context replaces
-/// the page's while it is pinned; the label stays on the local chip and is never sent.
+/// The item a turn is about (`AssistantFocus` + its book): the one "Ask about this" pinned, or
+/// the transaction open in the detail panel. Its typed entity joins the page's context
+/// (`tray::build`); the label stays on the local chip and is never sent.
 #[derive(Clone, Debug)]
 pub struct Focus {
     pub label: String,
@@ -162,6 +164,10 @@ pub struct Ui {
     pub chat_modes: std::collections::HashMap<String, PermissionMode>,
     /// The last page the user was on (the assistant page answers about it).
     pub last_screen: Option<Value>,
+    /// The open transaction the user removed from the tray, kept out until another opens.
+    pub hidden_open: Option<String>,
+    /// The Transactions chart selection removed from the tray, kept out until it changes.
+    pub hidden_chart: Option<crate::transactions::model::ChartSel>,
     /// Bumped by every fresh conversation (`generationRef`) and every submit (`promptRevisionRef`).
     pub generation: u64,
     pub prompt_revision: u64,
@@ -263,6 +269,8 @@ impl Default for Ui {
             shown: Default::default(),
             chat_modes: Default::default(),
             last_screen: None,
+            hidden_open: None,
+            hidden_chart: None,
             generation: 0,
             prompt_revision: 0,
             turn_generation: 0,
@@ -937,17 +945,27 @@ pub fn ask_about(app: &mut App, tx_id: &str, date: Option<&str>, quarantine: boo
 /// travels only as the typed entity, never in prompt text. False when the id is not a safe
 /// entity id or the open book's ids are not known yet (a notice says so).
 pub fn pin_transaction(app: &mut App, tx_id: &str, date: Option<&str>, quarantine: bool) -> bool {
-    let context = screen::context_for(
-        if quarantine {
-            "/review"
-        } else {
-            "/transactions"
-        },
-        &format!("?tx={}", urlencode(tx_id)),
-    );
-    if context["entity_type"] != "transaction" || context["entity_id"].is_null() {
+    if screen::item_context(tx_id, quarantine).is_none() {
         return false;
     }
+    // `captureBook()`: not taken before the open book's ids are known.
+    let Some(book) = chat::book_now(app) else {
+        chat::refuse_book_loading(app, None);
+        return false;
+    };
+    app.assistant.focus = transaction_focus(tx_id, date, quarantine, book);
+    app.assistant.focus.is_some()
+}
+
+/// A transaction as the item of a turn: its typed context, its date label (the chip's words,
+/// never its id) and the book it belongs to. None for an unsafe id.
+pub fn transaction_focus(
+    tx_id: &str,
+    date: Option<&str>,
+    quarantine: bool,
+    book: chat::Book,
+) -> Option<Focus> {
+    let context = screen::item_context(tx_id, quarantine)?;
     let day = date
         .map(|d| d.chars().take(10).collect::<String>())
         .filter(|d| !d.is_empty())
@@ -957,17 +975,11 @@ pub fn pin_transaction(app: &mut App, tx_id: &str, date: Option<&str>, quarantin
     } else {
         "assistant:panel.focusTransaction"
     };
-    // `captureBook()`: not taken before the open book's ids are known.
-    let Some(book) = chat::book_now(app) else {
-        chat::refuse_book_loading(app, None);
-        return false;
-    };
-    app.assistant.focus = Some(Focus {
+    Some(Focus {
         label: crate::i18n::tr(label_key, &[("date", &day)]),
         context,
         book,
-    });
-    true
+    })
 }
 
 /// The transaction panel's "Assistant" surface: the transaction on screen becomes the pinned
@@ -992,18 +1004,6 @@ pub fn open_about_detail(app: &mut App) {
         }
     }
     panel::open_surface(app, 0);
-}
-
-fn urlencode(s: &str) -> String {
-    s.bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
-        .collect()
 }
 
 /// A page's own request to the assistant (`handOffToAssistant`: the quarantine fix, and any
