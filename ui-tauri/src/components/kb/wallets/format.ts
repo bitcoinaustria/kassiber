@@ -15,5 +15,6 @@ export const statusDotStyles: Record<ConnectionStatus, string> = {
   synced: "bg-emerald-500",
   syncing: "bg-amber-500",
   idle: "bg-muted-foreground/50",
+  behind: "bg-orange-500",
   error: "bg-red-500",
 };
