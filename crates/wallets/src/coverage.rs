@@ -1130,6 +1130,32 @@ fn stored_error_class(record: Option<&Json>) -> &'static str {
     })
 }
 
+/// A sync count: an integer, or (Bitpanda's `skipped`) counts per category.
+fn is_count(value: &Value) -> bool {
+    match value {
+        Value::Int(_) => true,
+        Value::Dict(items) => items.iter().all(|(_, v)| matches!(v, Value::Int(_))),
+        _ => false,
+    }
+}
+
+/// A stored count read back: an integer, or an object of integers.
+fn stored_count(value: &Json) -> Option<Value> {
+    if let Some(count) = value.as_i64() {
+        return Some(Value::from(count));
+    }
+    let items = value.as_object()?;
+    let counts = items
+        .iter()
+        .map(|(key, count)| {
+            count
+                .as_i64()
+                .map(|count| (key.as_str(), Value::from(count)))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(dict(counts))
+}
+
 /// Record the outcome of one exchange API sync on its wallet so coverage,
 /// the desktop sync card, and completeness survive a restart. Success also
 /// stores `last_synced_at`. `outcome` holds `status` (`ok`/`error`), the
@@ -1147,7 +1173,7 @@ pub fn record_exchange_sync(
         ("at", s(at)),
     ];
     for key in ["imported", "updated", "fetched", "skipped"] {
-        if let Some(value @ Value::Int(_)) = kassiber_envelope::get(outcome, key) {
+        if let Some(value) = kassiber_envelope::get(outcome, key).filter(|v| is_count(v)) {
             record.push((key, value.clone()));
         }
     }
@@ -1180,8 +1206,8 @@ pub fn exchange_sync_record(config_json: Option<&str>) -> Option<Value> {
         }
     }
     for key in ["imported", "updated", "fetched", "skipped"] {
-        if let Some(value) = stored.get(key).and_then(Json::as_i64) {
-            record.push((key, Value::from(value)));
+        if let Some(value) = stored.get(key).and_then(stored_count) {
+            record.push((key, value));
         }
     }
     if stored.get("status").and_then(Json::as_str) == Some("error") {

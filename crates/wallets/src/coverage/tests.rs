@@ -1253,3 +1253,77 @@ fn an_incomplete_sync_is_no_coverage() {
     .unwrap();
     assert_eq!(source(&conn, "sp", None).freshness_state, "current");
 }
+
+/// Codex 4660313536: a Bitpanda sync reports `skipped` as counts per
+/// category. The stored outcome keeps that map and reads it back, so the
+/// sync cards still show the skipped-operation notice after a reload; a map
+/// holding anything but counts is not stored.
+#[test]
+fn categorized_skipped_counts_survive_the_stored_sync_outcome() {
+    let conn = book();
+    wallet(&conn, "bitpanda", "bitpanda", r#"{"backend":"bitpanda"}"#);
+    let skipped = dict([
+        ("fiat_only_operations", Value::from(2_i64)),
+        ("non_btc_operations", Value::from(3_i64)),
+        ("internal_btc_moves", Value::from(0_i64)),
+    ]);
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T12:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("imported", Value::from(1_i64)),
+            ("skipped", skipped.clone()),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    let back = kassiber_envelope::get(&record, "skipped").unwrap();
+    for (key, count) in [
+        ("fiat_only_operations", 2_i64),
+        ("non_btc_operations", 3),
+        ("internal_btc_moves", 0),
+    ] {
+        assert_eq!(
+            kassiber_envelope::get(back, key),
+            Some(&Value::from(count)),
+            "{key}"
+        );
+    }
+    // Not counts: dropped, never stored as text.
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T13:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("skipped", dict([("x", s("provider text"))])),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!stored.contains("provider text"), "{stored}");
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    assert_eq!(kassiber_envelope::get(&record, "skipped"), None);
+    // An integer count still reads back as before.
+    let plain = r#"{"exchange_sync":{"at":"2026-01-01T00:00:00Z","status":"ok","skipped":4}}"#;
+    let record = exchange_sync_record(Some(plain)).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&record, "skipped"),
+        Some(&Value::from(4_i64))
+    );
+}
