@@ -941,14 +941,30 @@ fn csv_records(text: &str) -> Result<Vec<Vec<String>>> {
     let mut chars = text.trim_start_matches('\u{feff}').chars().peekable();
     let mut quoted = false;
     let mut started = false;
+    // Set when a quoted field closed: only a separator, a line break or the
+    // end may follow, so `"0"5` can't become the amount `05`.
+    let mut closed = false;
     while let Some(c) = chars.next() {
+        if closed && !matches!(c, ',' | '\n' | '\r') {
+            return Err(AppError::new(
+                "validation",
+                format!(
+                    "Row {}: text follows a closing quote; quote the whole field",
+                    records.len() + 1
+                ),
+            ));
+        }
+        closed = false;
         if quoted {
             match c {
                 '"' if chars.peek() == Some(&'"') => {
                     chars.next();
                     field.push('"');
                 }
-                '"' => quoted = false,
+                '"' => {
+                    quoted = false;
+                    closed = true;
+                }
                 other => field.push(other),
             }
             continue;

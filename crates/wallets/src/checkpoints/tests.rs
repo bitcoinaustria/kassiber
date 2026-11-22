@@ -382,6 +382,30 @@ fn csv_rows_must_have_the_header_s_column_count() {
     );
 }
 
+/// Text after a closing quote must not join the quoted value: `"0"5` would
+/// otherwise import as 5 BTC. The whole file is refused instead.
+#[test]
+fn csv_refuses_text_after_a_closing_quote() {
+    let conn = book();
+    for bad in [
+        "date,wallet,btc_amount\n2025-03-01,Exchange,\"0\"5\n",
+        "date,wallet,btc_amount\n2025-03-01,\"Exchange\"x,1\n",
+        "date,wallet,btc_amount\n2025-03-01,Exchange,\"1\" \n",
+    ] {
+        let error = import_csv(&conn, "p", bad, "bad.csv").unwrap_err();
+        assert_eq!(error.code, "validation", "{bad:?}");
+        assert!(error.message.starts_with("Row 2:"), "{}", error.message);
+        assert!(stored(&conn, "p", None).unwrap().is_empty());
+    }
+    // Escaped quotes, quoted separators and line breaks stay valid.
+    let fine =
+        "date,wallet,btc_amount,note\r\n2025-03-01,\"Exchange\",\"1\",\"a \"\"b\"\", c\nd\"\r\n";
+    assert_eq!(
+        get(&import_csv(&conn, "p", fine, "ok.csv").unwrap(), "created"),
+        Some(&Value::from(1))
+    );
+}
+
 #[test]
 fn node_checkpoints_read_the_last_successful_sync_only() {
     let conn = book();
