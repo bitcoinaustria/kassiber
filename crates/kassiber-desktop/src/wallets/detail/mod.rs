@@ -344,8 +344,15 @@ pub fn sync_running(app: &App) -> bool {
         || crate::wallets::add::exchange::sync_pending(app)
 }
 
-/// The page's Refresh, for the Coverage card's Sync now (network egress, only from a press).
+/// The Coverage card's Sync now (network egress, only from a press): an exchange wallet syncs
+/// through its exchange request, as its sync card does (Codex 4660315085); every other
+/// live source through the page's Refresh.
 pub fn sync_now(app: &mut App) {
+    let shown = crate::wallets::conn::find(app, &app.wallets.detail.wallet);
+    if let Some(c) = shown.filter(|c| exchange_kind(app, c).is_some()) {
+        crate::wallets::add::exchange::sync_wallet(app, &c);
+        return;
+    }
     actions::sync(app, false);
 }
 
@@ -1006,6 +1013,32 @@ pub fn forget_pending_copy() {
 #[cfg(test)]
 mod transient_tests {
     use super::*;
+
+    /// Codex 4660315085: Sync now on an exchange wallet's Coverage card sends its exchange
+    /// sync; the page's Refresh would return without a request for an exchange wallet.
+    #[test]
+    fn coverage_sync_now_syncs_an_exchange_wallet_from_its_exchange() {
+        let mut app = crate::app::tests::quiet_app();
+        let snapshot = crate::app::Reply {
+            kind: "ui.overview.snapshot".into(),
+            data: serde_json::json!({"connections": [{"id": "x", "label": "Kraken", "kind": "kraken"}]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reads.insert("ui.overview.snapshot".into(), snapshot);
+        app.wallets.detail.wallet = "x".into();
+        app.wallets.detail.wallets = Read::Ready(vec![
+            serde_json::json!({"id": "x", "label": "Kraken", "kind": "kraken"}),
+        ]);
+        sync_now(&mut app);
+        let ex = &app.wallets.add.exchange;
+        assert!(
+            ex.syncs.iter().any(|(w, _, _)| w == "x"),
+            "the exchange sync was sent"
+        );
+        assert!(!app.wallets.detail.syncing, "not the generic wallet sync");
+    }
 
     /// A book refresh re-reads the open wallet once and starts no refresh of its own (which
     /// would bump the generation again and loop).
