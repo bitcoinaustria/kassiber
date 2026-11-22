@@ -932,7 +932,10 @@ pub fn ask_about(app: &mut App, tx_id: &str, date: Option<&str>, quarantine: boo
         return;
     }
     let day = date
-        .map(|d| d.chars().take(10).collect::<String>())
+        .map(|d| match crate::format::is_unknown_time(d) {
+            true => crate::format::tx_date(d, false),
+            false => d.chars().take(10).collect::<String>(),
+        })
         .filter(|d| !d.is_empty())
         .unwrap_or_else(|| "—".into());
     let (label_key, prompt_key) = if quarantine {

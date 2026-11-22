@@ -155,7 +155,8 @@ fn tx_time_ms(tx: &Tx) -> Option<f64> {
         .as_deref()
         .filter(|s| !s.is_empty())
         .unwrap_or(&tx.date);
-    if raw.is_empty() {
+    // The backend's placeholder for an unconfirmed or untimed transaction is no time to plot.
+    if raw.is_empty() || format::is_unknown_time(raw) {
         return None;
     }
     format::parse_ts(raw).map(|s| s * 1000.0)
@@ -1253,6 +1254,21 @@ mod tests {
             },
         );
         assert_eq!((g.carry, g.first == g.end, g.more), (Some(99), true, true));
+    }
+
+    #[test]
+    fn an_unconfirmed_transaction_gets_no_1970_event() {
+        let s: Snapshot = serde_json::from_value(serde_json::json!({
+            "activityTxs": [
+                {"id": "u", "date": "1970-01-01 00:00", "occurredAt": "1970-01-01T00:00:00Z",
+                 "type": "Withdrawal", "amountSat": -30_000_000.0, "conf": 0},
+                {"id": "c", "date": "2026-09-15 12:20", "occurredAt": "2026-09-15T12:20:00Z",
+                 "type": "Withdrawal", "amountSat": -1_000_000.0, "conf": 1},
+            ],
+        }))
+        .unwrap();
+        let ids: Vec<String> = events(&s).into_iter().map(|e| e.tx_id).collect();
+        assert_eq!(ids, vec!["c".to_owned()]);
     }
 
     #[test]

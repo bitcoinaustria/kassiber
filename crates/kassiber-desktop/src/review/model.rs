@@ -781,9 +781,20 @@ pub fn action_label(a: &Action) -> String {
     t(&format!("journals:quarantine.cta.{k}"))
 }
 
+/// A case's day, or "Unconfirmed"/"Unknown" for the backend's placeholder time (by the row's
+/// `confirmed_at`, when it carries one).
+fn day_label(occurred_at: &str, row: &Value) -> String {
+    if crate::format::is_unknown_time(occurred_at) {
+        let confirmed = !s(row, "confirmed_at").trim().is_empty();
+        crate::format::tx_date(occurred_at, confirmed)
+    } else {
+        occurred_at.chars().take(10).collect()
+    }
+}
+
 /// `quarantineRootLabel`.
 pub fn root_label(root: &Value) -> String {
-    let date: String = s(root, "occurred_at").chars().take(10).collect();
+    let date = day_label(&s(root, "occurred_at"), root);
     [date, s(root, "wallet")]
         .into_iter()
         .filter(|x| !x.is_empty())
@@ -804,15 +815,11 @@ pub fn row_meta(i: &Item) -> String {
     } else {
         id.clone()
     };
-    [
-        i.occurred_at.chars().take(10).collect::<String>(),
-        i.wallet.clone(),
-        short,
-    ]
-    .into_iter()
-    .filter(|x| !x.is_empty())
-    .collect::<Vec<_>>()
-    .join(" · ")
+    [day_label(&i.occurred_at, &i.v), i.wallet.clone(), short]
+        .into_iter()
+        .filter(|x| !x.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// `quarantineRowAmount`: signed sats for bitcoin, units otherwise.
