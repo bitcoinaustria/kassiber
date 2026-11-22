@@ -33,6 +33,9 @@ pub struct State {
     /// Check file contents: in flight, and its answer (`same` | `different` | `unknown`).
     pub checking: bool,
     pub file_check: Option<String>,
+    /// The wallet the check in flight was asked for: an answer for another wallet (the page
+    /// moved on meanwhile) is dropped.
+    pub check_wallet: Option<String>,
     /// Import newer export was pressed: the coverage then and the import count then; the next
     /// read after a successful import says what it added.
     pub before: Option<(Value, u64)>,
@@ -284,6 +287,7 @@ fn check_file(a: &mut App) {
     }
     a.wallets.sources.checking = true;
     a.wallets.sources.file_check = None;
+    a.wallets.sources.check_wallet = Some(wallet.clone());
     a.send(
         "ui.sources.coverage",
         json!({"wallet": wallet, "check_file": true}),
@@ -386,6 +390,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "wallets.sources.check" => {
             let st = &mut app.wallets.sources;
+            let answered = r.data["sources"][0]["wallet_id"].as_str();
+            if st.check_wallet.as_deref() != Some(st.wallet.as_str())
+                || answered.is_some_and(|w| w != st.wallet)
+            {
+                return;
+            }
+            st.check_wallet = None;
             st.checking = false;
             st.file_check = Some(
                 r.error
@@ -949,6 +960,33 @@ pub fn scene_sample(a: &mut App, attest: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Codex 4660315088: a content check started on wallet A that answers after the page moved
+    /// to wallet B is not shown on B's card; B's own check is.
+    #[test]
+    fn a_file_check_answer_stays_with_its_wallet() {
+        let mut app = crate::app::tests::quiet_app();
+        read(&mut app, "a");
+        check_file(&mut app);
+        assert!(app.wallets.sources.checking);
+        read(&mut app, "b");
+        let answer = |wallet: &str, check: &str| Reply {
+            kind: "ui.sources.coverage".into(),
+            data: json!({"sources": [{"wallet_id": wallet, "file": {"source_file_check": check}}]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        on_reply(&mut app, "wallets.sources.check", &answer("a", "same"));
+        assert_eq!(
+            app.wallets.sources.file_check, None,
+            "A's answer is not B's"
+        );
+        check_file(&mut app);
+        on_reply(&mut app, "wallets.sources.check", &answer("b", "different"));
+        assert_eq!(app.wallets.sources.file_check.as_deref(), Some("different"));
+        assert!(!app.wallets.sources.checking);
+    }
 
     fn cov(v: Value) -> Value {
         let mut base = json!({
