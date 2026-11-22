@@ -262,10 +262,20 @@ pub fn desktop_undo(c: &ToolCall) -> Option<(&'static str, Value)> {
 }
 
 /// The request Undo sends: the hinted kind and arguments, bound to the open book. `None` while
-/// the open book's ids are unknown (an unbound write is never sent).
+/// the open book's ids are unknown (an unbound write is never sent), and when the conversation
+/// belongs to another book than the open one: a change made in one book is never undone in
+/// another, even in the frame before a book switch resets the conversation.
 pub fn undo_request(app: &App, c: &ToolCall) -> Option<(&'static str, Value)> {
     let (kind, args) = desktop_undo(c)?;
     let book = book_now(app)?;
+    if app
+        .assistant
+        .book
+        .as_ref()
+        .is_some_and(|bound| *bound != book)
+    {
+        return None;
+    }
     let scope = crate::assistant::chat::scope_json(&book);
     Some((kind, crate::app::scope_args(kind, args, &scope)))
 }
@@ -1009,6 +1019,11 @@ mod tests {
             args,
             json!({"pair_id": "pair-9", "expected_scope": {"workspace_id": "w", "profile_id": "p"}})
         );
+        // A conversation from another book never undoes into the open one.
+        app.assistant.book = Some(("w".into(), "other".into()));
+        assert!(undo_request(&app, &call).is_none());
+        app.assistant.book = Some(("w".into(), "p".into()));
+        assert!(undo_request(&app, &call).is_some());
         let mut m =
             crate::assistant::model::Msg::new("a1", crate::assistant::model::Role::Assistant, "");
         m.tool_calls = vec![call];
