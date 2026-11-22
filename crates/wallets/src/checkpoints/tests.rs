@@ -359,14 +359,38 @@ fn csv_round_trips_and_refuses_a_bad_row_as_a_whole() {
     );
 }
 
+/// A row with more or fewer fields than the header (an unquoted decimal
+/// comma splits `0,5` into two) refuses the whole file instead of reading
+/// the first part as the amount.
+#[test]
+fn csv_rows_must_have_the_header_s_column_count() {
+    let conn = book();
+    for bad in [
+        "date,wallet,btc_amount\n2025-03-01,Exchange,1\n2025-03-01,Exchange,0,5\n",
+        "date,wallet,btc_amount,note\n2025-03-01,Exchange,1,ok\n2025-03-02,Exchange,1\n",
+    ] {
+        let error = import_csv(&conn, "p", bad, "bad.csv").unwrap_err();
+        assert_eq!(error.code, "validation");
+        assert!(error.message.starts_with("Row 3:"), "{}", error.message);
+        assert!(stored(&conn, "p", None).unwrap().is_empty());
+    }
+    // Blank lines stay skipped.
+    let fine = "date,wallet,btc_amount\n2025-03-01,Exchange,1\n\n";
+    assert_eq!(
+        get(&import_csv(&conn, "p", fine, "ok.csv").unwrap(), "created"),
+        Some(&Value::from(1))
+    );
+}
+
 #[test]
 fn node_checkpoints_read_the_last_successful_sync_only() {
     let conn = book();
     assert_eq!(node_checkpoint(&conn, "p", "n").unwrap(), None);
     conn.execute_batch(
         "INSERT INTO lightning_node_syncs(id,workspace_id,profile_id,wallet_id,backend_name,started_at,completed_at,status,created_at) VALUES
-           ('s1','ws','p','n','cln','2025-01-01T00:00:00Z','2025-01-01T00:01:00Z','ok','x'),
-           ('s2','ws','p','n','cln','2025-02-01T00:00:00Z','2025-02-01T00:01:00Z','error','x');
+           ('s1','ws','p','n','cln','2025-01-01T00:00:00Z','2025-01-01T00:01:00Z','synced','x'),
+           ('s2','ws','p','n','cln','2025-02-01T00:00:00Z','2025-02-01T00:01:00Z','error','x'),
+           ('s3','ws','p','n','cln','2025-03-01T00:00:00Z','2025-03-01T00:01:00Z','partial','x');
          INSERT INTO lightning_node_records(id,workspace_id,profile_id,wallet_id,backend_name,record_type,external_id,occurred_at,amount_msat,sync_id,first_seen_at,updated_at) VALUES
            ('r1','ws','p','n','cln','balance_snapshot','wallet','2025-01-01T00:00:00Z',1000,'s1','x','x'),
            ('r2','ws','p','n','cln','balance_snapshot','chan','2025-01-01T00:00:00Z',234,'s1','x','x'),
@@ -438,6 +462,54 @@ fn reports_show_the_latest_per_origin_and_the_worst_state() {
             .code,
         "not_found"
     );
+}
+
+/// Two balances for one wallet, origin, asset and time recorded within the
+/// same second: the later-recorded one is the latest, whatever the random ids.
+#[test]
+fn a_tie_on_time_and_creation_reports_the_later_recorded_balance() {
+    let conn = book();
+    movement(&conn, "a", "2025-01-01T00:00:00Z", 100);
+    processed(&conn);
+    for msat in [90, 100] {
+        record(
+            &conn,
+            "p",
+            &New {
+                wallet_id: "w".into(),
+                asset: "BTC".into(),
+                as_of: "2025-01-02T00:00:00Z".into(),
+                amount_msat: msat,
+                origin: "manual",
+                scope: None,
+                origin_ref: None,
+                attachment_id: None,
+                note: None,
+            },
+        )
+        .unwrap();
+    }
+    // Same creation second, and ids that sort the older row last.
+    conn.execute_batch(
+        "UPDATE balance_checkpoints SET created_at='2025-06-01T00:00:00Z';
+         UPDATE balance_checkpoints SET id='zz-older' WHERE amount_msat=90;
+         UPDATE balance_checkpoints SET id='aa-newer' WHERE amount_msat=100;",
+    )
+    .unwrap();
+    let latest = report(&conn, "p", None, vec![], false).unwrap();
+    let Some(Value::List(rows)) = get(&latest, "checkpoints") else {
+        panic!()
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(get(&rows[0], "id"), Some(&s("aa-newer")));
+    let Some(Value::List(wallets)) = get(&latest, "wallets") else {
+        panic!()
+    };
+    assert_eq!(get(&wallets[0], "status"), Some(&s("matches")));
+    // History lists both, oldest recorded first.
+    let history = super::stored(&conn, "p", None).unwrap();
+    let ids: Vec<_> = history.iter().filter_map(|c| c.id.as_deref()).collect();
+    assert_eq!(ids, ["zz-older", "aa-newer"]);
 }
 
 /// A date covers its whole UTC day: every instant before the next midnight,
