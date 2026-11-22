@@ -1,17 +1,3 @@
-//! A bounded model check of reply delivery: every interleaving of sends, dropped tickets, book
-//! resets and out-of-order answers, up to [`DEPTH`] steps and [`REQUESTS`] requests, runs against
-//! the real `App` and must keep these properties:
-//!
-//! 1. An answer whose ticket was dropped reaches nobody (dffe84718: an export started before the
-//!    dialog closed answered the reopened dialog, and consent given for one book exported
-//!    another).
-//! 2. A book reset drops the answers of the book's requests still in flight; only callers whose
-//!    state survives a reset (`kept_tag`) still hear theirs.
-//! 3. Answers with one tag reach the modules in the order the requests were sent, however the
-//!    daemon orders them.
-//! 4. No answer is delivered twice, and once every request is answered, every one still wanted
-//!    has been delivered.
-
 use std::collections::{BTreeSet, HashMap};
 
 use super::tests::{answer, inject_ticket, quiet_app};
@@ -19,12 +5,12 @@ use super::{App, Ticket};
 
 const DEPTH: usize = 8;
 const REQUESTS: usize = 3;
-/// A tag whose requests a book reset orphans, and one it keeps.
-const TAGS: [&str; 2] = ["model.book", "reports.diag.model"];
+const BOOK_TAG: &str = "model.book";
+const KEPT_TAG: &str = "reports.diag.model";
 
 #[derive(Clone, Copy, Debug)]
 enum Step {
-    Send(usize),
+    Send(&'static str),
     Drop(usize),
     Answer(usize),
     Reset,
@@ -34,10 +20,9 @@ struct Run {
     app: App,
     tickets: Vec<Option<Ticket>>,
     ids: Vec<String>,
-    tags: Vec<usize>,
+    tags: Vec<&'static str>,
     answered: Vec<bool>,
     dropped_at: HashMap<usize, usize>,
-    /// Per reset, the book-tag requests it found undelivered.
     orphaned: BTreeSet<usize>,
     delivered: Vec<usize>,
 }
@@ -60,7 +45,7 @@ impl Run {
         match step {
             Step::Send(tag) => {
                 let kind = format!("model.{}", self.ids.len());
-                let (id, ticket) = inject_ticket(&mut self.app, &kind, TAGS[tag]);
+                let (id, ticket) = inject_ticket(&mut self.app, &kind, tag);
                 self.ids.push(id);
                 self.tickets.push(Some(ticket));
                 self.tags.push(tag);
@@ -81,7 +66,7 @@ impl Run {
             }
             Step::Reset => {
                 for i in 0..self.ids.len() {
-                    if TAGS[self.tags[i]] == "model.book" && !self.delivered.contains(&i) {
+                    if self.tags[i] == BOOK_TAG && !self.delivered.contains(&i) {
                         self.orphaned.insert(i);
                     }
                 }
@@ -131,13 +116,12 @@ impl Run {
     }
 }
 
-/// Steps enabled after `prefix`, without running it: up to [`REQUESTS`] sends, one reset.
 fn enabled(prefix: &[Step]) -> Vec<Step> {
     let sent = prefix.iter().filter(|s| matches!(s, Step::Send(_))).count();
     let done = |f: &dyn Fn(&Step) -> bool| prefix.iter().any(f);
     let mut steps = Vec::new();
     if sent < REQUESTS {
-        steps.extend((0..TAGS.len()).map(Step::Send));
+        steps.extend([BOOK_TAG, KEPT_TAG].map(Step::Send));
     }
     for i in 0..sent {
         if !done(&|s| matches!(s, Step::Drop(d) if *d == i)) {
@@ -153,31 +137,46 @@ fn enabled(prefix: &[Step]) -> Vec<Step> {
     steps
 }
 
-/// Runs every maximal step sequence up to `DEPTH` against a fresh `App`, checking the
-/// properties after each step (so every prefix is checked too); the first violation is returned
-/// with its trace.
 fn explore() -> Result<usize, String> {
-    fn walk(prefix: &mut Vec<Step>, runs: &mut usize) -> Result<(), String> {
+    struct Search {
+        runs: usize,
+        shortest: Option<(usize, String)>,
+    }
+    fn walk(prefix: &mut Vec<Step>, search: &mut Search) {
         let next = enabled(prefix);
         if prefix.len() == DEPTH || next.is_empty() {
-            *runs += 1;
+            search.runs += 1;
             let mut run = Run::new();
             for (at, &step) in prefix.iter().enumerate() {
-                run.apply(step, at)
-                    .map_err(|e| format!("{e}\n  after {:?}", &prefix[..=at]))?;
+                if let Err(e) = run.apply(step, at) {
+                    if search
+                        .shortest
+                        .as_ref()
+                        .is_none_or(|(len, _)| at + 1 < *len)
+                    {
+                        search.shortest =
+                            Some((at + 1, format!("{e}\n  after {:?}", &prefix[..=at])));
+                    }
+                    return;
+                }
             }
-            return Ok(());
+            return;
         }
         for step in next {
             prefix.push(step);
-            walk(prefix, runs)?;
+            walk(prefix, search);
             prefix.pop();
         }
-        Ok(())
     }
-    let mut runs = 0;
-    walk(&mut Vec::new(), &mut runs)?;
-    Ok(runs)
+    let mut search = Search {
+        runs: 0,
+        shortest: None,
+    };
+    walk(&mut Vec::new(), &mut search);
+    match search.shortest {
+        Some((_, violation)) => Err(violation),
+        None => Ok(search.runs),
+    }
 }
 
 #[test]

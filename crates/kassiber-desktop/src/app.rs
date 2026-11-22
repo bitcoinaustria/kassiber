@@ -3,8 +3,7 @@
 //!
 //! Requests are tagged with a `&'static str` naming who asked (`"app.overview"`, `"shell.books"`,
 //! `"chart.resolve"` …). A reply is stored under its kind in `reads` and handed to every
-//! module's `on_reply`; a module only acts on its own tags. A request sent with
-//! [`App::send_ticket`] is delivered only while its [`Ticket`] lives.
+//! module's `on_reply`; a module only acts on its own tags.
 //!
 //! The plumbing follows the Tauri shell's `daemon_invoke` and the web's daemon client:
 //! - every kind passes the allowlist and the AI kill switch first (`crate::kinds`); a refusal,
@@ -138,17 +137,15 @@ pub struct Toast {
 /// A caller's claim on the answer to one request ([`App::send_ticket`]).
 ///
 /// The answer reaches the modules only while the caller still holds the ticket (or a clone).
-/// State that is reset, closed, reopened or re-sent drops its ticket with it, so an answer to
-/// an earlier dialog, entity or book can never land in what replaced it.
 #[derive(Clone, Debug)]
 pub struct Ticket(Arc<()>);
 
 impl Ticket {
     /// Whether the answer `on_reply` is handling now is this ticket's.
     pub fn answers(&self, app: &App) -> bool {
-        app.delivering_owner
+        app.delivering_ticket
             .as_ref()
-            .is_some_and(|owner| std::ptr::eq(owner.as_ptr(), Arc::as_ptr(&self.0)))
+            .is_some_and(|ticket| std::ptr::eq(ticket.as_ptr(), Arc::as_ptr(&self.0)))
     }
 }
 
@@ -290,10 +287,8 @@ pub struct App {
     /// order they asked.
     parked: HashMap<String, (u64, Value)>,
     next_seq: u64,
-    /// The ticket of the answer being delivered ([`Ticket::answers`]).
-    delivering_owner: Option<Weak<()>>,
-    /// Requests sent with a ticket: request_id → its ticket, dead once the caller dropped it.
-    owners: HashMap<String, Weak<()>>,
+    delivering_ticket: Option<Weak<()>>,
+    tickets: HashMap<String, Weak<()>>,
     /// While true, error toasts are not shown: the answer is a refusal the app handles itself
     /// (a request refused behind the lock, a write refused because the open book changed).
     quiet_errors: bool,
@@ -556,8 +551,8 @@ impl App {
             orphaned: HashMap::new(),
             parked: HashMap::new(),
             next_seq: 0,
-            delivering_owner: None,
-            owners: HashMap::new(),
+            delivering_ticket: None,
+            tickets: HashMap::new(),
             quiet_errors: false,
             root_switch: None,
             local: VecDeque::new(),
@@ -813,7 +808,7 @@ impl App {
             .send(kind, args, tag)
             .expect("send answers every request");
         let ticket = Ticket(Arc::new(()));
-        self.owners.insert(id, Arc::downgrade(&ticket.0));
+        self.tickets.insert(id, Arc::downgrade(&ticket.0));
         ticket
     }
 
@@ -875,7 +870,7 @@ impl App {
             if let Err(panic) =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.handle(pgen, m)))
             {
-                self.delivering_owner = None;
+                self.delivering_ticket = None;
                 self.quiet_errors = false;
                 // Ahead of anything queued since: the order the records came in is kept.
                 for item in msgs.into_iter().rev() {
@@ -1098,8 +1093,8 @@ impl App {
         self.busy.reads = self.busy.reads.saturating_sub(1);
         let id = self.daemon.alloc_id();
         self.register(&id, kind, tag, &args);
-        if let Some(owner) = self.owners.remove(old) {
-            self.owners.insert(id.clone(), owner);
+        if let Some(ticket) = self.tickets.remove(old) {
+            self.tickets.insert(id.clone(), ticket);
         }
         if let Some(m) = self.meta.get_mut(&id) {
             m.seq = meta.seq;
@@ -1112,19 +1107,17 @@ impl App {
         true
     }
 
-    /// Hands a finished reply to the app and every module, naming its ticket; an answer whose
-    /// ticket was dropped reaches nobody.
     fn deliver_as(&mut self, tag: &'static str, id: &str, reply: Reply) {
-        let owner = self.owners.remove(id);
-        if owner
+        let ticket = self.tickets.remove(id);
+        if ticket
             .as_ref()
-            .is_some_and(|owner| owner.strong_count() == 0)
+            .is_some_and(|ticket| ticket.strong_count() == 0)
         {
             return;
         }
-        let before = std::mem::replace(&mut self.delivering_owner, owner);
+        let before = std::mem::replace(&mut self.delivering_ticket, ticket);
         self.deliver(tag, reply);
-        self.delivering_owner = before;
+        self.delivering_ticket = before;
     }
 
     /// Hands a finished reply to the app and every module.
@@ -1349,7 +1342,7 @@ impl App {
             self.parked.remove(&id);
             self.orphaned.insert(id, (kind, pgen));
         }
-        self.owners.retain(|id, _| self.pending.contains_key(id));
+        self.tickets.retain(|id, _| self.pending.contains_key(id));
         self.cycle = BookRefresh::default();
         self.last_change = None;
         self.reads.clear();
@@ -2080,11 +2073,10 @@ pub(crate) mod tests {
         id
     }
 
-    /// A request as `send_ticket` registers it, without writing it anywhere.
     pub(crate) fn inject_ticket(app: &mut App, kind: &str, tag: &'static str) -> (String, Ticket) {
         let id = inject(app, kind, tag);
         let ticket = Ticket(Arc::new(()));
-        app.owners.insert(id.clone(), Arc::downgrade(&ticket.0));
+        app.tickets.insert(id.clone(), Arc::downgrade(&ticket.0));
         (id, ticket)
     }
 

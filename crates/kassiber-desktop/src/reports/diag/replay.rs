@@ -27,9 +27,7 @@ pub struct State {
     pub passphrase: TextEdit,
     pub confirmation: TextEdit,
     pub pending: bool,
-    /// The export this dialog waits for; closing, reopening or a book reset drops it, so an
-    /// earlier export's answer reaches nobody.
-    pub request: Option<crate::app::Ticket>,
+    pub export: Option<crate::app::Ticket>,
     /// The saved bundle's path, as the daemon reports it.
     pub saved: Option<String>,
     pub error: Option<String>,
@@ -83,7 +81,7 @@ fn submit(a: &mut App) {
     let s = st(a);
     s.error = None;
     s.pending = true;
-    st(a).request = Some(a.send_ticket(KIND, args, TAG));
+    st(a).export = Some(a.send_ticket(KIND, args, TAG));
 }
 
 pub fn on_reply(a: &mut App, tag: &str, r: &Reply) {
@@ -94,14 +92,14 @@ pub fn on_reply(a: &mut App, tag: &str, r: &Reply) {
         .reports
         .diag
         .replay
-        .request
+        .export
         .as_ref()
         .is_some_and(|t| t.answers(a))
     {
         return;
     }
     let s = st(a);
-    s.request = None;
+    s.export = None;
     s.pending = false;
     s.passphrase = TextEdit::new("");
     s.confirmation = TextEdit::new("");
@@ -422,7 +420,7 @@ mod tests {
         let mut app = crate::app::tests::quiet_app();
         open(&mut app);
         let (earlier, ticket) = crate::app::tests::inject_ticket(&mut app, KIND, TAG);
-        st(&mut app).request = Some(ticket);
+        st(&mut app).export = Some(ticket);
         st(&mut app).pending = true;
         close(&mut app);
         open(&mut app);
@@ -441,7 +439,7 @@ mod tests {
         );
         // The dialog's own request lands.
         let (current, ticket) = crate::app::tests::inject_ticket(&mut app, KIND, TAG);
-        st(&mut app).request = Some(ticket);
+        st(&mut app).export = Some(ticket);
         st(&mut app).pending = true;
         crate::app::tests::answer(
             &mut app,
@@ -452,7 +450,7 @@ mod tests {
         app.pump();
         let s = &app.reports.diag.replay;
         assert_eq!(s.saved.as_deref(), Some("/new.kassiber-replay"));
-        assert!(!s.pending && s.request.is_none() && s.passphrase.text.is_empty());
+        assert!(!s.pending && s.export.is_none() && s.passphrase.text.is_empty());
     }
 
     /// Consent belongs to the book it was given for: leaving Logs or switching books forgets
