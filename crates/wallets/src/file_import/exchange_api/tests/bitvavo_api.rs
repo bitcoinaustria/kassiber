@@ -208,6 +208,18 @@ fn bitvavo_refuses_btc_rows_it_cannot_book_by_name() {
     }
 }
 
+/// A fiat trade whose cash amount fits both fee readings (a fee under two
+/// cents) refuses the sync: stored unpriced, `journals process` would value
+/// it from the rates cache instead of what it cost. The CSV states the fee.
+#[test]
+fn bitvavo_api_refuses_a_fiat_trade_whose_fee_reading_is_ambiguous() {
+    let tiny = item("tiny", "buy", "2024-08-01T00:00:00Z", &[("sent", "EUR", "10.00"), ("received", "BTC", "0.0002"), ("fees", "EUR", "0.004"), ("price", "EUR", "50000")]);
+    let error = sync(with_item(tiny)).1.result.unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(error.message, "Bitvavo transaction 'tiny' (type 'buy') has a cash amount that fits its price both with and without its fee");
+    assert!(error.hint.as_deref().unwrap().contains("this wallet cannot be synced while it holds this trade. Import Bitvavo's transaction-history CSV export"), "{error:?}");
+}
+
 /// A refused key reports only Kassiber's values: the status, a documented
 /// `errorCode` and its hint, never Bitvavo's text (which echoes the key).
 #[test]

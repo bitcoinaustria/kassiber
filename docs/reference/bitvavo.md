@@ -91,8 +91,9 @@ never rounded ([units](../plan/24-crypto-assets.md#decisions)).
 Fiat trade values are checked against amount × price (one cent tolerance). The
 CSV states the quote amount after the fee. The API does not document it:
 the single reading that fits is used, and when both fit (a fee under two
-cents) the trade imports unpriced ("fee treatment unclear"), so `journals
-process` holds it until the user prices it. Rows are stored oldest first by
+cents) the sync refuses the trade: stored unpriced, `journals process` would
+value it from the rates cache rather than what it cost or earned. Import the
+CSV export, which states the fee, for such a wallet. Rows are stored oldest first by
 their millisecond time. A row an import adds into a second that already
 holds an order-sensitive row from an earlier import (the other direction, or
 the same direction at another unit cost or fee per unit) is tagged
