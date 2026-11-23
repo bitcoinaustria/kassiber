@@ -195,7 +195,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 (unchanged)
 # grant read, access restricted
@@ -379,7 +379,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 (unchanged)
 # grant operator, access full
@@ -645,7 +645,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 - (116 tables, 105 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -899,7 +899,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 - (116 tables, 105 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1224,7 +1224,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 - (116 tables, 105 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1523,7 +1523,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"invalid","result":{"content":[{"type":"text","text":"validation: AI tool ar… [434 bytes fnv128 b72bb2efeead7fb4afb2c04c67ad02bd]
 < {"jsonrpc":"2.0","id":"bounds","result":{"content":[{"type":"text","text":"validation: AI tool arg… [431 bytes fnv128 c25ef5976e3635e57131d1433531df91]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
-< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"0.22.78"}}}}
+< {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
 - (116 tables, 105 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
