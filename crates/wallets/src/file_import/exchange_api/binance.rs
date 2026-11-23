@@ -28,10 +28,11 @@ fn wait(pace: Duration) {
     std::thread::sleep(pace);
 }
 
-/// Tests keep a virtual clock: each wait advances it, and every read is
-/// logged with the time it would start, so pacing is checked without sleeping.
 #[cfg(test)]
 thread_local! {
+    /// Tests keep a virtual clock: each wait advances it, and every read is
+    /// logged with the time it would start, so pacing is checked without
+    /// sleeping.
     pub(super) static PACED: std::cell::RefCell<(Duration, Vec<(String, Duration)>)> =
         const { std::cell::RefCell::new((Duration::ZERO, Vec::new())) };
 }
