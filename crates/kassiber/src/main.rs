@@ -15,12 +15,15 @@ use kassiber_runtime::store::BookStore;
 use kassiber_runtime::BuildInfo;
 mod broker;
 mod real_store;
+mod version;
 
-const BUILD: BuildInfo = BuildInfo {
-    version: env!("CARGO_PKG_VERSION"),
-    channel: option_env!("KASSIBER_BUILD_CHANNEL"),
-    commit: option_env!("KASSIBER_BUILD_COMMIT"),
-};
+fn build() -> BuildInfo {
+    BuildInfo {
+        version: version::current(),
+        channel: option_env!("KASSIBER_BUILD_CHANNEL"),
+        commit: option_env!("KASSIBER_BUILD_COMMIT"),
+    }
+}
 
 /// Production always uses the real, fail-closed storage adapter.
 #[cfg(not(feature = "test-harness"))]
@@ -51,6 +54,9 @@ fn main() -> ExitCode {
     let _gate = Gate::new(|| Offline::Unavailable, Ledger::process());
     // Test builds only: a recorded session's SQLite seed (no-op otherwise).
     kassiber_store::seed_test_prng();
+    // Test builds only: a recorded session's version, refused before any
+    // work when malformed (the package version otherwise).
+    version::current();
     // BIP329 label matching reads the derived ownership index, which lives
     // above the metadata service it serves.
     kassiber_wallets::identify::register_bip329_ownership();
@@ -71,7 +77,7 @@ fn main() -> ExitCode {
         }
     }
     if argv == ["--operator-broker-server"] {
-        return ExitCode::from(u8::try_from(broker::serve(BUILD)).unwrap_or(1));
+        return ExitCode::from(u8::try_from(broker::serve(build())).unwrap_or(1));
     }
     // The AI provider broker (plan 23), which the daemon starts per CLI-provider
     // request, and the MCP server a provider CLI starts for Kassiber's tools.
@@ -93,7 +99,13 @@ fn main() -> ExitCode {
         stderr_is_tty: std::io::stderr().is_terminal(),
         stderr: Box::new(std::io::stderr()),
     };
-    let code = run(&argv, &Environment::from_process(), store(), BUILD, streams);
+    let code = run(
+        &argv,
+        &Environment::from_process(),
+        store(),
+        build(),
+        streams,
+    );
     ExitCode::from(exit_status(code))
 }
 

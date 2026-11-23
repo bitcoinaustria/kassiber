@@ -449,7 +449,7 @@ impl BookStore for RealStore {
                     &resolved,
                     operation,
                     args,
-                    env!("CARGO_PKG_VERSION"),
+                    crate::version::current(),
                 )
             } else {
                 kassiber_secrets::service::execute(&namespace()?, &resolved, operation, args)
@@ -809,7 +809,7 @@ impl BookStore for RealStore {
             lightning_gate: lightning::network_gate(),
             book: Some(book),
             data_root: root.to_owned(),
-            rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
+            rates: kassiber_rates::Providers::system(crate::version::current()),
             db_passphrase: retained_key.into_inner(),
             backends,
             backend_kinds,
@@ -1628,7 +1628,7 @@ impl Book for RealBook {
             // request, after expected_scope and database unlock checks.
             let consent =
                 kassiber_chain::probes::ProbeConsent::explicit(operation, &args, &book_id);
-            let value = kassiber_chain::probes::Probes::new(gate, env!("CARGO_PKG_VERSION")).run(
+            let value = kassiber_chain::probes::Probes::new(gate, crate::version::current()).run(
                 operation,
                 &args,
                 &book_id,
@@ -1659,7 +1659,7 @@ impl Book for RealBook {
                 &self.backends,
                 args,
                 self.lightning_gate.clone(),
-                env!("CARGO_PKG_VERSION"),
+                crate::version::current(),
             );
         }
         if kassiber_wallets::freshness::settings::KINDS.contains(&operation) {
@@ -1935,7 +1935,7 @@ impl Book for RealBook {
             Plan::new(
                 self.conn()?,
                 &request,
-                env!("CARGO_PKG_VERSION"),
+                crate::version::current(),
                 |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
             )
         };
@@ -2070,7 +2070,7 @@ impl Book for RealBook {
                 &kassiber_wallets::scan::Cancellation::default(),
                 Instant::now() + Duration::from_secs(900),
                 start_time,
-                env!("CARGO_PKG_VERSION"),
+                crate::version::current(),
                 backends,
                 |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
             )
@@ -2175,7 +2175,7 @@ impl Book for RealBook {
         let public = Public {
             network: kassiber_wallets::freshness::graph::public::Network {
                 gate: &gate,
-                version: env!("CARGO_PKG_VERSION"),
+                version: crate::version::current(),
                 scoped: mode == LookupMode::WalletBackend,
             },
             runtime: backends.graph_runtime(),
@@ -2596,7 +2596,7 @@ impl Book for RealBook {
                 command,
                 args,
                 self.lightning_gate.clone(),
-                env!("CARGO_PKG_VERSION"),
+                crate::version::current(),
             );
         }
         if kassiber_reports::export_request::handles(command) {
@@ -2920,7 +2920,7 @@ impl Book for RealBook {
             &config,
             kind,
             &gate,
-            env!("CARGO_PKG_VERSION"),
+            crate::version::current(),
             &mut |route| Some(Consent::explicit_trigger(route.request())),
             identity.as_ref(),
         )
@@ -3120,7 +3120,7 @@ impl Book for RealBook {
         kassiber_wallets::freshness::planning::Plan::new(
             self.conn()?,
             request,
-            env!("CARGO_PKG_VERSION"),
+            crate::version::current(),
             |conn, name| kassiber_wallets::sync::resolve_backend(conn, &self.backends, name),
         )
     }
@@ -3139,7 +3139,7 @@ impl Book for RealBook {
                 wallet,
                 all,
                 force_full,
-                version: env!("CARGO_PKG_VERSION"),
+                version: crate::version::current(),
             },
             |conn, name| resolve_backend(conn, &self.backends, name),
         ) {
@@ -3182,7 +3182,7 @@ impl Book for RealBook {
             cancel,
             Instant::now() + Duration::from_secs(900),
             start_time,
-            env!("CARGO_PKG_VERSION"),
+            crate::version::current(),
             backends,
             |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
             Some(&mut journal_handler),
@@ -3222,7 +3222,7 @@ impl Book for RealBook {
             &gate,
             stop,
             sources.as_mut(),
-            env!("CARGO_PKG_VERSION"),
+            crate::version::current(),
             |conn, name| kassiber_wallets::sync::resolve_backend(conn, backends, name),
         )
     }
@@ -3254,7 +3254,7 @@ impl Book for RealBook {
                 wallet,
                 all,
                 force_full,
-                version: env!("CARGO_PKG_VERSION"),
+                version: crate::version::current(),
             },
             |conn, name| resolve_backend(conn, backends, name),
         )?;
@@ -3272,7 +3272,7 @@ impl Book for RealBook {
             Some(&kassiber_wallets::sync::btcpay::Context {
                 backends,
                 gate: &gate,
-                version: env!("CARGO_PKG_VERSION"),
+                version: crate::version::current(),
                 book_id: &book_id,
                 progress: None,
             }),

@@ -163,10 +163,7 @@ mod tests {
         let mut cases: serde_json::Value =
             serde_json::from_str(include_str!("../tests/data/full_xlsx.json")).unwrap();
         normalize_numbers(&mut cases);
-        let version = include_str!("../../kassiber/Cargo.toml")
-            .lines()
-            .find_map(|line| line.strip_prefix("version = \"")?.strip_suffix('"'))
-            .expect("Kassiber package version");
+        let version = kassiber_store::version::current();
         let root = tempfile::tempdir().unwrap();
         let book = kassiber_store::Book::create(&root.path().join("data"), None).unwrap();
         let conn = book.connection();
