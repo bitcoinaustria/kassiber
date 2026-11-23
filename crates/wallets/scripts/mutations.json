@@ -4955,7 +4955,7 @@
   {
     "id": "W-ledgerlive-fee",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "    let fee = abs(number(c.get(&[\"Operation Fees\"]))?\n        .filter(truth)\n        .unwrap_or_else(zero))?;\n    let occurred",
+    "find": "    let fee = assets::stored_abs(\n        &asset,\n        number(c.get(&[\"Operation Fees\"]))?\n            .filter(truth)\n            .unwrap_or_else(zero),\n    )?;\n    let occurred",
     "replace": "    let fee = zero();\n    let occurred",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
