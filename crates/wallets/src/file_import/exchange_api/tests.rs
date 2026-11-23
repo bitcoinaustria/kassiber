@@ -1434,7 +1434,7 @@ fn same_second_tagging_uses_the_profile_time_index() {
     let plan: Vec<String> = conn
         .prepare(&format!("EXPLAIN QUERY PLAN {SAME_SECOND_SQL}"))
         .unwrap()
-        .query_map(["p", "w", "2024-01-01T00:00:00Z", "inbound"], |r| r.get(3))
+        .query_map(["p", "w", "2024-01-01T00:00:00Z"], |r| r.get(3))
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
