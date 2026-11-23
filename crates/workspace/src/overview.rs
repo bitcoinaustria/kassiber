@@ -2277,8 +2277,11 @@ fn other_assets(
     let mut observed: BTreeMap<String, AssetHolding> = BTreeMap::new();
     for row in rows(
         conn,
+        // The wallet delta of `boundary_amounts`: an outbound row whose amount
+        // includes its fee moves that amount, any other moves amount plus fee.
         "SELECT wallet_id, asset, SUM(CASE WHEN direction = 'inbound' THEN amount \
-         WHEN direction = 'outbound' THEN -amount - COALESCE(fee, 0) ELSE 0 END) AS quantity \
+         WHEN direction = 'outbound' THEN -amount - CASE WHEN COALESCE(amount_includes_fee, 0) != 0 \
+         THEN 0 ELSE COALESCE(fee, 0) END ELSE 0 END) AS quantity \
          FROM transactions WHERE profile_id = ? AND excluded = 0 GROUP BY wallet_id, asset",
         [&id],
     )? {
@@ -2290,6 +2293,17 @@ fn other_assets(
             units,
         );
     }
+    // Assets with journal-blocked activity: their booked basis does not
+    // establish the holding's basis even where the quantities happen to match.
+    let blocked: BTreeSet<String> = rows(
+        conn,
+        "SELECT DISTINCT t.asset FROM journal_quarantines q JOIN transactions t ON t.id = q.transaction_id \
+         WHERE q.profile_id = ? AND t.excluded = 0",
+        [&id],
+    )?
+    .iter()
+    .map(|row| kassiber_pytext::upper(kassiber_pytext::strip(&text(row, "asset"))))
+    .collect();
     let mut holdings: Vec<(String, AssetHolding, &'static str)> = Vec::new();
     let codes: BTreeSet<String> = canonical.keys().chain(observed.keys()).cloned().collect();
     for code in codes {
@@ -2313,7 +2327,8 @@ fn other_assets(
             let market = rate.map(|rate| btc(holding.units) * rate);
             let float = |value: Option<f64>| value.map_or(Value::Null, Value::Float);
             let basis = booked.get(&code);
-            let complete = basis.is_some_and(|basis| basis.units == holding.units);
+            let complete =
+                !blocked.contains(&code) && basis.is_some_and(|basis| basis.units == holding.units);
             let full_basis = basis.filter(|_| complete).map(|basis| basis.basis);
             dict([
                 ("asset", s(code.as_str())),
@@ -3278,6 +3293,44 @@ mod other_asset_tests {
         assert_eq!(val(sol, "quantity"), s("3"));
         assert_eq!(val(sol, "rate"), Value::Null);
         assert_eq!(val(sol, "marketValue"), Value::Null);
+    }
+
+    /// A 2 ETH deposit and a 1 ETH withdrawal whose amount already includes
+    /// its 0.01 ETH fee leave 1 ETH, not 0.99.
+    #[test]
+    fn other_asset_balances_honor_fee_inclusive_amounts() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        insert(conn, "e1", "w", "ETH", 200_000_000_000, None);
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,created_at) VALUES('e2','ws','p','w','e2','2024-06-02T00:00:00Z','outbound','ETH',100000000000,1000000000,1,'t')", []).unwrap();
+        let others = other_assets(conn, &profile(conn), "EUR", false).unwrap();
+        assert_eq!(val(&others[0], "quantity"), s("1"));
+    }
+
+    /// A priced 1 ETH buy, then an unpriced 1 ETH disposal and an unpriced
+    /// 1 ETH deposit that journals hold back: booked and canonical quantity
+    /// are both 1 ETH, yet the remaining deposit has no basis.
+    #[test]
+    fn blocked_asset_activity_keeps_the_basis_incomplete() {
+        let (_root, book) = book();
+        let conn = book.connection();
+        insert(conn, "e1", "w", "ETH", 100_000_000_000, Some(2_000.0));
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,created_at) VALUES('e2','ws','p','w','e2','2024-06-02T00:00:00Z','outbound','ETH',100000000000,'t')", []).unwrap();
+        insert(conn, "e3", "w", "ETH", 100_000_000_000, None);
+        conn.execute_batch("INSERT INTO journal_wallet_holdings(id,workspace_id,profile_id,wallet_id,asset,quantity,cost_basis,created_at) VALUES
+            ('h1','ws','p','w','ETH',100000000000,2000,'t');
+            INSERT INTO journal_quantity_balances(workspace_id,profile_id,location_kind,location_id,asset,amount_msat,created_at) VALUES
+            ('ws','p','wallet','w','ETH',100000000000,'t');
+            INSERT INTO journal_quantity_postings(posting_id,workspace_id,profile_id,transaction_id,asset,location_kind,location_id,amount_msat,state,created_at) VALUES
+            ('q1','ws','p','e1','ETH','wallet','w',100000000000,'observed','t'),
+            ('q2','ws','p','e2','ETH','wallet','w',-100000000000,'observed','t'),
+            ('q3','ws','p','e3','ETH','wallet','w',100000000000,'observed','t');
+            INSERT INTO journal_quarantines(transaction_id,workspace_id,profile_id,reason,created_at) VALUES
+            ('e2','ws','p','missing_spot_price','t'),
+            ('e3','ws','p','missing_spot_price','t');").unwrap();
+        let others = other_assets(conn, &profile(conn), "EUR", true).unwrap();
+        assert_eq!(val(&others[0], "basisComplete"), Value::Bool(false));
+        assert_eq!(val(&others[0], "unrealized"), Value::Null);
     }
 
     #[test]
