@@ -320,7 +320,8 @@ file's cell values and name. `restricted` keeps an off-device provider to the
 projected surface: those tools are denied with `agent_access_restricted`,
 chain-analysis results are projected, and an attachment is reduced to headers,
 counts and the column plan (its import plan likewise drops dates, amounts and
-the filename). Attached images and PDFs are not shown to a restricted
+the filename, and a changed-rows refusal keeps its code but not the example
+row's id and amounts). Attached images and PDFs are not shown to a restricted
 provider at all. A provider on this device (kind `local` at a
 loopback URL) always has full access.
 
