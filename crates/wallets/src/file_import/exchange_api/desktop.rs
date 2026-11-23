@@ -51,9 +51,8 @@ pub fn probe(
         secret,
         source: exchange.provider,
     };
-    let read_only = (exchange.probe)(&client)
-        // An echoed request credential (a signature, say) leaves every error.
-        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    // An echoed request credential (a signature, say) leaves every error.
+    let read_only = (exchange.probe)(&client).map_err(|error| leaving(error, &client))?;
     Ok(dict([
         ("exchange", s(kind.as_str())),
         ("ok", Py::Bool(true)),

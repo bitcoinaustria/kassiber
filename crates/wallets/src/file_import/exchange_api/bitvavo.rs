@@ -32,6 +32,11 @@ const SWAP_FEE: &str = "Kassiber places a swap's fee only where Bitvavo's transa
 /// The API does not place such a fee, and every sync reads the whole history
 /// again, so it would refuse the same trade on every run.
 const API_SWAP_FEE: &str = "Bitvavo's API does not say whether this swap's amounts include its fee, and every sync reads the whole history again, so this wallet cannot be synced while it holds this trade. Import Bitvavo's transaction-history CSV export into it instead, which states the fee, and import a newer export for later history.";
+/// A fiat trade whose cash amount fits both fee readings (a fee under two
+/// cents) has no execution value Kassiber can know. Stored unpriced,
+/// `journals process` would value it from the rates cache, so the sync
+/// refuses it, as it does an API swap with a fee.
+const API_TRADE_FEE: &str = "Bitvavo's API does not say whether this trade's cash amount includes its fee, and with a fee this small both readings fit, so Kassiber cannot know what it cost or earned; every sync reads the whole history again, so this wallet cannot be synced while it holds this trade. Import Bitvavo's transaction-history CSV export into it instead, which states the fee, and import a newer export for later history.";
 
 pub(super) static EXCHANGE: Descriptor = Descriptor {
     kind: "bitvavo",
@@ -663,15 +668,19 @@ fn trade(
         return Err(refuse(&reason, REVIEW));
     };
     let pricing = match trade_value(&leg.amount, &price.amount, &cash.amount, &fee, buy, reading)? {
-        TradeValue::Exact(value) => Some(Pricing {
+        TradeValue::Exact(value) => Pricing {
             fiat_currency: cash.asset.clone(),
             fiat_value: canonical(&value)?,
             fiat_rate: None,
             method,
             external_ref: event.id.clone(),
-        }),
-        // Unpriced: `journals process` holds it until the user prices it.
-        TradeValue::Ambiguous => None,
+        },
+        TradeValue::Ambiguous => {
+            return Err(refuse(
+                &"has a cash amount that fits its price both with and without its fee",
+                API_TRADE_FEE,
+            ))
+        }
         TradeValue::Mismatch => {
             return Err(refuse(
                 &"has a cash amount that does not match its amount, price and fee",
@@ -679,18 +688,13 @@ fn trade(
             ))
         }
     };
-    let description = match (buy, pricing.is_some()) {
-        (true, true) => "Bitvavo buy",
-        (false, true) => "Bitvavo sell",
-        (true, false) => "Bitvavo buy (fee treatment unclear; not priced)",
-        (false, false) => "Bitvavo sell (fee treatment unclear; not priced)",
-    };
+    let description = if buy { "Bitvavo buy" } else { "Bitvavo sell" };
     let kind = if buy { "buy" } else { "sell" };
     let shaped = row("", buy, leg.clone(), Decimal::zero(), kind);
     rows.insert(
         0,
         Shaped {
-            pricing,
+            pricing: Some(pricing),
             description,
             ..shaped
         },
