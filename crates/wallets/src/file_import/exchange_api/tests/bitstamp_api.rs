@@ -513,6 +513,19 @@ fn bitstamp_csv_crypto_scope_places_third_asset_and_swap_fees() {
     assert_eq!(error.message, "Bitstamp CSV line 2 (Inter Account Transfer) does not say which way its ETH moved");
 }
 
+/// A row cut short after its amount currency is refused: its missing fee is
+/// no confirmed absence of a fee.
+#[test]
+fn bitstamp_csv_refuses_a_truncated_row() {
+    let conn = book();
+    let csv = format!("{}
+73,Main Account,Withdrawal,,2024-09-04T00:00:00Z,0.01000000,BTC
+", header());
+    let error = import_into(&conn, &csv, crate::file_import::Format::Bitstamp, "").unwrap_err();
+    assert_eq!(error.message, "Bitstamp CSV line 2 has fewer cells than the header");
+    assert_eq!(count(&conn, "SELECT count(*) FROM transactions"), 0);
+}
+
 /// What `crypto` scope cannot book exactly still refuses the sync by name.
 #[test]
 fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
