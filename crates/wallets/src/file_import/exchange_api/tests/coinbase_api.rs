@@ -909,3 +909,103 @@ fn coinbase_austrian_convert_is_a_swap_only_in_the_crypto_scope() {
     let again = sync(&conn, &fake.url).unwrap();
     assert_eq!(at(&again, "swap_pairs"), &Py::from(0));
 }
+
+/// An ETH buy paying its fee in BTC: the bitcoin scope leaves the ETH out
+/// but books the BTC fee, as the same row the crypto scope books.
+#[test]
+fn coinbase_books_a_btc_fee_of_another_assets_trade_in_both_scopes() {
+    let history = || {
+        vec![(
+            "eth",
+            vec![with(
+                tx(
+                    "e1",
+                    "buy",
+                    "2025-01-02T10:00:00Z",
+                    "1",
+                    "ETH",
+                    Some("-2000"),
+                ),
+                "buy",
+                json!({"id": "E1", "fee": money("0.0001", "BTC")}),
+            )],
+        )]
+    };
+    let accounts = || vec![account("eth", "ETH", "crypto")];
+    let mut fees = vec![];
+    for scope in ["bitcoin", "crypto"] {
+        let fake = serve_accounts(accounts(), history());
+        let conn = book(scope);
+        sync(&conn, &fake.url).unwrap();
+        let btc: Vec<Row> = rows(&conn).into_iter().filter(|r| r.1 == "BTC").collect();
+        assert_eq!(btc.len(), 1, "{scope}: {btc:?}");
+        fees.push((
+            btc,
+            count(&conn, "SELECT fee FROM transactions WHERE asset='BTC'"),
+        ));
+    }
+    assert_eq!(fees[0], fees[1]);
+    assert_eq!(fees[0].1, 10_000_000);
+}
+
+/// Two fills of one order at the same time and price pair by size, each
+/// outgoing leg with the incoming leg of its own fill.
+#[test]
+fn coinbase_pairs_fills_sharing_a_time_and_price_by_size() {
+    let at = "2025-03-01T10:00:00Z";
+    let fake = serve_accounts(
+        vec![
+            account("btc", "BTC", "crypto"),
+            account("eth", "ETH", "crypto"),
+        ],
+        vec![
+            (
+                "btc",
+                vec![
+                    fill("b-1", at, "-0.04", "BTC", "O2", "0.04"),
+                    fill("b-2", at, "-0.02", "BTC", "O2", "0.04"),
+                ],
+            ),
+            (
+                "eth",
+                vec![
+                    fill("e-1", at, "0.5", "ETH", "O2", "0.04"),
+                    fill("e-2", at, "1", "ETH", "O2", "0.04"),
+                ],
+            ),
+        ],
+    );
+    let conn = book("crypto");
+    let result = sync(&conn, &fake.url).unwrap();
+    assert_eq!(at_key(&result, "swap_pairs"), Py::from(2), "{result:?}");
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let external = |id: &str| -> String {
+        conn.query_row(
+            "SELECT external_id FROM transactions WHERE id=?",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    let mut pairs: Vec<(String, String)> = kassiber_transfers::transaction_pairs(&conn, &scope)
+        .unwrap()
+        .iter()
+        .map(|(out, into)| (external(out), external(into)))
+        .collect();
+    pairs.sort();
+    assert_eq!(
+        pairs,
+        [
+            ("coinbase:b-1", "coinbase:e-2"),
+            ("coinbase:b-2", "coinbase:e-1")
+        ]
+        .map(|(a, b)| (a.to_owned(), b.to_owned()))
+    );
+}
+
+fn at_key(value: &Py, key: &str) -> Py {
+    at(value, key).clone()
+}
