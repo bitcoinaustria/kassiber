@@ -411,3 +411,48 @@ fn lineage_rows_carry_prices_and_the_send_fee_only_when_asked() {
         "validation"
     );
 }
+
+/// A reviewed ETH -> BTC swap with both legs in the period renders as one
+/// row from its last leg (the BTC receipt), sized by that leg's own quantity
+/// and rate, never by the ETH leg's units.
+#[test]
+fn dashboard_cross_asset_swap_renders_the_shown_legs_quantity() {
+    let tmp = tempfile::tempdir().unwrap();
+    let book = Book::create(tmp.path(), None).unwrap();
+    let conn = book.connection();
+    conn.execute_batch(include_str!("data/desktop.sql"))
+        .unwrap();
+    conn.execute_batch(
+        "DELETE FROM transaction_tags; DELETE FROM journal_quarantines;
+         DELETE FROM transactions WHERE id NOT IN ('g','b');
+         UPDATE transactions SET asset='ETH',amount=100000000000,fee=0,fiat_rate=3000 WHERE id='g';
+         UPDATE transactions SET amount=5000000000,fee=0,fiat_rate=60000 WHERE id='b';
+         INSERT INTO journal_custody_economic_relations(relation_id,workspace_id,profile_id,relation_kind,source_transaction_id,target_transaction_id,source_asset,target_asset,source_amount_msat,target_amount_msat,basis_state,occurred_at,created_at) VALUES('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','w','p','conversion','g','b','ETH','BTC',100000000000,5000000000,'eligible','2025','2025');
+         UPDATE profiles SET last_processed_at='2025',last_processed_tx_count=2,journal_input_version=2,last_processed_input_version=2 WHERE id='p';
+         UPDATE profiles SET journal_semantics_version=10 WHERE id='p';",
+    )
+    .unwrap();
+    let display = |key: &str| Ok(kassiber_pytext::zone::Zone::utc(key));
+    let book_zone = |_: Option<&str>| {
+        Ok::<_, kassiber_envelope::AppError>(kassiber_pytext::zone::Zone::utc("UTC"))
+    };
+    let snapshot = desktop::dashboard(
+        conn,
+        &Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        },
+        &kassiber_envelope::dict([("period", s("all"))]),
+        &[],
+        &desktop::Zones {
+            display: &display,
+            book: &book_zone,
+        },
+    )
+    .unwrap();
+    let swaps = get(get(&snapshot, "summary").unwrap(), "swaps").unwrap();
+    assert_eq!(get(swaps, "count"), Some(&Value::Int(1.into())));
+    // 0.05 BTC at the BTC leg's 60,000, not 1 ETH's units.
+    assert_eq!(get(swaps, "btc"), Some(&Value::Float(0.05)));
+    assert_eq!(get(swaps, "eur"), Some(&Value::Float(3000.0)));
+}
