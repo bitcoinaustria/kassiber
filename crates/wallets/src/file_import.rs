@@ -2174,6 +2174,7 @@ fn bull_review_tag(
     }
     Ok(())
 }
+#[allow(clippy::too_many_arguments)]
 fn apply(
     conn: &Connection,
     request: &Request,
