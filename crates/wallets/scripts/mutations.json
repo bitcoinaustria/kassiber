@@ -4955,7 +4955,7 @@
   {
     "id": "W-ledgerlive-absolute-id-amount",
     "file": "crates/wallets/src/file_import/ledgerlive.rs",
-    "find": "let amount = abs(amount.unwrap())?;",
+    "find": "let amount = assets::stored_abs(&asset, amount.unwrap())?;",
     "replace": "let amount = amount.unwrap();",
     "expect_failing": [
       "python_ledgerlive_import_vectors"
@@ -5155,7 +5155,7 @@
   {
     "id": "W-cointracking-decimal-round",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "let amount = assets::stored_abs(&base, amount)?;",
+    "find": "let amount = abs(amount)?;",
     "replace": "let amount = amount;",
     "expect_failing": [
       "python_cointracking_import_vectors"
@@ -6235,7 +6235,7 @@
   {
     "id": "W-binance-base-absolute",
     "file": "crates/wallets/src/file_import/binance.rs",
-    "find": "let amount = abs(amount)?;",
+    "find": "let amount = assets::stored_abs(&base, amount)?;",
     "replace": "let amount = amount;",
     "expect_failing": [
       "python_binance_import_vectors"
