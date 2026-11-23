@@ -513,6 +513,19 @@ fn bitstamp_csv_crypto_scope_places_third_asset_and_swap_fees() {
     assert_eq!(error.message, "Bitstamp CSV line 2 (Inter Account Transfer) does not say which way its ETH moved");
 }
 
+/// A row cut short after its amount currency is refused: its missing fee is
+/// no confirmed absence of a fee.
+#[test]
+fn bitstamp_csv_refuses_a_truncated_row() {
+    let conn = book();
+    let csv = format!("{}
+73,Main Account,Withdrawal,,2024-09-04T00:00:00Z,0.01000000,BTC
+", header());
+    let error = import_into(&conn, &csv, crate::file_import::Format::Bitstamp, "").unwrap_err();
+    assert_eq!(error.message, "Bitstamp CSV line 2 has fewer cells than the header");
+    assert_eq!(count(&conn, "SELECT count(*) FROM transactions"), 0);
+}
+
 /// What `crypto` scope cannot book exactly still refuses the sync by name.
 #[test]
 fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
@@ -523,6 +536,8 @@ fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
         (tx(50, "0", at, &[("btc", json!("0.00010000")), ("eth", json!("1.00000000"))]), "(type 'deposit') moves BTC and ETH together"),
         (tx(50, "2", at, &[("eth", json!("1.00000000")), ("btc", json!("-0.05000000")), ("eth_btc", json!("0.05000000")), ("fee", json!("0.000000000001"))]),
             "(type 'market trade') has a BTC fee that is not a whole number of millisatoshi"),
+        (tx(50, "2", at, &[("eth", json!("1.00000000")), ("btc", json!("-0.05000000")), ("eur", json!("-10.00")), ("eth_btc", json!("0.05000000"))]),
+            "(type 'market trade') swaps BTC and ETH but also moves EUR"),
     ] {
         let run = sync_scoped(Script::with(vec![row]), "crypto");
         let error = run.result.unwrap_err();
