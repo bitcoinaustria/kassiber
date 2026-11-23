@@ -298,6 +298,19 @@ pub(crate) fn keep_command(wallet: &str) -> String {
 /// no rounded operation runs before the check, so a digit past the 11th
 /// decimal is never rounded away. Callers pass the value as parsed, not one
 /// that a rounded `abs` or sum has already shortened.
+/// The absolute value a mapper stores for `asset`. Bitcoin keeps the
+/// reference's context-rounded `abs` (its msat conversion rounds anyway);
+/// another asset keeps the provider's exact digits, so `exact_units` refuses
+/// a finer quantity instead of seeing it already rounded.
+pub(crate) fn stored_abs(asset: &str, n: PriceNumber) -> Result<PriceNumber, AppError> {
+    match n {
+        PriceNumber::Finite(v) if class(asset) != Class::Bitcoin => {
+            Ok(PriceNumber::Finite(v.copy_abs()))
+        }
+        n => super::river::abs(n),
+    }
+}
+
 pub(crate) fn exact_units(asset: &str, field: &str, amount: &Decimal) -> Result<i64, AppError> {
     let too_large = || {
         AppError::new(

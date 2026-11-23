@@ -487,3 +487,41 @@ fn inbound_fees_in_the_same_asset_leave_the_net_quantity() {
         "CoinTracking row 1 receives 1 ETH but charges a fee of 1 ETH"
     );
 }
+
+/// A fiat deposit charging a fee in another crypto asset stores a fee-only,
+/// unpriced spend of that asset: the deposited euros are not its proceeds.
+#[test]
+fn a_fiat_rows_crypto_fee_is_an_unpriced_fee_only_spend() {
+    let conn = book(Format::CoinTracking, Some("crypto"));
+    let body = format!("{CT}Deposit,1000,EUR,,,1,BNB,Binance,,,2025-02-01,d-1\n");
+    import_kind(&conn, &body, Format::CoinTracking).unwrap();
+    assert_eq!(
+        stored(&conn),
+        ["outbound BNB 0 fee=100000000000 fee  missing"]
+    );
+}
+
+/// A Bitcoin fee on another asset's fiat trade is the same row in either
+/// scope, so widening the scope adds the other asset's trade and never a
+/// second copy of the fee.
+#[test]
+fn widening_the_scope_keeps_one_bitcoin_fee_row() {
+    let conn = book(Format::CoinTracking, Some("bitcoin"));
+    let body = format!("{CT}Trade,3000,EUR,1,ETH,0.0001,BTC,Binance,,,2025-02-01,t-2\n");
+    import_kind(&conn, &body, Format::CoinTracking).unwrap();
+    let narrow = stored(&conn);
+    assert_eq!(narrow.len(), 1);
+    assert!(narrow[0].starts_with("outbound BTC 10000000 fee=0 spend"), "{narrow:?}");
+    assets::Scope::parse("crypto")
+        .unwrap()
+        .store(&conn, "p", "wallet")
+        .unwrap();
+    import_kind(&conn, &body, Format::CoinTracking).unwrap();
+    let wide = stored(&conn);
+    assert_eq!(
+        wide.iter().filter(|row| row.contains(" BTC ")).collect::<Vec<_>>(),
+        [&narrow[0]],
+        "{wide:?}"
+    );
+    assert!(wide.iter().any(|row| row.starts_with("outbound ETH 100000000000 fee=0 sell")), "{wide:?}");
+}
