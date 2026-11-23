@@ -6411,16 +6411,21 @@ fn provider_swap_with_a_leg_paired_elsewhere_is_refused_and_the_exact_pair_is_ke
         vec![(id("s-out"), id("other-in"))]
     );
 
-    // The exact pair, already authored, is kept and not authored again.
+    // The exact pair, already authored, is kept and not authored again. A
+    // month later, so these legs do not look like the stored ones above.
+    let later = |mut row: Json| {
+        row["occurred_at"] = json!("2025-05-01T10:00:00Z");
+        row
+    };
     let exact = json!([
-        leg("t-out", "outbound", "BTC", None),
-        leg("t-in", "inbound", "ETH", None),
+        later(leg("t-out", "outbound", "BTC", None)),
+        later(leg("t-in", "inbound", "ETH", None)),
     ]);
     import_kind(&conn, &exact.to_string(), Format::Json).unwrap();
     pair("t-out", "t-in");
     let swap = json!([
-        leg("t-out", "outbound", "BTC", Some("trade-2")),
-        leg("t-in", "inbound", "ETH", Some("trade-2")),
+        later(leg("t-out", "outbound", "BTC", Some("trade-2"))),
+        later(leg("t-in", "inbound", "ETH", Some("trade-2"))),
     ]);
     let again = import_kind(&conn, &swap.to_string(), Format::Json).unwrap();
     assert_eq!(
