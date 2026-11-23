@@ -1663,7 +1663,7 @@
   {
     "id": "bitvavo-api-tags-same-second",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "            tag_same_second(conn, profile, &wallet.id, &inserted, &mut ids)?;\n",
+    "find": "            tag_same_second(conn, profile, &wallet.id, &inserted, true, &mut ids)?;\n",
     "replace": "",
     "expect_failing": [
       "bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs"
@@ -2349,7 +2349,7 @@
   {
     "id": "bitfinex-funding-interest-booked",
     "file": "crates/wallets/src/file_import/exchange_api/bitfinex/mapping.rs",
-    "find": "records.push((row.at.clone(), interest(row)?));",
+    "find": "records.push(((row.at.clone(), row.ms), interest(row)?));",
     "replace": "",
     "expect_failing": [
       "bitfinex_reads_only_and_maps_every_btc_event"
