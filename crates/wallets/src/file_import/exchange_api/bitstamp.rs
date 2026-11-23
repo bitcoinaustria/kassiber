@@ -654,7 +654,18 @@ fn classify(
     let held: Vec<&Leg> = event.legs.iter().filter(|l| kept(&l.currency)).collect();
     let others: Vec<&Leg> = event.legs.iter().filter(|l| !kept(&l.currency)).collect();
     let mut rows = match (event.code, held.as_slice()) {
-        (Some(2 | 36), [first, second]) => swap(event, [first, second], fee, &refuse, &fee_in)?,
+        (Some(2 | 36), [first, second]) => {
+            // A third currency moving in the same trade is no part of a
+            // two-asset swap: refused rather than left out of its pricing.
+            if let Some(extra) = others.iter().find(|l| !l.amount.is_zero()) {
+                let reason = format!(
+                    "swaps {} and {} but also moves {}",
+                    first.currency, second.currency, extra.currency
+                );
+                return Err(refuse(reason, REVIEW));
+            }
+            swap(event, [first, second], fee, &refuse, &fee_in)?
+        }
         (_, [leg]) => vec![single(
             event, leg, &others, fee, &refuse, &fee_in, kept, keep,
         )?],

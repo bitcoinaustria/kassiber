@@ -472,6 +472,8 @@ fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
         (tx(50, "0", at, &[("btc", json!("0.00010000")), ("eth", json!("1.00000000"))]), "(type 'deposit') moves BTC and ETH together"),
         (tx(50, "2", at, &[("eth", json!("1.00000000")), ("btc", json!("-0.05000000")), ("eth_btc", json!("0.05000000")), ("fee", json!("0.000000000001"))]),
             "(type 'market trade') has a BTC fee that is not a whole number of millisatoshi"),
+        (tx(50, "2", at, &[("eth", json!("1.00000000")), ("btc", json!("-0.05000000")), ("eur", json!("-10.00")), ("eth_btc", json!("0.05000000"))]),
+            "(type 'market trade') swaps BTC and ETH but also moves EUR"),
     ] {
         let run = sync_scoped(Script::with(vec![row]), "crypto");
         let error = run.result.unwrap_err();
