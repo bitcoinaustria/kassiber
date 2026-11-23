@@ -33,7 +33,7 @@ pub fn current() -> &'static str {
     {
         use std::sync::OnceLock;
         static REPORTED: OnceLock<&'static str> = OnceLock::new();
-        *REPORTED.get_or_init(|| {
+        REPORTED.get_or_init(|| {
             let value = std::env::var(OVERRIDE).ok();
             match reported(value.as_deref()) {
                 Ok(version) => version,
