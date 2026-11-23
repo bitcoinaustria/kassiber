@@ -393,13 +393,9 @@ mod tests {
 
     #[test]
     fn a_book_missing_only_added_columns_is_refused_before_anything_is_written() {
+        let message = "this book stores NaN or infinity where Kassiber needs an exact number";
         let sql = pre_run_columns() + &wallet_config(r#"{"ownership_history": null, "fee": NaN}"#);
-        refused(
-            false,
-            &sql,
-            "non_finite_number",
-            "this book stores NaN or infinity where Kassiber needs an exact number",
-        );
+        refused(false, &sql, "non_finite_number", message);
         // Without such a value it migrates and gains the columns.
         let (_root, data, database) = book(false, &pre_run_columns());
         let conn = encryption::open_container(&database, None).unwrap();
