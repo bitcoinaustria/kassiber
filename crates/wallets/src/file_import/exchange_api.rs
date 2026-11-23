@@ -110,9 +110,8 @@ pub fn execute(
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
     let mut mapper = Mapper::new(exchange, scope, &wallet.label);
-    // Every error leaves with every credential the reads carried withheld.
-    let balance = (exchange.fetch)(&client, &mut mapper)
-        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    let balance =
+        (exchange.fetch)(&client, &mut mapper).map_err(|error| leaving(error, &client))?;
     let contract::Mapped {
         records,
         tally,
@@ -1205,6 +1204,46 @@ fn echo_refusal(provider: &str) -> AppError {
     .with_hint("The exchange echoed the key, the secret or a request signature. Revoke and replace this key, then report the response shape.")
 }
 
+/// A read's error as it may leave: every credential the reads carried is
+/// withheld from it. When a successful page echoed a request credential, an
+/// error built from that page (a mapping refusal quoting a truncated field,
+/// say) can still hold part of one, which no whole-value scrub finds: the
+/// echo refusal replaces such an error.
+fn leaving(error: AppError, client: &Client<'_>) -> AppError {
+    let credentials = client.http.display_credentials();
+    let error = scrub_error(error, &credentials);
+    if client.http.echoed() && quotes_part(&error, &credentials) {
+        return echo_refusal(client.source);
+    }
+    error
+}
+
+/// Whether `error`'s message or a detail string holds [`PART`] or more
+/// consecutive characters of one of `credentials`.
+fn quotes_part(error: &AppError, credentials: &[String]) -> bool {
+    /// A run this long of a credential counts as quoting it.
+    const PART: usize = 8;
+    fn texts(value: &Py, out: &mut Vec<String>) {
+        match value {
+            Py::Str(text) => out.push(lossy(text)),
+            Py::List(items) => items.iter().for_each(|item| texts(item, out)),
+            Py::Dict(items) => items.iter().for_each(|(_, item)| texts(item, out)),
+            _ => {}
+        }
+    }
+    let mut shown = vec![error.message.clone()];
+    if let Some(details) = &error.details {
+        texts(details, &mut shown);
+    }
+    credentials.iter().any(|credential| {
+        let chars: Vec<char> = credential.chars().collect();
+        chars.windows(PART).any(|run| {
+            let run: String = run.iter().collect();
+            shown.iter().any(|text| text.contains(&run))
+        })
+    })
+}
+
 /// `error` with every one of `credentials` withheld, at any length, from its
 /// message and every detail string; a numeric detail equal to one is
 /// dropped. The hint is Kassiber's own text and stays whole. Strings are
@@ -1353,15 +1392,94 @@ pub(super) fn canonical(value: &Decimal) -> Result<PriceNumber, AppError> {
 /// times are whole seconds, and a later import's rows take source positions
 /// after an earlier import's, whatever their milliseconds.
 pub(super) const ORDER_TAG: &str = "same-second-order-uncertain";
-/// The rows of a wallet in one second with the other direction, read
-/// through the profile/time index (`idx_transactions_profile_page`).
+/// The rows of a wallet in one second, with what decides whether their
+/// order matters ([`Ordered`]), read through the profile/time index
+/// (`idx_transactions_profile_page`).
 pub(super) const SAME_SECOND_SQL: &str =
-    "SELECT id FROM transactions WHERE profile_id=?1 AND occurred_at=?3 AND wallet_id=?2 AND direction<>?4";
+    "SELECT id, direction, asset, COALESCE(kind_override, kind), amount, fee, fiat_currency, fiat_value_exact FROM transactions WHERE profile_id=?1 AND occurred_at=?3 AND wallet_id=?2";
+
+/// What decides whether two rows of one second are order-sensitive: FIFO
+/// and LIFO take lots in the journals' order, which within a second is
+/// source position and id, not the provider's sub-second time.
+#[derive(Clone)]
+struct Ordered {
+    direction: String,
+    asset: Option<String>,
+    kind: Option<String>,
+    amount: i64,
+    fee: i64,
+    currency: Option<String>,
+    value: Option<String>,
+}
+impl Ordered {
+    fn read(
+        r: &kassiber_store::rusqlite::Row<'_>,
+    ) -> kassiber_store::rusqlite::Result<(String, Self)> {
+        Ok((
+            r.get(0)?,
+            Ordered {
+                direction: r.get(1)?,
+                asset: r.get(2)?,
+                kind: r.get(3)?,
+                amount: r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                fee: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                currency: r.get(6)?,
+                value: r.get(7)?,
+            },
+        ))
+    }
+
+    /// Whether swapping the two rows can change basis or gains. Rows of
+    /// opposite directions always can. Rows of one direction and one asset
+    /// can unless they are the same kind, priced in one currency at the same
+    /// value per unit and charged the same fee per unit: lots that differ
+    /// only in size. Anything unpriced or not exactly comparable counts as
+    /// sensitive; a row of another asset in the same direction is its own lot.
+    fn sensitive(&self, other: &Ordered) -> bool {
+        if self.direction != other.direction {
+            return true;
+        }
+        if self.asset != other.asset {
+            return false;
+        }
+        // a / self.amount == b / other.amount, exactly.
+        let per_unit = |a: i128, b: i128| {
+            a.checked_mul(i128::from(other.amount))
+                .zip(b.checked_mul(i128::from(self.amount)))
+                .is_some_and(|(left, right)| left == right)
+        };
+        let same_value = || -> Option<bool> {
+            let mine: Decimal = self.value.as_deref()?.parse().ok()?;
+            let theirs: Decimal = other.value.as_deref()?.parse().ok()?;
+            let floor = mine.exponent().min(theirs.exponent());
+            let scaled = |d: &Decimal| -> Option<i128> {
+                let shift = u32::try_from(d.exponent().checked_sub(floor)?).ok()?;
+                let magnitude = i128::try_from(d.coefficient_u128()?)
+                    .ok()?
+                    .checked_mul(10i128.checked_pow(shift)?)?;
+                Some(if d.is_sign_negative() {
+                    -magnitude
+                } else {
+                    magnitude
+                })
+            };
+            Some(per_unit(scaled(&mine)?, scaled(&theirs)?))
+        };
+        !(self.kind == other.kind
+            && self.amount > 0
+            && other.amount > 0
+            && self.currency.is_some()
+            && self.currency == other.currency
+            && per_unit(i128::from(self.fee), i128::from(other.fee))
+            && same_value() == Some(true))
+    }
+}
 
 /// After an import into `wallet`: each row it inserted into a second that
-/// holds an opposite-direction row from an earlier import is tagged
-/// [`ORDER_TAG`] with those rows, for review; their order decides FIFO and
-/// LIFO basis, and stored times are whole seconds. With `together` (an API
+/// holds an order-sensitive row ([`Ordered::sensitive`]: the other
+/// direction, or the same direction at another unit cost) from an earlier
+/// import is tagged [`ORDER_TAG`] with those rows, for review; their order
+/// decides FIFO and LIFO basis, and stored times are whole seconds. With `together` (an API
 /// sync, which records no source positions, so the journals order a
 /// second's rows by id rather than the provider's sub-second order) rows of
 /// this import in one second are tagged with each other too; a file import
@@ -1378,23 +1496,25 @@ pub(super) fn tag_same_second(
     let new: std::collections::BTreeSet<&str> = inserted.iter().map(String::as_str).collect();
     let mut uncertain = std::collections::BTreeSet::<String>::new();
     let mut row = conn
-        .prepare("SELECT occurred_at, direction FROM transactions WHERE id=?")
+        .prepare("SELECT occurred_at FROM transactions WHERE id=?")
         .map_err(database_error)?;
     let mut same_second = conn.prepare(SAME_SECOND_SQL).map_err(database_error)?;
     for id in inserted {
-        let (occurred, direction): (String, String) = row
-            .query_row([id], |r| Ok((r.get(0)?, r.get(1)?)))
-            .map_err(database_error)?;
-        let earlier = same_second
-            .query_map([profile, wallet, &occurred, &direction], |r| {
-                r.get::<_, String>(0)
-            })
+        let occurred: String = row.query_row([id], |r| r.get(0)).map_err(database_error)?;
+        let second = same_second
+            .query_map([profile, wallet, &occurred], Ordered::read)
             .map_err(database_error)?
-            .collect::<Result<Vec<String>, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(database_error)?;
-        let earlier: Vec<String> = earlier
+        let Some(mine) = second.iter().find(|(e, _)| e == id).map(|(_, o)| o.clone()) else {
+            continue;
+        };
+        let earlier: Vec<String> = second
             .into_iter()
-            .filter(|e| together || !new.contains(e.as_str()))
+            .filter(|(e, other)| {
+                e != id && (together || !new.contains(e.as_str())) && mine.sensitive(other)
+            })
+            .map(|(e, _)| e)
             .collect();
         if !earlier.is_empty() {
             uncertain.insert(id.clone());
