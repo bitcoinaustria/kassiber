@@ -239,6 +239,18 @@ fn bitvavo_refuses_btc_rows_it_cannot_book_by_name() {
     }
 }
 
+/// A fiat trade whose cash amount fits both fee readings (a fee under two
+/// cents) refuses the sync: stored unpriced, `journals process` would value
+/// it from the rates cache instead of what it cost. The CSV states the fee.
+#[test]
+fn bitvavo_api_refuses_a_fiat_trade_whose_fee_reading_is_ambiguous() {
+    let tiny = item("tiny", "buy", "2024-08-01T00:00:00Z", &[("sent", "EUR", "10.00"), ("received", "BTC", "0.0002"), ("fees", "EUR", "0.004"), ("price", "EUR", "50000")]);
+    let error = sync(with_item(tiny)).1.result.unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(error.message, "Bitvavo transaction 'tiny' (type 'buy') has a cash amount that fits its price both with and without its fee");
+    assert!(error.hint.as_deref().unwrap().contains("this wallet cannot be synced while it holds this trade. Import Bitvavo's transaction-history CSV export"), "{error:?}");
+}
+
 /// A refused key reports only Kassiber's values: the status, a documented
 /// `errorCode` and its hint, never Bitvavo's text (which echoes the key).
 #[test]
@@ -405,6 +417,35 @@ fn bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs() {
     }
     let tagged: String = conn.query_row(tagged, [], |r| r.get(0)).unwrap();
     assert_eq!(tagged, "bitvavo:aaa-later,bitvavo:zzz-earlier");
+}
+
+/// Two buys in one second at different unit costs are tagged too, in one
+/// sync or across two: a later partial disposal's FIFO/LIFO basis depends on
+/// their order, which the journals take from ids. Buys at the same cost per
+/// unit are interchangeable lots and stay untagged.
+#[test]
+fn bitvavo_api_tags_same_second_buys_at_different_unit_costs() {
+    let cheap = item("zzz-cheap", "buy", "2024-08-01T10:00:00.100Z", &[("sent", "EUR", "60.00"), ("received", "BTC", "0.001"), ("fees", "EUR", "0.15"), ("price", "EUR", "60000")]);
+    let dear = item("aaa-dear", "buy", "2024-08-01T10:00:00.900Z", &[("sent", "EUR", "70.00"), ("received", "BTC", "0.001"), ("fees", "EUR", "0.17"), ("price", "EUR", "70000")]);
+    let twin = item("mmm-twin", "buy", "2024-08-01T10:00:00.500Z", &[("sent", "EUR", "120.00"), ("received", "BTC", "0.002"), ("fees", "EUR", "0.30"), ("price", "EUR", "60000")]);
+    let tagged = "SELECT coalesce(group_concat(id), '') FROM (SELECT t.external_id AS id FROM transactions t JOIN transaction_tags x
+        ON x.transaction_id=t.id JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain' ORDER BY 1)";
+    for syncs in [vec![vec![dear.clone(), cheap.clone()]], vec![vec![dear.clone()], vec![dear.clone(), cheap.clone()]]] {
+        let conn = book();
+        for history in syncs {
+            let mut script = Script::new();
+            script.history = history;
+            sync_into(&conn, &serve_script(script));
+        }
+        let both: String = conn.query_row(tagged, [], |r| r.get(0)).unwrap();
+        assert_eq!(both, "bitvavo:aaa-dear,bitvavo:zzz-cheap");
+    }
+    let conn = book();
+    let mut script = Script::new();
+    script.history = vec![twin, cheap];
+    sync_into(&conn, &serve_script(script));
+    let none: String = conn.query_row(tagged, [], |r| r.get(0)).unwrap();
+    assert_eq!(none, "");
 }
 
 /// The Bitvavo wallet a sync or an import finds by label, in `scope`.
