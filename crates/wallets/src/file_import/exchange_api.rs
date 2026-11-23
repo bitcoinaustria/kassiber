@@ -110,9 +110,8 @@ pub fn execute(
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
     let mut mapper = Mapper::new(exchange, scope, &wallet.label);
-    // Every error leaves with every credential the reads carried withheld.
-    let balance = (exchange.fetch)(&client, &mut mapper)
-        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;
+    let balance =
+        (exchange.fetch)(&client, &mut mapper).map_err(|error| leaving(error, &client))?;
     let contract::Mapped {
         records,
         tally,
@@ -1188,6 +1187,46 @@ fn echo_refusal(provider: &str) -> AppError {
         format!("{provider} returned an API credential in its response; nothing was imported"),
     )
     .with_hint("The exchange echoed the key, the secret or a request signature. Revoke and replace this key, then report the response shape.")
+}
+
+/// A read's error as it may leave: every credential the reads carried is
+/// withheld from it. When a successful page echoed a request credential, an
+/// error built from that page (a mapping refusal quoting a truncated field,
+/// say) can still hold part of one, which no whole-value scrub finds: the
+/// echo refusal replaces such an error.
+fn leaving(error: AppError, client: &Client<'_>) -> AppError {
+    let credentials = client.http.display_credentials();
+    let error = scrub_error(error, &credentials);
+    if client.http.echoed() && quotes_part(&error, &credentials) {
+        return echo_refusal(client.source);
+    }
+    error
+}
+
+/// Whether `error`'s message or a detail string holds [`PART`] or more
+/// consecutive characters of one of `credentials`.
+fn quotes_part(error: &AppError, credentials: &[String]) -> bool {
+    /// A run this long of a credential counts as quoting it.
+    const PART: usize = 8;
+    fn texts(value: &Py, out: &mut Vec<String>) {
+        match value {
+            Py::Str(text) => out.push(lossy(text)),
+            Py::List(items) => items.iter().for_each(|item| texts(item, out)),
+            Py::Dict(items) => items.iter().for_each(|(_, item)| texts(item, out)),
+            _ => {}
+        }
+    }
+    let mut shown = vec![error.message.clone()];
+    if let Some(details) = &error.details {
+        texts(details, &mut shown);
+    }
+    credentials.iter().any(|credential| {
+        let chars: Vec<char> = credential.chars().collect();
+        chars.windows(PART).any(|run| {
+            let run: String = run.iter().collect();
+            shown.iter().any(|text| text.contains(&run))
+        })
+    })
 }
 
 /// `error` with every one of `credentials` withheld, at any length, from its
