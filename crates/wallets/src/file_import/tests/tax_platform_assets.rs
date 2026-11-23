@@ -511,7 +511,10 @@ fn widening_the_scope_keeps_one_bitcoin_fee_row() {
     import_kind(&conn, &body, Format::CoinTracking).unwrap();
     let narrow = stored(&conn);
     assert_eq!(narrow.len(), 1);
-    assert!(narrow[0].starts_with("outbound BTC 10000000 fee=0 spend"), "{narrow:?}");
+    assert!(
+        narrow[0].starts_with("outbound BTC 10000000 fee=0 spend"),
+        "{narrow:?}"
+    );
     assets::Scope::parse("crypto")
         .unwrap()
         .store(&conn, "p", "wallet")
@@ -519,9 +522,15 @@ fn widening_the_scope_keeps_one_bitcoin_fee_row() {
     import_kind(&conn, &body, Format::CoinTracking).unwrap();
     let wide = stored(&conn);
     assert_eq!(
-        wide.iter().filter(|row| row.contains(" BTC ")).collect::<Vec<_>>(),
+        wide.iter()
+            .filter(|row| row.contains(" BTC "))
+            .collect::<Vec<_>>(),
         [&narrow[0]],
         "{wide:?}"
     );
-    assert!(wide.iter().any(|row| row.starts_with("outbound ETH 100000000000 fee=0 sell")), "{wide:?}");
+    assert!(
+        wide.iter()
+            .any(|row| row.starts_with("outbound ETH 100000000000 fee=0 sell")),
+        "{wide:?}"
+    );
 }
