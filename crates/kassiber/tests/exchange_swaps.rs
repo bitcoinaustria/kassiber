@@ -750,3 +750,51 @@ fn a_counter_leg_price_follows_its_pair_on_every_pass() {
     );
     assert_eq!(counter_leg(&book, "L5"), unpriced);
 }
+
+/// A pair converting only part of its source (0.25 of the 0.5 ETH leg) does
+/// not copy the BTC leg's whole value onto the ETH leg: it stays unpriced.
+#[test]
+fn a_partial_swap_takes_no_counter_leg_price() {
+    let fake = eth_into_btc_twice();
+    let home = tempfile::tempdir().unwrap();
+    let book = priced_swaps(home.path(), fake.base());
+    let pair = pair_of(&book, "L2");
+    book.ok(&["transfers", "unpair", "--pair-id", &pair]);
+    book.ok(&[
+        "transfers",
+        "pair",
+        "--tx-out",
+        "kraken:L2",
+        "--tx-in",
+        "kraken:L2B",
+        "--policy",
+        "carrying-value",
+        "--out-amount",
+        "0.25",
+    ]);
+    book.ok(&["journals", "process"]);
+    assert_eq!(counter_leg(&book, "L2"), json!([null, null]));
+}
+
+/// A non-Bitcoin leg given a market-price source by hand prices nothing:
+/// the SOL leg of the ETH -> SOL swap stays unpriced.
+#[test]
+fn only_a_bitcoin_leg_prices_its_counter_leg() {
+    let fake = eth_into_btc_and_sol();
+    let home = tempfile::tempdir().unwrap();
+    let book = Book::new(home.path(), "crypto", fake.base());
+    book.ok(&SYNC);
+    let (_, eth) = priced(&book, "L4");
+    book.run(&["context", "set", "--workspace", "Main", "--profile", "Book"]);
+    let updated = daemon(
+        home.path(),
+        "ui.transactions.metadata.update",
+        &json!({"transaction": eth, "fiat_value": "1000", "pricing_source_kind": "fmv_provider"}),
+    );
+    assert_eq!(
+        updated["kind"], "ui.transactions.metadata.update",
+        "{updated}"
+    );
+    book.ok(&["journals", "process"]);
+    assert_eq!(counter_leg(&book, "L4S"), json!([null, null]));
+}

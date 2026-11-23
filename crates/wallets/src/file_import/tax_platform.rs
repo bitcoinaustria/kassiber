@@ -636,6 +636,7 @@ fn record(row: csv::Row, index: usize, p: &mut Parse<'_>) -> Result<Vec<csv::Row
     let provider = platform(format);
     let name = provider.name;
     let label = format!("{name} row {index}");
+    let original = row.clone();
     let c = Columns::new(&row);
     let code = |names: &[&str]| c.opt(names).map(|v| asset(&v));
     let incoming = code(provider.incoming_asset);
@@ -666,6 +667,29 @@ fn record(row: csv::Row, index: usize, p: &mut Parse<'_>) -> Result<Vec<csv::Row
     let standalone =
         inbound.is_none() && outbound.is_none() && p.held(fee_code.as_deref()).is_some();
     let mut sent_raw = c.get(provider.outgoing_amount);
+    // A fiat-only row's fee in another crypto asset (a deposit charging BNB)
+    // is a fee-only spend, unpriced: the unrelated fiat movement is not its
+    // proceeds. A Bitcoin fee keeps the reference's standalone spend below.
+    if let Some(code) = p
+        .held(fee_code.as_deref())
+        .filter(|code| standalone && exchange::bitcoin(Some(code)).is_none())
+    {
+        if !fee_charged {
+            return Ok(vec![]);
+        }
+        let quantity = fee_amount(fee_raw, &code, index, &label)?;
+        let shared = Shared::of(&c, provider, index)?;
+        let external = shared.txid.clone().unwrap_or_default();
+        let (amount, fee) = assets::fee_only(quantity);
+        return Ok(vec![shared.unpriced(
+            format,
+            &external,
+            "outbound",
+            &code,
+            (&amount, &fee),
+            "fee",
+        )]);
+    }
     if standalone {
         outgoing = fee_code.clone();
         outbound = p.held(outgoing.as_deref());
@@ -865,7 +889,25 @@ fn record(row: csv::Row, index: usize, p: &mut Parse<'_>) -> Result<Vec<csv::Row
         rest: None,
         original: None,
     }];
-    if let Some((code, raw)) = third {
+    if third
+        .as_ref()
+        .is_some_and(|(code, _)| exchange::bitcoin(Some(code)).is_some())
+    {
+        // Bitcoin rows never depend on the scope: a Bitcoin fee on another
+        // asset's trade is the row the `bitcoin` scope stores for this export
+        // row, so widening the scope adds the other asset's rows and never a
+        // second representation of the same fee.
+        let mut narrow = Parse {
+            format,
+            target: p.target.map(|target| Target {
+                scope: Scope::Bitcoin,
+                wallet: target.wallet,
+            }),
+            tally: Tally::default(),
+            swaps: BTreeMap::new(),
+        };
+        rows.extend(record(original, index, &mut narrow)?);
+    } else if let Some((code, raw)) = third {
         // Shares the trade's provider id where it has one; otherwise its own
         // economics identify it, as for any id-less row.
         let fee = fee_amount(raw, &code, index, &label)?;

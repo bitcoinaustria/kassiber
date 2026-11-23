@@ -758,6 +758,24 @@ fn reported(relevant: &[Operation<'_>], btc: &str) -> Result<i64, &'static str> 
     if latest.is_empty() {
         return Err("Bitpanda listed no BTC transactions");
     }
+    // A BTC fee on another asset's operation moves BTC without a BTC
+    // transaction; at or after a wallet's latest BTC transaction no reported
+    // balance is known to include it.
+    let covered = latest.values().map(|(at, _)| *at).min().unwrap_or(i64::MIN);
+    let uncovered = relevant
+        .iter()
+        .flat_map(|operation| &operation.legs)
+        .any(|leg| {
+            !leg.holding.is_btc()
+                && leg
+                    .fee
+                    .as_ref()
+                    .is_some_and(|(holding, _)| holding.is_btc())
+                && leg.occurred >= covered
+        });
+    if uncovered {
+        return Err("a BTC fee after a BTC wallet's latest transaction is in no reported balance");
+    }
     let mut total = 0i64;
     for (_, legs) in latest.values() {
         let mut balance: Option<&Decimal> = None;
@@ -1001,6 +1019,14 @@ fn fees(
         if !third {
             return Err(refuse.because(
                 "charges a separate fee; Kassiber cannot tell whether the cash amount includes it",
+                REVIEW,
+            ));
+        }
+        // A BTC fee must be whole msat: the record builder's exactness check
+        // skips Bitcoin, and the coordinator would round it.
+        if holding.is_btc() && crate::file_import::assets::exact_units("BTC", "fee", fee).is_err() {
+            return Err(refuse.because(
+                format!("charges a BTC fee of {fee}, finer than 1 msat"),
                 REVIEW,
             ));
         }
