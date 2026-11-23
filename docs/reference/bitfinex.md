@@ -38,6 +38,9 @@ hex HMAC-SHA384 of `/api/` + path + nonce + body), re-signed on every retry:
 
 1. `/v2/auth/r/permissions`: a key with any write flag refuses the sync
    (`auth_error`, `details.write_permissions`) before any history is read.
+   Only entries shaped like a scope name (lowercase letters and `_`, at most
+   32 characters) are named; any other writable entry could be an echoed
+   credential and is only counted (`details.other_write_permissions`).
 2. `/v2/auth/r/ledgers/BTC/hist`, `/v2/auth/r/trades/hist` (`"sort":-1`) and
    `/v2/auth/r/movements/BTC/hist`, paged by `end` = the oldest millisecond
    of the last page (inclusive; limits 2,500 and 1,000). A repeated entry

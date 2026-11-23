@@ -224,6 +224,22 @@ fn bitfinex_refuses_keys_with_write_permissions_before_any_history() {
     assert_eq!(served.targets(), HISTORY[..1]);
 }
 
+/// A writable entry that is not shaped like a Bitfinex scope name could be an
+/// echoed key or signature: it is counted, never quoted, not even in part.
+#[test]
+fn bitfinex_write_permissions_never_quote_an_entry_that_is_not_a_scope_name() {
+    let echoed = "Kx9fQ2mZ7bW4tR8yL3vN6cH1sD5gJ0pA2eU7iO9kXqWz";
+    let mut script = Script::new();
+    script.permissions = json!([["orders", 1, 1], [echoed, 1, 1], ["history", 1, 0]]);
+    let error = refusal(script);
+    assert_eq!(error.code, "auth_error");
+    let details = error.details.as_ref().unwrap();
+    let listed = kassiber_pyjson::dumps(at(details, "write_permissions"), &Default::default()).unwrap();
+    assert_eq!((listed.as_str(), at(details, "other_write_permissions")), (r#"["orders"]"#, &Py::from(1)));
+    let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+    assert!(!shown.contains(&echoed[..8]), "{shown}");
+}
+
 #[test]
 fn bitfinex_errors_keep_only_documented_codes() {
     for (status, body, code, documented) in [
