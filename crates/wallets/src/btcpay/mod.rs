@@ -2,7 +2,7 @@
 //! Local operations here never construct a network client; Greenfield reads
 //! run only through `kassiber_chain::btcpay` under an explicit action grant.
 pub mod args;
-pub(crate) mod bark;
+pub mod bark;
 pub mod connect;
 pub mod create;
 pub(crate) mod ledger;

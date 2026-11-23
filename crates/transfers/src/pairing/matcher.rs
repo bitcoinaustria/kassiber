@@ -67,9 +67,19 @@ impl Population {
             let surfaced = st(&raw, "txid");
             let malformed =
                 !kassiber_pytext::strip(&surfaced).is_empty() && hex_id(&surfaced).is_none();
+            let bark_hash = st(&raw, "transaction_hash");
+            let bark_onchain = kassiber_pytext::lower(kassiber_pytext::strip(&st(&raw, "source")))
+                == "btcpay_bark_wallet"
+                && kassiber_pytext::lower(kassiber_pytext::strip(&st(&raw, "part"))) == "principal"
+                && matches!(
+                    kassiber_pytext::lower(kassiber_pytext::strip(&st(&raw, "kind"))).as_str(),
+                    "send-onchain" | "offboard" | "onchain-send" | "onchain-receive"
+                )
+                && !kassiber_pytext::strip(&bark_hash).is_empty();
             let possible = !malformed
                 && (hex_id(&st(&data, "external_id")).is_some()
                     || !surfaced.is_empty()
+                    || bark_onchain
                     || ["tx", "ownership_graph"]
                         .iter()
                         .any(|k| get(&raw, k).and_then(|v| get(v, "txid")).is_some())

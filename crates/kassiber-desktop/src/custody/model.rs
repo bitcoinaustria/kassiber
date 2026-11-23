@@ -384,7 +384,11 @@ pub const DISMISS_REASON: &str = "user dismissed from review queue";
 
 /// `canUndoAutomaticPairing`.
 pub fn can_undo_automatic(item: &Lineage) -> bool {
-    item.custody_state == "internal_verified" && item.evidence_reason == "exchange_txid_exact"
+    item.custody_state == "internal_verified"
+        && matches!(
+            item.evidence_reason.as_str(),
+            "exchange_txid_exact" | "bark_txid_exact"
+        )
 }
 
 // ---- The ledger of moves (linkedMovesModel.ts) -----------------------------------------------
@@ -1067,5 +1071,46 @@ mod tests {
             Verdict::SortOut { total: 3 }
         );
         assert_eq!(verdict(false, false, false, 0, 0, 3), Verdict::Settled);
+    }
+
+    #[test]
+    fn automatic_undo_covers_exchange_and_bark_only() {
+        let lineage = |reason: &str, state: &str| {
+            Lineage::parse(&json!({
+                "out_transaction_id": "out-bark",
+                "in_transaction_id": "in-store",
+                "occurred_at": "2026-11-13T11:51:50Z",
+                "asset": "BTC",
+                "amount_msat": "600000000",
+                "custody_state": state,
+                "evidence_reason": reason,
+                "rail": "bitcoin",
+                "basis_state": "eligible",
+                "from_wallet_label": "BTCPay Bark",
+                "to_wallet_label": "Store on-chain"
+            }))
+        };
+        assert!(can_undo_automatic(&lineage(
+            "exchange_txid_exact",
+            "internal_verified"
+        )));
+        assert!(can_undo_automatic(&lineage(
+            "bark_txid_exact",
+            "internal_verified"
+        )));
+        assert!(!can_undo_automatic(&lineage(
+            "row_matched",
+            "internal_verified"
+        )));
+        assert!(!can_undo_automatic(&lineage(
+            "bark_txid_exact",
+            "internal_reviewed"
+        )));
+        let moves =
+            build_linked_moves(&[lineage("bark_txid_exact", "internal_verified")], &[], &[]);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].source, Source::Automatic);
+        assert!(moves[0].undoable);
+        assert!(can_unlink(&moves[0]));
     }
 }

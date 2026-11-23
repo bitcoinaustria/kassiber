@@ -26,7 +26,7 @@ pub(super) fn pair_id(txid: &str, vout: &str) -> String {
 }
 
 /// A platform's graphless withdrawal row and the observed owned receipt.
-fn shape(source: &Value, target: &Value) -> bool {
+pub(super) fn shape(source: &Value, target: &Value) -> bool {
     !truth(&source["authoritative_chain_observation"])
         && truth(&target["authoritative_chain_observation"])
         && source["direction"] == "outbound"
@@ -40,9 +40,19 @@ fn shape(source: &Value, target: &Value) -> bool {
         && principal(source) == principal(target)
 }
 
-/// A platform withdrawal bound to the one owned output it paid.
+/// Which automatic txid-exact producer created a bound proof.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum ProofSource {
+    #[default]
+    Exchange,
+    Bark,
+}
+
+/// A platform withdrawal or Bark on-chain send bound to the one owned output it paid.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(super) struct ExchangeTxidProof {
+    #[serde(default)]
+    source: ProofSource,
     source_quantity_hash: String,
     target_quantity_hash: String,
     txid: String,
@@ -50,12 +60,46 @@ pub(super) struct ExchangeTxidProof {
     amount_msat: i128,
 }
 impl ExchangeTxidProof {
-    pub(super) fn validates(&self, pair: &Value, source: &Value, target: &Value) -> bool {
+    pub(super) fn bark(
+        source_quantity_hash: String,
+        target_quantity_hash: String,
+        txid: String,
+        vout: String,
+        amount_msat: i128,
+    ) -> Self {
+        Self {
+            source: ProofSource::Bark,
+            source_quantity_hash,
+            target_quantity_hash,
+            txid,
+            vout,
+            amount_msat,
+        }
+    }
+    pub(super) fn validates_for(
+        &self,
+        expected: ProofSource,
+        pair: &Value,
+        source: &Value,
+        target: &Value,
+    ) -> bool {
+        if self.source != expected {
+            return false;
+        }
+        let expected_pair_id = match self.source {
+            ProofSource::Exchange => pair_id(&self.txid, &self.vout),
+            ProofSource::Bark => {
+                if truth(&source["amount_includes_fee"]) {
+                    return false;
+                }
+                super::bark::pair_id(&self.txid, &self.vout)
+            }
+        };
         source["quantity_hash"] == self.source_quantity_hash
             && target["quantity_hash"] == self.target_quantity_hash
             && shape(source, target)
             && principal(source) == self.amount_msat
-            && pair["pair_id"] == pair_id(&self.txid, &self.vout)
+            && pair["pair_id"] == expected_pair_id
     }
 }
 
@@ -65,7 +109,7 @@ pub(super) type Proofs = BTreeMap<(String, String), ExchangeTxidProof>;
 /// a fully valued graph with no input owned by the book and exactly one
 /// output owned in its network, by the receiving wallet alone, for the whole
 /// receipt.
-fn owned_output(
+pub(super) fn owned_output(
     row: &Value,
     target: &Value,
     scope: &TransferScope,
@@ -90,8 +134,19 @@ fn owned_output(
     {
         return Ok(None);
     }
+    let inputs = py::list(py::get(&graph, "inputs"));
+    if inputs.is_empty()
+        || inputs
+            .iter()
+            .any(|entry| !py::truth(py::get(entry, "script")))
+        || outputs
+            .iter()
+            .any(|output| !py::truth(py::get(output, "script")))
+    {
+        return Ok(None);
+    }
     let physical: PhysicalScope = (scope.0.clone(), scope.1.clone());
-    for entry in py::list(py::get(&graph, "inputs")) {
+    for entry in inputs {
         if !index
             .input_owners(&py::project(entry), &physical)?
             .is_empty()
@@ -164,6 +219,7 @@ pub(super) fn promote(
         proofs.insert(
             (out_id, in_id),
             ExchangeTxidProof {
+                source: ProofSource::Exchange,
                 source_quantity_hash: codec::text(&source["quantity_hash"]),
                 target_quantity_hash: codec::text(&target["quantity_hash"]),
                 txid: scope.2.clone(),

@@ -104,6 +104,8 @@ macro_rules! book {
     (@required provider_hold_quarantines, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
     // Present only while an excluded row shares a possible collaborative receipt's transaction.
     (@required excluded_txids, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
+    // Present only while the book holds synced BTCPay Bark on-chain sends.
+    (@required bark_sync_provenance, $value:ident) => { $value.unwrap_or_else(Unported::empty) };
     (@required $field:ident, $value:ident) => { $value.ok_or_else(|| serde::de::Error::missing_field(stringify!($field)))? };
 }
 
@@ -196,6 +198,7 @@ book! {
     reset_hold_quarantines: Unported<Vec<Record>>,
     provider_hold_quarantines: Unported<Vec<Record>>,
     excluded_txids: Unported<Vec<String>>,
+    bark_sync_provenance: Unported<Vec<Record>>,
     gap_reviews: Unported<Vec<Record>>,
     pair_dismissals: Unported<Vec<Record>>,
     gap_worklist: TypedWorklist,
@@ -259,6 +262,11 @@ impl BookSnapshot {
                 .iter()
                 .any(|f| matches!(f, Field::excluded_txids))
                 .then(|| (*self.excluded_txids).clone()),
+            bark_sync_provenance: self
+                .order
+                .iter()
+                .any(|f| matches!(f, Field::bark_sync_provenance))
+                .then(|| (*self.bark_sync_provenance).clone()),
             gap_reviews: (*self.gap_reviews).clone(),
             pair_dismissals: (*self.pair_dismissals).clone(),
             rows: Default::default(),

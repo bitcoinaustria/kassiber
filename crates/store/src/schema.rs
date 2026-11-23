@@ -79,6 +79,7 @@ pub fn verify(conn: &Connection) -> Result<()> {
                     "custody-durable-evidence-v1",
                     "device-sync-removal-v1",
                     "at-fee-consumed-regime-v1",
+                    "bark-onchain-settlement-v1",
                 ]
                 .contains(&id.as_str()))
         {

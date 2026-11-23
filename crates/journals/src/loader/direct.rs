@@ -90,6 +90,7 @@ impl Gate {
                         "reset_hold_quarantines",
                         "provider_hold_quarantines",
                         "excluded_txids",
+                        "bark_sync_provenance",
                         "gap_reviews",
                         "pair_dismissals",
                         "gap_worklist",
@@ -626,6 +627,12 @@ pub fn load_read_snapshot(
         );
         snapshot.excluded_txids = Some(excluded_txids);
     }
+    let bark_provenance = bark_sync_provenance(conn, &profile_id)?;
+    if !bark_provenance.is_empty() {
+        let records = Value::List(bark_provenance);
+        snapshot.bark_sync_provenance = Some(native_rows(records.clone())?);
+        reader.gate.ordered.insert("bark_sync_provenance", records);
+    }
     snapshot.gap_reviews = gap_reviews;
     snapshot.pair_dismissals = reader.rows(
         conn,
@@ -662,6 +669,124 @@ pub fn load_read_snapshot(
         snapshot,
         gate: reader.gate,
     })
+}
+
+fn bark_sync_provenance(conn: &Connection, profile_id: &str) -> Result<Vec<Value>> {
+    if !table_exists(conn, "import_batch_transactions")? {
+        return Ok(Vec::new());
+    }
+    let rows = query(
+        conn,
+        "SELECT t.id, t.wallet_id, t.external_id, t.direction, t.asset, t.amount, t.fee, \
+         t.amount_includes_fee, t.raw_json, w.config_json \
+         FROM transactions t JOIN wallets w ON w.id = t.wallet_id \
+         WHERE t.profile_id = ? AND t.excluded = 0 \
+           AND lower(trim(coalesce(w.kind, ''))) = 'custom' \
+           AND NOT EXISTS ( \
+               SELECT 1 FROM import_batch_transactions ibt WHERE ibt.transaction_id = t.id \
+           ) \
+         ORDER BY t.id ASC",
+        [profile_id],
+    )?;
+    let mut out = Vec::new();
+    for row in rows {
+        let config_str = text(get(&row, "config_json"));
+        let Ok(config) = serde_json::from_str::<J>(&config_str) else {
+            continue;
+        };
+        let Some(cfg) = config.as_object() else {
+            continue;
+        };
+        let sync_source = cfg
+            .get("sync_source")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_lowercase());
+        if sync_source.as_deref() != Some("btcpay") {
+            continue;
+        }
+        let source_mode = cfg
+            .get("source_mode")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_lowercase());
+        if source_mode.as_deref() == Some("payment_ledger") {
+            continue;
+        }
+        let payment_method = cfg
+            .get("payment_method_id")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_uppercase().replace('_', "-"));
+        if payment_method.as_deref() != Some("BTC-ARK") {
+            continue;
+        }
+        let Some(wallet_store_id) = cfg
+            .get("store_id")
+            .and_then(J::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let raw_str = text(get(&row, "raw_json"));
+        let Ok(raw_val) = serde_json::from_str::<J>(&raw_str) else {
+            continue;
+        };
+        let Some(raw) = raw_val.as_object() else {
+            continue;
+        };
+        let source = raw
+            .get("source")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_lowercase());
+        let part = raw
+            .get("part")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_lowercase());
+        let kind = raw
+            .get("kind")
+            .and_then(J::as_str)
+            .map(|s| s.trim().to_ascii_lowercase());
+        let raw_store_id = raw
+            .get("store_id")
+            .and_then(J::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        let tx_hash = raw
+            .get("transaction_hash")
+            .and_then(J::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        if source.as_deref() != Some("btcpay_bark_wallet")
+            || part.as_deref() != Some("principal")
+            || !matches!(
+                kind.as_deref(),
+                Some("send-onchain" | "offboard" | "onchain-send")
+            )
+            || raw_store_id != wallet_store_id
+            || tx_hash.len() != 64
+            || !tx_hash.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            continue;
+        }
+        let external_id = text(get(&row, "external_id"));
+        let bark_prefix = format!("btcpay-bark:{wallet_store_id}:");
+        let btcpay_prefix = format!("btcpay:{wallet_store_id}:");
+        if !(external_id.starts_with(&bark_prefix) || external_id.starts_with(&btcpay_prefix)) {
+            continue;
+        }
+        let row_json = convert(row.clone())?;
+        let observed = kassiber_custody::evidence::observed_hash(&row_json)
+            .map_err(|e| Error::Invalid(e.to_string()))?
+            .0;
+        let graph = kassiber_custody::evidence::graph_hash(&row_json["raw_json"])
+            .map_err(|e| Error::Invalid(e.to_string()))?
+            .0;
+        out.push(dict([
+            ("transaction_id", get(&row, "id").clone()),
+            ("observed_hash", Value::from(observed)),
+            ("graph_hash", Value::from(graph)),
+        ]));
+    }
+    Ok(out)
 }
 
 fn network(conn: &Connection, profile: &str, reader: &mut Reader) -> Result<Option<J>> {

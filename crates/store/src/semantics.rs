@@ -13,6 +13,7 @@ const OUTFLOW: &str = "at-outflow-consumed-regime-v2";
 const LEGACY_PAIR_FEE: &str = "custody-legacy-pair-fee-review-v1";
 const SAME_TIME_ORDER: &str = "same-time-source-order-v1";
 const PRICE_CURRENCY: &str = "price-currency-mismatch-hold-v1";
+const BARK_ONCHAIN_SETTLEMENT: &str = "bark-onchain-settlement-v1";
 /// The semantics version that holds a price stored in another currency than
 /// the book's.
 const PRICE_CURRENCY_REQUIRED: i64 = 10;
@@ -74,6 +75,7 @@ pub(crate) fn migrate_with_observer(
     // fee reviews, then the stored-error credential scrub.
     legacy_pair_fee(conn, observer)?;
     price_currency(conn, observer)?;
+    bark_onchain_settlement(conn, observer)?;
     crate::stored_errors::migrate(conn, observer)
 }
 
@@ -380,6 +382,87 @@ pub(crate) fn price_currency(
     observer(&format!("{PRICE_CURRENCY}.after_commit"))
 }
 
+/// One-time invalidation for previously processed books holding active BTCPay
+/// Bark on-chain principal rows (`send-onchain`, `offboard`, `onchain-send`,
+/// `onchain-receive` with a 64-hex `transaction_hash`). Earlier builds gave
+/// those rows no on-chain scope, so they could book without holds and pass
+/// freshness checks with double-counted incoming BTC or standalone disposals.
+/// Unaffected books are left untouched (no audit row written).
+pub(crate) fn bark_onchain_settlement(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let already: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migration_audits WHERE migration_name=?)",
+            [BARK_ONCHAIN_SETTLEMENT],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if already {
+        return Ok(());
+    }
+    let affected = "(last_processed_at IS NOT NULL OR EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))\n        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id\n            AND t.excluded = 0\n            AND json_valid(t.raw_json)\n            AND json_type(t.raw_json) = 'object'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.source'), ''))) = 'btcpay_bark_wallet'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive')\n            AND length(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = 64)";
+    let pending: i64 = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM profiles WHERE {affected}"),
+            [],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if pending == 0 {
+        return Ok(());
+    }
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(map_sqlite_error)?;
+    if tx
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migration_audits WHERE migration_name=?)",
+            [BARK_ONCHAIN_SETTLEMENT],
+            |r| r.get::<_, bool>(0),
+        )
+        .map_err(map_sqlite_error)?
+    {
+        return Ok(());
+    }
+    let count: i64 = tx
+        .query_row(
+            &format!("SELECT COUNT(*) FROM profiles WHERE {affected}"),
+            [],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if count == 0 {
+        return Ok(());
+    }
+    let impact = python_value(&serde_json::json!({
+        "schema_version": 1,
+        "migration": BARK_ONCHAIN_SETTLEMENT,
+        "affected_profile_count": count,
+        "explanation": "Marks previously processed books with active BTCPay Bark on-chain rows stale so journals rebuild with Bark on-chain settlement linking and holds.",
+    }));
+    let impact = dumps(&impact, &Options::default().sort_keys(true))
+        .map_err(|_| Error::new(ErrorKind::Validation, "invalid migration audit JSON"))?;
+    observer(&format!("{BARK_ONCHAIN_SETTLEMENT}.before_audit"))?;
+    let inserted = tx.execute(
+        "INSERT OR IGNORE INTO schema_migration_audits(id,migration_name,schema_version,impact_json,created_at) VALUES(?1,?1,1,?2,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+        [BARK_ONCHAIN_SETTLEMENT, &impact],
+    ).map_err(map_sqlite_error)?;
+    if inserted != 0 {
+        tx.execute(
+            &format!(
+                "UPDATE profiles SET last_processed_at = NULL,\n        last_processed_tx_count = 0, journal_input_version = journal_input_version + 1,\n        ownership_review_counts_json = NULL\n        WHERE {affected}"
+            ),
+            [],
+        )
+        .map_err(map_sqlite_error)?;
+    }
+    observer(&format!("{BARK_ONCHAIN_SETTLEMENT}.before_commit"))?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer(&format!("{BARK_ONCHAIN_SETTLEMENT}.after_commit"))
+}
+
 pub(crate) fn legacy_pair_fee(
     conn: &mut Connection,
     observer: &mut impl FnMut(&str) -> Result<()>,
@@ -684,5 +767,81 @@ mod tests {
             audit,
             r#"{"affected_profile_count": 2, "migration": "price-currency-mismatch-hold-v1", "required_journal_semantics_version": 10, "schema_version": 1}"#
         );
+    }
+
+    #[test]
+    fn bark_onchain_settlement_invalidates_affected_processed_books_once() {
+        let txid = "1".repeat(64);
+        // Unaffected processed book (only ark-receive, no Bark on-chain row):
+        // stays current and writes no audit row.
+        let (_root_clean, mut clean) = book();
+        clean
+            .connection
+            .execute_batch(&format!(
+                "INSERT INTO workspaces VALUES('ws','clean','fixed');
+                 INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,last_processed_at,last_processed_tx_count,journal_semantics_version,required_journal_semantics_version,created_at) VALUES
+                   ('clean','ws','Clean','EUR','generic','FIFO','fixed',1,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed');
+                 INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wal','ws','clean','Bark','custom','fixed');
+                 INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,excluded,created_at) VALUES
+                   ('ark','ws','clean','wal','fp-ark','fixed','inbound','BTC',1000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"ark-receive\",\"transaction_hash\":\"{txid}\"}}',0,'fixed');"
+            ))
+            .unwrap();
+        let before = clean.connection.total_changes();
+        bark_onchain_settlement(&mut clean.connection, &mut |_| Ok(())).unwrap();
+        assert_eq!(clean.connection.total_changes(), before);
+        assert_eq!(
+            clean
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM schema_migration_audits WHERE migration_name=?",
+                    [BARK_ONCHAIN_SETTLEMENT],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap(),
+            0
+        );
+        crate::schema::verify(&clean.connection).unwrap();
+
+        // Processed book with an active Bark send-onchain row is invalidated once,
+        // passes schema::verify, and ignores excluded or unprocessed profiles.
+        let (_root_aff, mut aff) = book();
+        aff.connection
+            .execute_batch(&format!(
+                "INSERT INTO workspaces VALUES('ws','shop','fixed');
+                 INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,last_processed_at,last_processed_tx_count,journal_semantics_version,required_journal_semantics_version,created_at) VALUES
+                   ('affected','ws','Affected','EUR','generic','FIFO','fixed',1,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed'),
+                   ('excluded','ws','Excluded','EUR','generic','FIFO','fixed',0,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed'),
+                   ('unprocessed','ws','Unprocessed','EUR','generic','FIFO',NULL,0,0,0,'fixed');
+                 INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES
+                   ('w1','ws','affected','Bark','custom','fixed'),
+                   ('w2','ws','excluded','Bark','custom','fixed'),
+                   ('w3','ws','unprocessed','Bark','custom','fixed');
+                 INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,excluded,created_at) VALUES
+                   ('t1','ws','affected','w1','fp1','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"send-onchain\",\"transaction_hash\":\"{txid}\"}}',0,'fixed'),
+                   ('t2','ws','excluded','w2','fp2','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"offboard\",\"transaction_hash\":\"{txid}\"}}',1,'fixed'),
+                   ('t3','ws','unprocessed','w3','fp3','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"onchain-send\",\"transaction_hash\":\"{txid}\"}}',0,'fixed');"
+            ))
+            .unwrap();
+        bark_onchain_settlement(&mut aff.connection, &mut |_| Ok(())).unwrap();
+        let after_first = aff.connection.total_changes();
+        bark_onchain_settlement(&mut aff.connection, &mut |_| Ok(())).unwrap();
+        assert_eq!(aff.connection.total_changes(), after_first);
+        let profiles: Vec<(String, Option<String>, i64, i64)> = aff
+            .connection
+            .prepare("SELECT id,last_processed_at,last_processed_tx_count,journal_input_version FROM profiles ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            profiles,
+            [
+                ("affected".to_owned(), None, 0, 1),
+                ("excluded".to_owned(), Some("fixed".to_owned()), 0, 0),
+                ("unprocessed".to_owned(), None, 0, 0),
+            ]
+        );
+        crate::schema::verify(&aff.connection).unwrap();
     }
 }

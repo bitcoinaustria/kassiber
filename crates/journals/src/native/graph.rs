@@ -192,6 +192,24 @@ pub(super) fn onchain_scope(row: &Value) -> Option<Scope> {
         if truth(&Value::Str(strip(&empty_text(field(payload, "txid"))))) {
             txids.insert(strict_txid(field(payload, "txid"))?);
         }
+        let is_bark = normalized(field(payload, "source")).is("btcpay_bark_wallet")
+            && normalized(field(payload, "part")).is("principal")
+            && [
+                "send-onchain",
+                "offboard",
+                "onchain-send",
+                "onchain-receive",
+            ]
+            .iter()
+            .any(|kind| normalized(field(payload, "kind")).is(kind));
+        if is_bark
+            && truth(&Value::Str(strip(&empty_text(field(
+                payload,
+                "transaction_hash",
+            )))))
+        {
+            txids.insert(strict_txid(field(payload, "transaction_hash"))?);
+        }
     }
     if txids.len() > 1 {
         return None;

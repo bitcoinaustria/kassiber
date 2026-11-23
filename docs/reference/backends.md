@@ -542,7 +542,13 @@ payment's provenance key, so it links exactly; other rows are booked as
 `btcpay-bark:{store}:{row id}` and move to the provenance key once BTCPay
 reports the payment. Bark payment hashes (`payment_hash_source =
 btcpay_bark`) never pair automatically with another wallet; review such
-transfers.
+transfers. On-chain sends (`send-onchain`, `offboard`, `onchain-send`) whose
+`transactionHash` names an owned watch-only wallet's observed receipt for
+exactly its one owned output book automatically as `bark_txid_exact` transfers
+with Bark's fee as a transfer fee (see
+[custody resolution](custody-resolution.md#exchange-withdrawals-that-name-their-txid));
+less exact sends and `onchain-receive` rows matching another owned wallet hold
+for review, and off-chain `ark-receive` VTXO hashes stay unscoped.
 
 Switching from a ledger. When the plugin of a store booked as a `BTC-ARK`
 payment ledger starts serving wallet history, the next sync switches that
