@@ -9,7 +9,9 @@ use super::*;
 
 /// Authors one pair per `swap_ref` among `rows` (in step with `records`) and
 /// returns how many it created, or `None` when no row names a swap. A swap
-/// whose legs are already paired keeps its pair, so a re-run creates none.
+/// whose legs are already paired with each other keeps its pair, so a re-run
+/// creates none; a leg paired or reviewed elsewhere is left to pair
+/// authoring, which refuses it, so the import fails and stores nothing.
 pub(super) fn pair(
     conn: &Connection,
     profile: &str,
@@ -50,7 +52,10 @@ pub(super) fn pair(
         workspace_id: &workspace,
         profile_id: profile,
     };
-    let paired = kassiber_transfers::paired_transaction_ids(conn, &scope)?;
+    let paired: std::collections::BTreeSet<(String, String)> =
+        kassiber_transfers::transaction_pairs(conn, &scope)?
+            .into_iter()
+            .collect();
     let mut created = 0;
     for (reference, (outbound, inbound)) in legs {
         let ([out], [into]) = (outbound.as_slice(), inbound.as_slice()) else {
@@ -67,7 +72,7 @@ pub(super) fn pair(
             stored(conn, wallet, out, "outbound")?,
             stored(conn, wallet, into, "inbound")?,
         );
-        if paired.contains(&out) || paired.contains(&into) {
+        if paired.contains(&(out.clone(), into.clone())) {
             continue;
         }
         kassiber_transfers::pair_provider_swap(
