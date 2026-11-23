@@ -2297,13 +2297,13 @@ one-hour limits:
 | --- | --- | --- |
 | `/sapi/v1/fiat/payments` (`transactionType=0`) | July 2017 to now, pages of `rows=500` until the answer's `total` is read | completed BTC card buys, priced at the fiat paid; another coin's buy is counted in `assets.unread` |
 | `/sapi/v1/capital/deposit/hisrec?coin=BTC` | 89-day windows (Binance allows less than 90) from July 2017, each paged by `offset` with `limit=1000` | settled BTC deposits (status 1, or 6: credited) |
-| `/sapi/v1/capital/withdraw/history?coin=BTC` | as deposits, at most about eight reads a second | completed BTC withdrawals (status 6), fee in BTC |
+| `/sapi/v1/capital/withdraw/history?coin=BTC` | as deposits, one read a little over six seconds apart (18,000 of the endpoint's 180,000 UID weight a minute) | completed BTC withdrawals (status 6), fee in BTC |
 | `/sapi/v1/asset/assetDividend?asset=BTC` | 179-day windows, `limit=500`; Binance has no cursor, so a window that comes back full, or whose `total` is more than it returned, is read again as two halves, down to one minute | `income` (or `mining` when Binance says so), unpriced |
 | `/sapi/v1/convert/tradeFlow` | 29-day windows, `limit=1000`, halved while `moreData` is true; one read a little over a second apart (3,000 of the account's 180,000 weight a minute) | `SUCCESS` orders between BTC and fiat: a buy or sell priced at the fiat side (Convert's price includes its fee); an order without BTC is counted in `assets.unread` |
 | `/api/v3/account` (last) | one request | the spot account's BTC, `free` plus `locked`, for `provider_balance` and `reported_balance` (`scope: "spot_free_plus_locked"`) |
 
-A sync therefore takes a little over two minutes, mostly pacing the Convert
-reads. A window that is still full at one minute fails closed
+A sync therefore takes about six minutes, mostly pacing the withdrawal and
+Convert reads; a faster scan would run into HTTP 429 part way through. A window that is still full at one minute fails closed
 (`protocol_error`) rather than drop rows, and so does an answer without its
 paging field (`total` for card buys and dividends, `moreData` for Convert).
 Deposit and withdrawal statuses are read per direction from Binance's tables:

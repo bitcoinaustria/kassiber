@@ -50,7 +50,7 @@ fn with_client<T>(
         source: exchange.provider,
     };
     // An echoed request credential (a signature, say) leaves every error.
-    read(&client).map_err(|error| scrub_error(error, &client.http.display_credentials()))
+    read(&client).map_err(|error| leaving(error, &client))
 }
 
 /// `ui.connections.exchange.test`: the fewest signed reads that prove the

@@ -47,10 +47,22 @@ pub struct Notice {
     pub error: Option<String>,
     /// `crypto` is stored and the file has to be chosen again.
     pub pick_again: bool,
-    /// The `ui.wallets.update` in flight.
-    pub pending: bool,
+    /// The `ui.wallets.update` in flight, as it was sent. It outlives the shown confirmation:
+    /// opening another wallet's starts that one over but keeps this, and its reply acts only for
+    /// the wallet and scope named here.
+    pub pending: Option<Submitted>,
     /// The import after it (the import result's same file again) in flight.
     pub reimport_pending: bool,
+}
+
+/// A confirmed scope change as sent: what its reply belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Submitted {
+    pub wallet: String,
+    pub scope: Scope,
+    /// Whether the follow-up (Sync now, or the same file again) may run once the scope is
+    /// stored; cancelling the confirmation while the update is in flight withdraws it.
+    pub follow_up: bool,
 }
 
 #[derive(Default)]
@@ -87,8 +99,11 @@ pub fn reset(app: &mut App, s: Surface) {
 fn begin(app: &mut App, s: Surface, wallet: &str, next: Scope) {
     let n = notice_mut(app, s);
     if n.wallet != wallet {
+        // Another wallet's confirmation starts over; a submitted update keeps its own request.
         *n = Notice {
             wallet: wallet.to_owned(),
+            pending: n.pending.take(),
+            reimport_pending: n.reimport_pending,
             ..Notice::default()
         };
     }
@@ -106,13 +121,17 @@ fn cancel(app: &mut App, s: Surface) {
     let n = notice_mut(app, s);
     n.confirming = None;
     n.error = None;
+    let wallet = n.wallet.clone();
+    if let Some(sent) = n.pending.as_mut().filter(|p| p.wallet == wallet) {
+        sent.follow_up = false;
+    }
 }
 
 fn confirm(app: &mut App, s: Surface) {
     let encrypted = app.encrypted;
     let n = notice(app, s);
     let Some(next) = n.confirming else { return };
-    if n.pending {
+    if n.pending.is_some() {
         return;
     }
     if let Some(issue) = model::auth_issue(encrypted, &n.secret.text) {
@@ -131,7 +150,11 @@ fn confirm(app: &mut App, s: Surface) {
     if app.send("ui.wallets.update", args, tag).is_some() {
         let n = notice_mut(app, s);
         n.error = None;
-        n.pending = true;
+        n.pending = Some(Submitted {
+            wallet: n.wallet.clone(),
+            scope: next,
+            follow_up: true,
+        });
     }
 }
 
@@ -163,23 +186,29 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         app.refresh_reads();
         return;
     }
-    let next = {
-        let n = notice_mut(app, s);
-        n.pending = false;
-        n.confirming
+    // The reply belongs to the update as it was sent, not to whatever the notice shows now.
+    let Some(sent) = notice_mut(app, s).pending.take() else {
+        return;
     };
+    let shown_here = notice(app, s).wallet == sent.wallet;
     if r.error.is_some() {
-        notice_mut(app, s).error = Some(failure(r, ""));
+        if shown_here {
+            notice_mut(app, s).error = Some(failure(r, ""));
+        }
         return;
     }
-    let Some(next) = next else { return };
-    let confirmed = {
+    if shown_here {
         let n = notice_mut(app, s);
-        n.confirming = None;
-        n.secret = TextEdit::default();
-        n.wallet.clone()
-    };
+        if n.confirming == Some(sent.scope) {
+            n.confirming = None;
+            n.secret = TextEdit::default();
+        }
+    }
     app.refresh_reads();
+    if !sent.follow_up || !shown_here {
+        return;
+    }
+    let (next, confirmed) = (sent.scope, sent.wallet);
     match s {
         Surface::Card => {
             // The follow-up requests belong to the wallet whose scope changed: once the card shows
@@ -197,7 +226,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         Surface::Import => {
             let replay = model::Replay::usable(app.wallets.add.last_import_replay.as_ref())
                 .cloned()
-                .filter(|_| next == Scope::Crypto);
+                .filter(|r| next == Scope::Crypto && r.wallet == confirmed);
             match replay {
                 Some(replay) => {
                     if app
@@ -276,7 +305,7 @@ pub fn view(app: &App, tk: &Tk, i: Input) -> Option<El> {
         return None;
     }
     let confirming = st.and_then(|n| n.confirming);
-    let busy = i.disabled || st.is_some_and(|n| n.pending || n.reimport_pending);
+    let busy = i.disabled || st.is_some_and(|n| n.pending.is_some() || n.reimport_pending);
     let surface = i.surface;
     let wallet = i.wallet.to_owned();
     let muted = |s: String| xs(tk, s, tk.muted_fg);
@@ -547,7 +576,11 @@ mod tests {
             app.wallets.assets.card = Notice {
                 wallet: "a".into(),
                 confirming: Some(Scope::Crypto),
-                pending: true,
+                pending: Some(Submitted {
+                    wallet: "a".into(),
+                    scope: Scope::Crypto,
+                    follow_up: true,
+                }),
                 ..Notice::default()
             };
             on_reply(
@@ -599,5 +632,36 @@ mod tests {
             text.starts_with("A, B, C, D, E") && text.contains('2'),
             "{text}"
         );
+    }
+    /// With A's scope update in flight, the card moves to B and B's confirmation opens without
+    /// being submitted. A's reply acts for A only: it neither syncs B (B never consented) nor
+    /// closes B's confirmation, and B's cannot be sent while A's is in flight.
+    #[test]
+    fn a_reply_acts_for_its_own_wallet_after_another_confirmation_opens() {
+        let mut app = crate::app::tests::quiet_app();
+        app.encrypted = true;
+        app.wallets.add.exchange.sync.wallet = Some("a".into());
+        begin(&mut app, Surface::Card, "a", Scope::Crypto);
+        app.wallets.assets.card.secret = TextEdit::new("pw");
+        confirm(&mut app, Surface::Card);
+        assert_eq!(sent(&app, "ui.wallets.update"), 1);
+        app.wallets.add.exchange.sync.wallet = Some("b".into());
+        begin(&mut app, Surface::Card, "b", Scope::Crypto);
+        app.wallets.assets.card.secret = TextEdit::new("pw");
+        confirm(&mut app, Surface::Card);
+        assert_eq!(sent(&app, "ui.wallets.update"), 1);
+        on_reply(
+            &mut app,
+            "wallets.assets.card.update",
+            &reply(json!({}), None, None),
+        );
+        assert_eq!(sent(&app, "ui.connections.exchange.sync"), 0);
+        assert_eq!(sent(&app, "ui.connections.exchange.status"), 0);
+        let n = &app.wallets.assets.card;
+        assert_eq!(
+            (n.wallet.as_str(), n.confirming),
+            ("b", Some(Scope::Crypto))
+        );
+        assert_eq!(n.pending, None);
     }
 }

@@ -609,3 +609,29 @@ fn bitfinex_reads_a_standalone_csv_with_a_bom_like_one_without() {
     };
     assert_eq!(outcome(format!("\u{feff}{TRADES_CSV}")), outcome(TRADES_CSV.to_owned()));
 }
+
+/// A ledger entry whose DESCRIPTION echoes the request's `bfx-signature` is
+/// unknown, and its refusal would quote the first 80 characters: a prefix
+/// no whole-value scrub finds. The echo refuses the sync before any mapping
+/// error leaves, so no part of the signature does.
+#[test]
+fn bitfinex_refuses_an_echoed_signature_before_quoting_a_mapping_error() {
+    let script = Mutex::new(Script::new());
+    let signatures = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = signatures.clone();
+    let fake = loopback::serve_seeing("bitfinex", move |ordinal, _, target, headers| {
+        let signature = headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("bfx-signature")).unwrap().1.clone();
+        seen.lock().unwrap().push(signature.clone());
+        let mut script = script.lock().unwrap();
+        script.ledger[0][8] = json!(signature);
+        script.reply(ordinal, target)
+    });
+    let run = loopback::run_prepared(&backend("bitfinex", &fake.url), "bitfinex", "", true, online(), &usd);
+    let error = run.result.unwrap_err();
+    assert_eq!(error.code, "credential_echo", "{error:?}");
+    assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
+    let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+    for signature in signatures.lock().unwrap().iter() {
+        assert!(!shown.contains(&signature[..16]), "{shown}");
+    }
+}

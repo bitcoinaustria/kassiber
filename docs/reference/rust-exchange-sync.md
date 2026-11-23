@@ -57,7 +57,11 @@ proxy userinfo) at any length (`HttpClient::display_credentials`).
   credential of at least 16 characters, exactly or behind JSON escapes, the
   client notes it (`HttpClient::echoed`) and `execute` refuses the sync with
   `credential_echo` before anything is stored. Shorter values are ordinary
-  data and never match.
+  data and never match. After such a page, an error a read or the mapping
+  returns (sync and desktop key check alike) that still holds eight or more
+  consecutive characters of a credential once whole values are withheld is
+  replaced by that refusal: an adapter error may quote a truncated field,
+  and no whole-value scrub finds a prefix.
 - Error bodies (accepted 401/403 or raised) are display text: every request
   credential is withheld at any length on their decoded JSON strings, so an
   escape cannot hide one; numbers stay, so error codes survive.

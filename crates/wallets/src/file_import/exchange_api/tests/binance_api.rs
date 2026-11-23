@@ -481,3 +481,38 @@ fn binance_books_only_settled_deposits_and_withdrawals() {
         assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
     }
 }
+
+/// A full-history sync of an empty account reads withdrawal history once per
+/// 89-day window (about 39 reads at 18,000 UID weight each) and Convert
+/// history once per 29-day window (3,000 each); either endpoint allows
+/// 180,000 a minute. On the test's virtual clock no minute may exceed it,
+/// or Binance answers HTTP 429 part way through a normal sync.
+#[test]
+fn binance_paces_withdrawal_and_convert_reads_inside_the_minute_budget() {
+    super::super::binance::PACED.with(|paced| *paced.borrow_mut() = Default::default());
+    let fake = binance(Histories::default());
+    let run = sync(&fake, "bitcoin", true);
+    run.result.unwrap();
+    let reads = super::super::binance::PACED.with(|paced| paced.borrow().1.clone());
+    for (path, weight) in [
+        ("/sapi/v1/capital/withdraw/history", 18_000u64),
+        ("/sapi/v1/convert/tradeFlow", 3_000),
+    ] {
+        let starts: Vec<Duration> = reads
+            .iter()
+            .filter(|(read, _)| read == path)
+            .map(|(_, at)| *at)
+            .collect();
+        assert!(starts.len() > 30, "{path}: {}", starts.len());
+        for (i, first) in starts.iter().enumerate() {
+            let in_minute = starts[i..]
+                .iter()
+                .take_while(|at| **at < *first + Duration::from_secs(60))
+                .count() as u64;
+            assert!(
+                in_minute * weight <= 180_000,
+                "{path}: {in_minute} reads within a minute from {first:?}"
+            );
+        }
+    }
+}
