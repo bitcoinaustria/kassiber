@@ -1440,3 +1440,66 @@ fn bitpanda_bitcoin_scope_points_swaps_at_the_asset_scope() {
         "{error:?}"
     );
 }
+
+/// An ETH buy after the BTC history that pays its fee in BTC.
+fn eth_buy_with_btc_fee(fee: &str) -> J {
+    op(
+        "op-eth-btc-fee",
+        "BUY",
+        vec![
+            with(
+                traded(
+                    tx(
+                        "t-eth-2",
+                        asset(ETH, "1"),
+                        "INCOMING",
+                        "2024-02-01T00:00:00Z",
+                        "w-eth",
+                    ),
+                    "trade-9",
+                ),
+                "fee_amount",
+                btc(fee),
+            ),
+            tx(
+                "t-eth-2-eur",
+                eur("2000"),
+                "OUTGOING",
+                "2024-02-01T00:00:00Z",
+                "w-eur",
+            ),
+        ],
+    )
+}
+
+/// A BTC fee on another asset's trade after the latest BTC transaction is
+/// in no reported BTC balance: the balance is unavailable, not a mismatch.
+#[test]
+fn bitpanda_btc_fee_after_the_latest_btc_transaction_leaves_the_balance_unknown() {
+    let mut script = Script::new();
+    script.operations.push(eth_buy_with_btc_fee("0.01"));
+    let (_, run) = sync_crypto(script);
+    let result = run.result.unwrap();
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "unavailable", "asset": "BTC", "reason": "a BTC fee after a BTC wallet's latest transaction is in no reported balance"}"#
+    );
+}
+
+/// A third-asset BTC fee finer than 1 msat refuses the sync instead of
+/// being rounded.
+#[test]
+fn bitpanda_refuses_a_btc_fee_finer_than_one_msat() {
+    let mut script = Script::new();
+    script
+        .operations
+        .push(eth_buy_with_btc_fee("0.000000000005"));
+    let (_, run) = sync_crypto(script);
+    let error = run.result.unwrap_err();
+    assert!(
+        error.message.contains("finer than 1 msat"),
+        "{}",
+        error.message
+    );
+    assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
+}
