@@ -6351,6 +6351,90 @@ fn provider_swaps_pair_once_and_other_assets_store_exactly() {
     );
 }
 
+/// A provider swap whose leg is already paired elsewhere is refused and the
+/// whole import rolls back; only the exact pair already present is a re-run.
+#[test]
+fn provider_swap_with_a_leg_paired_elsewhere_is_refused_and_the_exact_pair_is_kept() {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET tax_country='at', fiat_currency='EUR' WHERE id='p'")
+        .unwrap();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let leg = |txid: &str, direction: &str, asset: &str, swap: Option<&str>| {
+        let mut row = json!({"txid": txid, "occurred_at": "2025-04-01T10:00:00Z", "direction": direction,
+            "asset": asset, "amount": "0.05", "kind": "swap", "fiat_value": "4000", "fiat_currency": "EUR"});
+        if let Some(swap) = swap {
+            row["swap_ref"] = json!(swap);
+        }
+        row
+    };
+    let id = |external: &str| -> String {
+        conn.query_row(
+            "SELECT id FROM transactions WHERE external_id=?",
+            [external],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pair = |out: &str, into: &str| {
+        kassiber_transfers::execute(
+            &conn,
+            &scope,
+            "transfers.pair",
+            &dict([("tx_out", s(id(out))), ("tx_in", s(id(into)))]),
+        )
+        .unwrap();
+    };
+    // The outbound leg is already paired with another inbound by hand.
+    let first = json!([
+        leg("s-out", "outbound", "BTC", None),
+        leg("other-in", "inbound", "BTC", None),
+    ]);
+    import_kind(&conn, &first.to_string(), Format::Json).unwrap();
+    pair("s-out", "other-in");
+    let transactions = scalar(&conn, "SELECT count(*) FROM transactions");
+    let swap = json!([
+        leg("s-out", "outbound", "BTC", Some("trade-1")),
+        leg("s-in", "inbound", "ETH", Some("trade-1")),
+    ]);
+    let error = import_kind(&conn, &swap.to_string(), Format::Json).unwrap_err();
+    assert_eq!(error.code, "conflict", "{error:?}");
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions"),
+        transactions
+    );
+    assert_eq!(
+        kassiber_transfers::transaction_pairs(&conn, &scope).unwrap(),
+        vec![(id("s-out"), id("other-in"))]
+    );
+
+    // The exact pair, already authored, is kept and not authored again.
+    let exact = json!([
+        leg("t-out", "outbound", "BTC", None),
+        leg("t-in", "inbound", "ETH", None),
+    ]);
+    import_kind(&conn, &exact.to_string(), Format::Json).unwrap();
+    pair("t-out", "t-in");
+    let swap = json!([
+        leg("t-out", "outbound", "BTC", Some("trade-2")),
+        leg("t-in", "inbound", "ETH", Some("trade-2")),
+    ]);
+    let again = import_kind(&conn, &swap.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "swap_pairs"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_transfers::transaction_pairs(&conn, &scope)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
 #[test]
 fn asset_scope_is_validated_and_defaults_to_bitcoin() {
     let conn = fixture();
