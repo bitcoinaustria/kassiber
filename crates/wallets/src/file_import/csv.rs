@@ -3,7 +3,7 @@
 //! get None, duplicate headings overwrite, and blank physical rows are skipped.
 use super::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Row {
     pub data: Json,
     pub headers: Vec<String>,
