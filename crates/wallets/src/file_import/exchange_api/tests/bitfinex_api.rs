@@ -581,3 +581,15 @@ fn bitfinex_keeps_the_millisecond_order_of_one_second() {
     let position = |id: &str| order.iter().position(|o| o == id).unwrap_or_else(|| panic!("{id}: {order:?}"));
     assert!(position("bitfinex:trade:104") < position("bitfinex:movement:303"), "{order:?}");
 }
+
+/// A Reports CSV imported on its own reads like the same member of the zip,
+/// a UTF-8 BOM included.
+#[test]
+fn bitfinex_reads_a_standalone_csv_with_a_bom_like_one_without() {
+    let outcome = |content: String| {
+        let conn = usd_book();
+        let result = import(&conn, content.as_bytes());
+        (result.map_err(|e| e.message), count(&conn, "SELECT count(*) FROM transactions"))
+    };
+    assert_eq!(outcome(format!("\u{feff}{TRADES_CSV}")), outcome(TRADES_CSV.to_owned()));
+}
