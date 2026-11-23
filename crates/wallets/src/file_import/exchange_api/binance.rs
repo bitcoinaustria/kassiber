@@ -16,11 +16,42 @@ const START: u64 = 1_498_867_200_000;
 const DAY: u64 = 86_400_000;
 /// A window that is still full at this span cannot be read completely.
 const SPLIT_FLOOR: u64 = 60_000;
-/// Convert history weighs 3,000 of the account's 180,000 per minute, and
-/// withdrawal history allows 10 requests a second: reads of either are
-/// spaced so one sync stays inside both limits.
-const CONVERT_PACE: Duration = Duration::from_millis(if cfg!(test) { 0 } else { 1_100 });
-const WITHDRAW_PACE: Duration = Duration::from_millis(if cfg!(test) { 0 } else { 120 });
+/// Each UID-limited endpoint allows 180,000 weight a minute. Convert history
+/// weighs 3,000 a read and withdrawal history 18,000, so withdrawal reads
+/// (one per 89-day window, about 39 for the full history) fit ten a
+/// minute: reads of either are spaced so one sync stays inside both budgets
+/// rather than run into HTTP 429, which the shared retry cannot outlast.
+const CONVERT_PACE: Duration = Duration::from_millis(1_100);
+const WITHDRAW_PACE: Duration = Duration::from_millis(6_100);
+
+/// Waits out `pace` before a read.
+#[cfg(not(test))]
+fn wait(pace: Duration) {
+    std::thread::sleep(pace);
+}
+
+/// Tests keep a virtual clock: each wait advances it, and every read is
+/// logged with the time it would start, so pacing is checked without sleeping.
+#[cfg(test)]
+thread_local! {
+    pub(super) static PACED: std::cell::RefCell<(Duration, Vec<(String, Duration)>)> =
+        const { std::cell::RefCell::new((Duration::ZERO, Vec::new())) };
+}
+#[cfg(test)]
+fn wait(pace: Duration) {
+    PACED.with(|paced| paced.borrow_mut().0 += pace);
+}
+#[cfg(test)]
+fn logged(path: &str) {
+    PACED.with(|paced| {
+        let mut paced = paced.borrow_mut();
+        let at = paced.0;
+        paced.1.push((path.to_owned(), at));
+    });
+}
+#[cfg(not(test))]
+fn logged(_path: &str) {}
+
 /// What the balance check compares: the spot account's BTC, free plus locked
 /// in open orders (`GET /api/v3/account`); Funding, Earn and other wallets
 /// are not in it.
@@ -202,8 +233,9 @@ impl Reads<'_, '_> {
             if Instant::now() + pace >= self.client.deadline {
                 return Err(limit());
             }
-            std::thread::sleep(pace);
+            wait(pace);
         }
+        logged(path);
         signed_get(self.client, path, params)
     }
 
