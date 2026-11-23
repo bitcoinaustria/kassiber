@@ -418,6 +418,7 @@ fn binance_supplemental_refuses_a_wallet_holding_transaction_history_rows() {
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = execute(&conn, request, None).unwrap_err();
     std::fs::remove_file(file).unwrap();
