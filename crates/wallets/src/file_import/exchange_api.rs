@@ -1332,9 +1332,11 @@ pub(super) const SAME_SECOND_SQL: &str =
     "SELECT id FROM transactions WHERE profile_id=?1 AND occurred_at=?3 AND wallet_id=?2 AND direction<>?4";
 
 /// After an import into `wallet`: each row it inserted into a second that
-/// already held an opposite-direction row from an earlier import is tagged
-/// [`ORDER_TAG`] with those rows, for review; their order decides FIFO and
-/// LIFO basis. Returns how many rows carry the tag.
+/// holds an opposite-direction row, from an earlier import or from this one,
+/// is tagged [`ORDER_TAG`] with those rows, for review; their order decides
+/// FIFO and LIFO basis, and stored times are whole seconds, so the journals
+/// cannot tell the provider's sub-second order. Returns how many rows carry
+/// the tag.
 pub(super) fn tag_same_second(
     conn: &Connection,
     profile: &str,
@@ -1342,7 +1344,6 @@ pub(super) fn tag_same_second(
     inserted: &[String],
     ids: &mut Ids<'_>,
 ) -> Result<i64, AppError> {
-    let new: std::collections::BTreeSet<&str> = inserted.iter().map(String::as_str).collect();
     let mut uncertain = std::collections::BTreeSet::<String>::new();
     let mut row = conn
         .prepare("SELECT occurred_at, direction FROM transactions WHERE id=?")
@@ -1359,10 +1360,6 @@ pub(super) fn tag_same_second(
             .map_err(database_error)?
             .collect::<Result<Vec<String>, _>>()
             .map_err(database_error)?;
-        let earlier: Vec<String> = earlier
-            .into_iter()
-            .filter(|e| !new.contains(e.as_str()))
-            .collect();
         if !earlier.is_empty() {
             uncertain.insert(id.clone());
             uncertain.extend(earlier);
