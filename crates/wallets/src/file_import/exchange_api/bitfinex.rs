@@ -181,13 +181,22 @@ fn exact(json: &Json) -> Py {
     }
 }
 
+/// Whether a permission entry is shaped like a Bitfinex scope name
+/// (`orders`, `ui_withdraw`). Only such names are quoted in a refusal: any
+/// other text could be an echoed key or signature, and the credential scrub
+/// only withholds whole spellings (docs/reference/credential-echo.md).
+fn scope_name(scope: &str) -> bool {
+    (1..=32).contains(&scope.len()) && scope.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+}
+
 /// `/v2/auth/r/permissions`: `[[scope, read, write], ...]` with 0/1 flags.
-/// Any write flag refuses the key before any history is read.
+/// Any write flag refuses the key before any history is read; writable
+/// entries that are not scope names are counted, never quoted.
 fn refuse_write_keys(client: &Client<'_>) -> Result<(), AppError> {
     let Py::List(rows) = post(client, "v2/auth/r/permissions", "{}")? else {
         return Err(protocol("Bitfinex permissions were not a JSON array"));
     };
-    let mut writable = vec![];
+    let (mut writable, mut unnamed) = (vec![], 0i64);
     for row in &rows {
         let flag = |at: usize| match field(row, at).and_then(integer) {
             Some(n @ 0..=1) => Some(n == 1),
@@ -200,13 +209,21 @@ fn refuse_write_keys(client: &Client<'_>) -> Result<(), AppError> {
             ));
         };
         if write {
-            writable.push(s(scope.chars().take(40).collect::<String>()));
+            if scope_name(scope) {
+                writable.push(s(scope));
+            } else {
+                unnamed += 1;
+            }
         }
     }
-    if !writable.is_empty() {
+    if !writable.is_empty() || unnamed > 0 {
+        let mut details = vec![("write_permissions", Py::List(writable))];
+        if unnamed > 0 {
+            details.push(("other_write_permissions", Py::from(unnamed)));
+        }
         return Err(AppError::new("auth_error", "This Bitfinex API key has write permissions; Kassiber only accepts read-only keys")
             .with_hint("Create a Bitfinex API key with only read permissions (nothing to create, cancel, offer, transfer, withdraw or edit), store it in this backend, and delete the old key.")
-            .with_details(dict([("write_permissions", Py::List(writable))])));
+            .with_details(dict(details)));
     }
     Ok(())
 }
