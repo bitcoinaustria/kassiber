@@ -298,3 +298,36 @@ fn untallied_formats_refuse_assets_their_wallet_does_not_hold() {
         }
     }
 }
+
+/// A crypto-scope quantity finer than 11 decimals is refused, even past the
+/// 32 digits the reference's rounded `abs` keeps: the mappers hand the
+/// provider's exact digits to the precision check.
+#[test]
+fn supplemental_csvs_refuse_quantities_finer_than_the_stored_unit() {
+    let fine = "1.0000000000000000000000000000000000000001";
+    for (format, content) in [
+        (
+            Format::Binance,
+            format!("{DIVIDENDS}d1,{fine},ETH,1735787045000,Staking\n"),
+        ),
+        (
+            Format::Binance,
+            format!("{AUTO}2025-01-02 03:04:05,ETH,100.00 EUR,1.00 EUR,{fine} ETH,Spot\n"),
+        ),
+        (
+            Format::LedgerLive,
+            format!("{LEDGER}2025-01-03T01:02:03Z,ETH,IN,{fine},0,h2,Ethereum\n"),
+        ),
+        (
+            Format::Coinfinity,
+            format!("{COINFINITY}o1,buy,2025-01-02,100,{fine},ETH,,0,1,t1\n"),
+        ),
+    ] {
+        let error = run(format, "crypto", &content).unwrap_err();
+        assert!(
+            error.message.contains("has more than 11 decimal places"),
+            "{format:?}: {}",
+            error.message
+        );
+    }
+}

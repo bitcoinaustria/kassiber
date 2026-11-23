@@ -563,7 +563,10 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
 /// (docs/plan/24-crypto-assets.md): one trade, so both legs carry that
 /// value. A swap without a Bitcoin leg, or whose Bitcoin leg has no cached
 /// rate, stays unpriced, and a Bitcoin row (a transfer between own wallets
-/// included) is never priced from its pair. The leg keeps the priced leg's
+/// included) is never priced from its pair. Only a Bitcoin leg's cached
+/// value counts (another asset given a market-price source by hand does
+/// not), and a pair converting only part of its source transaction (a
+/// reviewed `out_amount`) prices nothing. The leg keeps the priced leg's
 /// provenance, so repricing that pair clears both legs.
 ///
 /// A counter-leg price is derived, never a stored fact: each pass clears
@@ -652,7 +655,23 @@ fn counter_legs(
         "SELECT fiat_value_exact,fiat_currency,pricing_source_kind,pricing_provider,pricing_pair,
             pricing_timestamp,pricing_fetched_at,pricing_granularity,pricing_quality
          FROM transactions WHERE id=? AND profile_id=? AND excluded=0 AND fiat_price_source='rates_cache'
-            AND pricing_source_kind IN ('fmv_provider','manual_rate_cache')",
+            AND pricing_source_kind IN ('fmv_provider','manual_rate_cache')
+            AND upper(trim(asset)) IN ('BTC','LBTC')",
+    )?;
+    // A pair that converts only part of its source transaction (a reviewed
+    // `out_amount`): the counter-leg is no copy of the whole leg's value.
+    let mut partial = conn.prepare_cached(
+        "SELECT EXISTS(SELECT 1 FROM custody_component_economic_terms term
+            JOIN custody_component_legs source ON source.id=term.source_leg_id
+            JOIN custody_component_legs target ON target.id=term.target_leg_id
+            JOIN transactions tx ON tx.id=COALESCE(source.anchor_transaction_id,source.transaction_id)
+         WHERE term.profile_id=? AND term.term_kind='transaction_pair'
+            AND COALESCE(source.anchor_transaction_id,source.transaction_id)=?
+            AND COALESCE(target.anchor_transaction_id,target.transaction_id)=?
+            AND term.reviewed_source_amount_msat IS NOT NULL
+            AND term.reviewed_source_amount_msat != CASE
+                WHEN tx.direction='outbound' AND COALESCE(tx.amount_includes_fee,0)!=0
+                THEN tx.amount-COALESCE(tx.fee,0) ELSE tx.amount END)",
     )?;
     let mut update = conn.prepare_cached("UPDATE transactions SET fiat_rate=?,fiat_value=?,fiat_price_source='rates_cache',fiat_rate_exact=?,fiat_value_exact=?,
         pricing_source_kind=?,pricing_provider=?,pricing_pair=?,pricing_timestamp=?,pricing_fetched_at=?,
@@ -665,11 +684,18 @@ fn counter_legs(
     };
     let mut count = 0;
     for (out, into) in pairs {
+        let part = (unpriced.contains_key(out.as_str()) || unpriced.contains_key(into.as_str()))
+            && partial.query_row(params![scope.profile_id, out, into], |r| {
+                r.get::<_, bool>(0)
+            })?;
         let (row, other) = match (unpriced.get(out.as_str()), unpriced.get(into.as_str())) {
             (Some(row), None) => (*row, into),
             (None, Some(row)) => (*row, out),
             _ => continue,
         };
+        if part {
+            continue;
+        }
         let mut found = cached.query(params![other, scope.profile_id])?;
         let Some(leg) = found.next()? else {
             continue;
