@@ -559,3 +559,37 @@ fn bitfinex_counts_other_assets_as_unread_in_either_scope() {
     let imported = import(&conn, &all_three()).unwrap();
     assert_eq!(dump(at(&imported, "assets")), left_out("crypto", 2));
 }
+
+/// A buy at .100 and a withdrawal at .900 of one second are stored in that
+/// order: the merge of trades and movements keeps the API's milliseconds.
+#[test]
+fn bitfinex_keeps_the_millisecond_order_of_one_second() {
+    let second = JAN1 + 5 * DAY;
+    let mut script = Script::new();
+    script.ledger.retain(|entry| entry[0] != json!(10));
+    script.ledger.push(ledger(10, "exchange", second + 900, "-0.001", "Bitcoin Withdrawal #303 on wallet exchange"));
+    script.ledger.push(ledger(11, "exchange", second + 100, "0.003", "Exchange 0.003 BTC for USD @ 40000.0 on wallet exchange"));
+    script.trades.push(trade(104, "tBTCUSD", second + 100, "0.003", "40000.0", "EXCHANGE MARKET", "-0.12", "USD"));
+    script.movements.retain(|row| row[0] != json!("303"));
+    script.movements.push(movement(303, second + 900, "COMPLETED", "-0.001", "0", None));
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    let Py::List(inserted) = at(&result, "inserted_records") else {
+        panic!("inserted records")
+    };
+    let order: Vec<String> = inserted.iter().map(|r| lossy(&text(at(r, "external_id")))).collect();
+    let position = |id: &str| order.iter().position(|o| o == id).unwrap_or_else(|| panic!("{id}: {order:?}"));
+    assert!(position("bitfinex:trade:104") < position("bitfinex:movement:303"), "{order:?}");
+}
+
+/// A Reports CSV imported on its own reads like the same member of the zip,
+/// a UTF-8 BOM included.
+#[test]
+fn bitfinex_reads_a_standalone_csv_with_a_bom_like_one_without() {
+    let outcome = |content: String| {
+        let conn = usd_book();
+        let result = import(&conn, content.as_bytes());
+        (result.map_err(|e| e.message), count(&conn, "SELECT count(*) FROM transactions"))
+    };
+    assert_eq!(outcome(format!("\u{feff}{TRADES_CSV}")), outcome(TRADES_CSV.to_owned()));
+}

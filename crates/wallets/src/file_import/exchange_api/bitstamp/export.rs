@@ -63,6 +63,17 @@ pub(super) fn load(file: &str, mapper: &mut Mapper) -> Result<(), AppError> {
     let mut events = vec![];
     // Line 1 is the header.
     for (line, row) in (2..).zip(&rows) {
+        // A row cut short leaves its last cells missing, not empty: an absent
+        // fee is no confirmed zero fee.
+        if row.headers.iter().any(|header| row.data[header].is_null()) {
+            return Err(AppError::new(
+                "validation",
+                format!("Bitstamp CSV line {line} has fewer cells than the header"),
+            )
+            .with_hint(
+                "Export the file from Bitstamp again; Kassiber does not guess a missing cell.",
+            ));
+        }
         let columns = Columns::new(row);
         accounts.extend(columns.opt(&["Account"]));
         let event = event(line, &columns, scope)?;
