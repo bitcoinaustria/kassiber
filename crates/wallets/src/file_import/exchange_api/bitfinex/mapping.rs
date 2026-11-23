@@ -27,6 +27,8 @@ pub(in crate::file_import::exchange_api) struct Trade {
     pub id: String,
     pub symbol: String,
     pub at: PyStr,
+    /// The API's millisecond time, which orders events within a second.
+    pub ms: Option<i64>,
     /// Signed (positive bought the base currency), as the fee (negative charges).
     pub amount: Decimal,
     pub price: Decimal,
@@ -42,6 +44,7 @@ pub(in crate::file_import::exchange_api) struct Movement {
     pub rail: Option<String>,
     pub started: PyStr,
     pub at: PyStr,
+    pub ms: Option<i64>,
     pub status: String,
     /// Signed: positive deposits; the fees are negative.
     pub amount: Decimal,
@@ -55,6 +58,7 @@ pub(in crate::file_import::exchange_api) struct LedgerEntry {
     pub currency: String,
     pub wallet: String,
     pub at: PyStr,
+    pub ms: Option<i64>,
     pub amount: Decimal,
     pub description: String,
     pub raw: Py,
@@ -87,6 +91,10 @@ pub(in crate::file_import::exchange_api) trait Fields {
     fn text(&self, field: (usize, &str)) -> String;
     fn number(&self, field: (usize, &str), optional: bool) -> Result<Decimal, AppError>;
     fn time(&self, field: (usize, &str)) -> Result<PyStr, AppError>;
+    /// The millisecond time where the source states one (the API).
+    fn millis(&self, _field: (usize, &str)) -> Option<i64> {
+        None
+    }
     /// A field only the API has (order type, rail).
     fn api_only(&self, at: usize) -> Option<String>;
     fn raw(&self) -> Py;
@@ -97,6 +105,7 @@ pub(in crate::file_import::exchange_api) fn read_trade(f: &impl Fields) -> Resul
         id: f.id()?,
         symbol: f.text((1, "PAIR")),
         at: f.time((2, "DATE"))?,
+        ms: f.millis((2, "DATE")),
         amount: f.number((4, "AMOUNT"), false)?,
         price: f.number((5, "PRICE"), false)?,
         order_type: f.api_only(6),
@@ -116,6 +125,7 @@ pub(in crate::file_import::exchange_api) fn read_movement(
         rail: f.api_only(2),
         started: f.time((5, "STARTED"))?,
         at: f.time((6, "UPDATED"))?,
+        ms: f.millis((6, "UPDATED")),
         status: f.text((9, "STATUS")),
         amount: f.number((12, "AMOUNT"), false)?,
         fees: f.number((13, "FEES"), true)?,
@@ -132,6 +142,7 @@ pub(in crate::file_import::exchange_api) fn read_ledger(
         currency: f.text((1, "CURRENCY")),
         wallet: f.text((2, "WALLET")),
         at: f.time((3, "DATE"))?,
+        ms: f.millis((3, "DATE")),
         amount: f.number((5, "AMOUNT"), false)?,
         description: f.text((8, "DESCRIPTION")),
         raw: f.raw(),
@@ -497,12 +508,13 @@ pub(in crate::file_import::exchange_api) fn map(
     mapper: &mut Mapper,
 ) -> Result<(), AppError> {
     let (mut not_btc, mut canceled, mut unfinished) = (0i64, 0i64, 0i64);
-    let mut records: Vec<(PyStr, Event)> = vec![];
+    // Keyed by stored time and, within a second, the source's milliseconds.
+    let mut records: Vec<((PyStr, Option<i64>), Event)> = vec![];
     let mut booked: Vec<Booked> = vec![];
     for row in unique(sources.trades, "trade", |r| (&r.id, &r.raw))? {
         match trade(row)? {
             Some((record, kept)) => {
-                records.push((row.at.clone(), record));
+                records.push(((row.at.clone(), row.ms), record));
                 booked.push(kept);
             }
             None => {
@@ -618,7 +630,7 @@ pub(in crate::file_import::exchange_api) fn map(
                 book(row, fits, "fits no completed withdrawal with that fee")?;
             }
             Described::FundingPayment if wallet == "funding" && row.amount.is_positive() => {
-                records.push((row.at.clone(), interest(row)?));
+                records.push(((row.at.clone(), row.ms), interest(row)?));
             }
             Described::Transfer(amount, from, to)
                 if [&from, &to]
@@ -704,7 +716,7 @@ pub(in crate::file_import::exchange_api) fn map(
             };
             return Err(refuse("movement", &row.id, "withdrawal", reason).with_hint(COMPLETE));
         }
-        records.push((row.at.clone(), movement(row, unproven)?));
+        records.push(((row.at.clone(), row.ms), movement(row, unproven)?));
     }
     // Oldest first; Bitfinex lists newest first.
     records.reverse();

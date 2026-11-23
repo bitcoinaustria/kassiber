@@ -340,6 +340,9 @@ impl mapping::Fields for Api<'_> {
         let mts = integer(self.at(at)).ok_or_else(|| self.fail("time"))?;
         epoch(&Py::from(mts), true)?.ok_or_else(|| self.fail("time"))
     }
+    fn millis(&self, (at, _): (usize, &str)) -> Option<i64> {
+        integer(self.at(at))
+    }
     fn api_only(&self, at: usize) -> Option<String> {
         Some(self.text((at, "")))
     }
