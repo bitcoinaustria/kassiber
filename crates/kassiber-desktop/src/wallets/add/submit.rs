@@ -2599,6 +2599,8 @@ mod tests {
                 stay_open: false,
                 form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
                 replay: None,
+                sent: None,
+                import_after: None,
             });
             let reply = Reply {
                 kind: "ui.wallets.import_file".into(),
