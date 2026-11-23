@@ -226,6 +226,9 @@ fn bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice() {
     let ignored = kassiber_pyjson::dumps(at(&result, "corrections_ignored"), &kassiber_pyjson::Options::new().sort_keys(true)).unwrap();
     assert!(ignored.contains(r#""external_id": "bitvavo:dep-btc", "field": "amount", "file": "0.006", "stored": "0.005""#), "{ignored}");
     assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:dep-btc'"), 1);
+    // The answer is remembered: the next sync of the same history asks nothing.
+    let again = sync(None).unwrap();
+    assert_eq!(at(&again, "imported"), &Py::from(0));
 }
 
 /// One BTC row Kassiber cannot book exactly refuses the whole sync by name,
