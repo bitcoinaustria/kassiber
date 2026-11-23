@@ -111,10 +111,12 @@ CSV states the quote amount after the fee. The API does not document it:
 the single reading that fits is used, and when both fit (a fee under two
 cents) the trade imports unpriced ("fee treatment unclear"), so `journals
 process` holds it until the user prices it. Rows are stored oldest first by
-their millisecond time. A row an import adds into a second that holds an
-opposite-direction row, from an earlier import or the same one, is tagged
+their millisecond time. A row an import adds into a second that already
+holds an opposite-direction row from an earlier import is tagged
 `same-second-order-uncertain` for review with it, since stored times are whole
-seconds and the journals cannot tell the milliseconds apart.
+seconds. An API sync records no source positions, so its own rows sharing a
+second with an opposite-direction row are tagged too; a CSV import keeps its
+rows' order as their source positions.
 
 ## Refusals
 
