@@ -728,6 +728,50 @@ fn kraken_bitcoin_only_answer_syncs_the_ledger_its_scope_reads() {
     assert_eq!(at(&result, "imported"), &Py::from(3), "{result:?}");
 }
 
+/// A ledger with valid BTC history and an ETH row the crypto scope cannot
+/// map still previews: Bitcoin only, with the crypto scope's reason and no
+/// asset choice, and its token lets the Bitcoin-only sync import.
+#[test]
+fn kraken_preview_falls_back_to_bitcoin_when_only_the_crypto_mapping_refuses() {
+    let t = 1_700_000_000;
+    let mut ledger = mixed_ledger();
+    ledger.push(("M1", row("margin", "XETH", "1", "0", "", t)));
+    let fake = kraken(ledger, fiat_trade());
+    let gate = Gate::new(
+        || kassiber_net::Offline::Online,
+        kassiber_net::Ledger::default(),
+    );
+    let conn = crate::file_import::tests::fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='EUR'; INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let preview =
+        desktop::preview(&conn, &backend("kraken", &fake.url), &gate, "test", consent).unwrap();
+    assert_eq!(at(&preview, "bitcoin_only"), &Py::Bool(true), "{preview:?}");
+    assert_eq!(at(&preview, "choice"), &Py::Bool(false), "{preview:?}");
+    assert!(
+        lossy(&text(at(&preview, "crypto_error"))).contains("unsupported type 'margin'"),
+        "{preview:?}"
+    );
+    let token = lossy(&text(at(&preview, "preview_token")));
+    wallet("bitcoin")(&conn);
+    let consent = &mut |route: &Route| Some(Consent::explicit_trigger(route.request()));
+    let result = execute_with(
+        &conn,
+        "p",
+        "",
+        &backend("kraken", &fake.url),
+        "kraken",
+        &gate,
+        "test",
+        consent,
+        None,
+        None,
+        Some(&token),
+    )
+    .unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(3), "{result:?}");
+}
+
 /// The scope filters a trade by its principal legs: a Buy Crypto of ETH
 /// that pays its fee in BTC is no BTC trade. Each scope books the BTC fee
 /// as the same fee-only row; only the crypto scope books the ETH.

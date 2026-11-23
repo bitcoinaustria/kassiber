@@ -173,14 +173,20 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         return;
     }
     let Some(next) = next else { return };
-    {
+    let confirmed = {
         let n = notice_mut(app, s);
         n.confirming = None;
         n.secret = TextEdit::default();
-    }
+        n.wallet.clone()
+    };
     app.refresh_reads();
     match s {
         Surface::Card => {
+            // The follow-up requests belong to the wallet whose scope changed: once the card shows
+            // another wallet, nothing is sent for either (its provider was not asked).
+            if crate::wallets::add::exchange::shown_wallet(app) != Some(confirmed.as_str()) {
+                return;
+            }
             crate::wallets::add::exchange::refresh_status(app);
             // Turning other assets on syncs again so the skipped rows arrive; turning them off
             // only affects later syncs.
@@ -462,6 +468,13 @@ fn surface_key(s: Surface) -> &'static str {
 }
 
 /// `ImportAssetsSummary`: the notice under an import result, for the wallet it imported into.
+/// Whether an import result asks for the asset choice (the `bitcoin` scope skipped crypto rows
+/// the user can track): its summary stays open so the choice can be made.
+pub fn actionable(result: &Value) -> bool {
+    model::read(result.get("assets"))
+        .is_some_and(|a| a.scope == Scope::Bitcoin && !a.skipped.is_empty())
+}
+
 pub fn import_view(app: &App, tk: &Tk, result: &Value) -> Option<El> {
     let parsed = model::read(result.get("assets"));
     let pairs = result.get("swap_pairs").and_then(Value::as_u64);
@@ -518,6 +531,60 @@ mod tests {
         assert_eq!(failure(&r, ""), t("connections:assets.confirm.errorDenied"));
         let r = reply(Value::Null, Some("wallet not found"), Some("not_found"));
         assert_eq!(failure(&r, ""), "wallet not found");
+    }
+
+    fn sent(app: &App, kind: &str) -> usize {
+        app.pending.values().filter(|(_, k, _)| k == kind).count()
+    }
+
+    /// Tracking other assets confirmed for wallet A syncs A, and nothing once the card shows
+    /// wallet B: B's provider is never contacted for A's choice.
+    #[test]
+    fn a_confirmed_scope_change_syncs_only_its_own_wallet() {
+        for (shown, syncs) in [("a", 1), ("b", 0)] {
+            let mut app = crate::app::tests::quiet_app();
+            app.wallets.add.exchange.sync.wallet = Some(shown.into());
+            app.wallets.assets.card = Notice {
+                wallet: "a".into(),
+                confirming: Some(Scope::Crypto),
+                pending: true,
+                ..Notice::default()
+            };
+            on_reply(
+                &mut app,
+                "wallets.assets.card.update",
+                &reply(json!({}), None, None),
+            );
+            assert_eq!(sent(&app, "ui.connections.exchange.sync"), syncs, "{shown}");
+            assert_eq!(
+                sent(&app, "ui.connections.exchange.status"),
+                syncs,
+                "{shown}"
+            );
+        }
+    }
+
+    /// The scope refresh waits in the status queue like the card's first read, so its reply
+    /// updates the card instead of being dropped.
+    #[test]
+    fn the_scope_refresh_is_queued_for_its_reply() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.add.exchange.sync.wallet = Some("a".into());
+        crate::wallets::add::exchange::refresh_status(&mut app);
+        assert_eq!(
+            app.wallets.add.exchange.statuses.back().map(String::as_str),
+            Some("a")
+        );
+    }
+
+    #[test]
+    fn an_import_with_skipped_crypto_rows_asks_for_the_asset_choice() {
+        let skipped =
+            json!({"assets": {"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {}}});
+        assert!(actionable(&skipped));
+        let kept = json!({"assets": {"scope": "crypto", "skipped": {}, "excluded": {}}});
+        assert!(!actionable(&kept));
+        assert!(!actionable(&json!({"imported": 3})));
     }
 
     #[test]

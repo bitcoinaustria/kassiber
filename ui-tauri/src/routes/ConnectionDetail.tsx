@@ -661,10 +661,13 @@ function ConnectionDetailView({
     connection,
     walletDetail,
   );
-  // Exchange API wallets sync from their exchange on Sync now only.
-  const exchangeKind = isExchangeKind(walletDetail?.kind)
-    ? walletDetail.kind
-    : null;
+  // Exchange API wallets sync from their exchange on Sync now only. A wallet
+  // of an exchange kind without an API key (a CSV export) refreshes from its
+  // file like any other.
+  const exchangeKind =
+    isExchangeKind(walletDetail?.kind) && walletDetail?.backend?.name
+      ? walletDetail.kind
+      : null;
   const exchangeSync = useExchangeSync({
     walletId: connection.id,
     label: connection.label,

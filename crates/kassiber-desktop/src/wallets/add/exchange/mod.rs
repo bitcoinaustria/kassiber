@@ -340,10 +340,17 @@ pub fn sync_pending(app: &App) -> bool {
 }
 
 /// `status.refetch()` for the wallet on screen (after its asset scope changed).
+/// The wallet the exchange card shows.
+pub fn shown_wallet(app: &App) -> Option<&str> {
+    st(app).sync.wallet.as_deref()
+}
+
 pub fn refresh_status(app: &mut App) {
     let Some(wallet) = st(app).sync.wallet.clone() else {
         return;
     };
+    // The reply handler takes its wallet from this queue, as for `sync_prime`'s request.
+    stm(app).statuses.push_back(wallet.clone());
     app.send(
         "ui.connections.exchange.status",
         json!({"wallet": wallet}),

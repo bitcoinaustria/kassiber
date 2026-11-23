@@ -1557,10 +1557,10 @@ fn finish(app: &mut App) {
     app.send("ui.wallets.list", Value::Null, "wallets.add.wallets");
     // A Bisq import that held trades keeps its summary open: those trades booked nothing, and
     // the toast alone would read as success.
-    let held = st(app)
-        .last_import
-        .as_ref()
-        .is_some_and(|r| !super::bisq::held_lines(r).is_empty());
+    // So does one whose skipped crypto rows the user can still choose to track.
+    let held = st(app).last_import.as_ref().is_some_and(|r| {
+        !super::bisq::held_lines(r).is_empty() || crate::wallets::assets::actionable(r)
+    });
     if !job.stay_open && !held {
         app.ov.add_open = false;
     }
@@ -2572,6 +2572,43 @@ mod tests {
             assert!(st(&app).job.is_none());
             assert_eq!(app.ov.add_open, open);
             assert!(st(&app).last_import.is_some());
+        }
+    }
+
+    /// A provider-file import whose bitcoin scope skipped crypto rows keeps its summary open, so
+    /// "Also track these assets" can be chosen; a plain one closes.
+    #[test]
+    fn an_import_with_skipped_crypto_rows_keeps_its_summary_open() {
+        for (assets, open) in [
+            (
+                json!({"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {}}),
+                true,
+            ),
+            (
+                json!({"scope": "bitcoin", "skipped": {}, "excluded": {}}),
+                false,
+            ),
+        ] {
+            let mut app = crate::app::tests::quiet_app();
+            app.ov.add_open = true;
+            stm(&mut app).job = Some(Job {
+                stage: Stage::ImportFile,
+                label: "CoinTracking".into(),
+                syncs: VecDeque::new(),
+                done: None,
+                stay_open: false,
+                form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+                replay: None,
+            });
+            let reply = Reply {
+                kind: "ui.wallets.import_file".into(),
+                data: json!({"imported": 3, "assets": assets}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            };
+            on_job(&mut app, &reply);
+            assert_eq!(app.ov.add_open, open);
         }
     }
 

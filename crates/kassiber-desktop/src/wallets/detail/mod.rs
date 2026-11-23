@@ -993,6 +993,27 @@ mod transient_tests {
         assert!(!follow_generation(&mut app), "once per refresh");
     }
 
+    /// A Binance wallet imported from its Transaction History CSV (no API key) is a file
+    /// wallet; with a key attached it is an exchange API connection.
+    #[test]
+    fn an_exchange_kind_is_an_api_connection_only_with_a_key() {
+        let mut app = crate::app::tests::quiet_app();
+        let c = Conn {
+            id: "w1".into(),
+            kind: "binance".into(),
+            label: "Binance".into(),
+            ..Conn::default()
+        };
+        for (backend, api) in [("", false), ("binance-key", true)] {
+            app.wallets.detail.wallets = Read::Ready(vec![json!({
+                "id": "w1", "label": "Binance", "kind": "binance",
+                "backend": {"name": backend, "source": "", "kind": ""},
+                "sync_mode": if api { "backend_exchange" } else { "file" },
+            })]);
+            assert_eq!(exchange_kind(&app, &c).is_some(), api, "{backend:?}");
+        }
+    }
+
     #[test]
     fn leaving_the_wallet_page_keeps_reads_and_drops_page_state() {
         let mut s = State {

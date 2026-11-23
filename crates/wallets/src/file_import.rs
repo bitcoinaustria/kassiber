@@ -2726,6 +2726,9 @@ fn apply_records(
         if updated_count > 0 {
             result.push(("updated", Py::from(updated_count)));
         }
+        // An API sync records no import run, so its `skip` answers stand
+        // until the user answers otherwise.
+        changed::remember(conn, &wallet.id, &answered, None)?;
         return Ok(dict(result));
     }
     if request.format == Format::Phoenix {

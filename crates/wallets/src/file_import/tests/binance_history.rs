@@ -393,3 +393,38 @@ fn binance_history_numbers_identical_rows_and_keeps_out_of_api_wallets() {
     let error = import("bitcoin", "", "{}").0;
     assert!(error.is_ok());
 }
+
+/// The reverse order: a supplemental CSV into a wallet holding Transaction
+/// History rows is refused, since the history already holds its rewards.
+#[test]
+fn binance_supplemental_refuses_a_wallet_holding_transaction_history_rows() {
+    let conn = fixture();
+    conn.execute_batch(
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,kind,description,counterparty,raw_json,created_at) VALUES('h','ws','p','wallet','binance:csv:abc','fp-h','2023-11-15T22:13:20Z','inbound','BTC',2000000,0,'income','Binance','Binance','{}','fixed')",
+    )
+    .unwrap();
+    let content = "id,amount,asset,divTime,enInfo\nd1,0.00002,BTC,1700086400000,Staking\n";
+    let file = std::env::temp_dir().join(format!(
+        "kassiber-binance-supplemental-{}-{:?}.csv",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::write(&file, content).unwrap();
+    let request = Request {
+        profile_id: "p".into(),
+        wallet: "Source".into(),
+        file: file.to_str().unwrap().into(),
+        format: Format::Binance,
+        mode: Some("full".into()),
+        companion: None,
+        timezone: None,
+        changed_rows: None,
+    };
+    let error = execute(&conn, request, None).unwrap_err();
+    std::fs::remove_file(file).unwrap();
+    assert_eq!(
+        error.message,
+        "This wallet holds rows of Binance's Transaction History export, which the supplemental CSV cannot be matched to"
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+}

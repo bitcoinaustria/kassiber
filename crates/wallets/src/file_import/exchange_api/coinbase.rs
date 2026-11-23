@@ -221,6 +221,14 @@ pub(super) fn map(accounts: &[Account], mapper: &mut Mapper) -> Result<(), AppEr
     let mut fees = BTreeMap::new();
     for (index, (row, class)) in rows.iter().enumerate() {
         if !mapper.admit_classed(&[(&row.currency, *class)]) {
+            // The bitcoin scope leaves another asset's buy or sell out, but a
+            // fee it paid in BTC is Bitcoin activity: the same fee row the
+            // crypto scope books, never dropped.
+            if scope == Scope::Bitcoin && !legs.contains_key(&index) && btc_fee(row)? {
+                if let Some(fee) = third_asset_fee(row, None, Scope::Crypto, &mut fees)? {
+                    mapper.push(fee)?;
+                }
+            }
             continue;
         }
         let leg = legs.get(&index);
@@ -541,7 +549,50 @@ fn swaps(rows: &[Row<'_>]) -> Result<BTreeMap<usize, Leg>, AppError> {
         for (fill, ((time, price), indexes)) in by_fill.into_iter().enumerate() {
             let name = format!("{name} fill at {time} for {price}");
             let reference = format!("coinbase:order:{order}:{fill}");
-            pair(rows, &indexes, reference, &name, &mut legs)?;
+            if indexes.len() <= 2 {
+                pair(rows, &indexes, reference, &name, &mut legs)?;
+                continue;
+            }
+            // Several fills at one time and price: every fill keeps that
+            // price, so ordered by size the n-th outgoing leg is the n-th
+            // incoming leg's other side (fills of equal size are alike).
+            let (mut sent, mut received) = (vec![], vec![]);
+            for &index in &indexes {
+                let (amount, _) = money(rows[index].tx, "amount")?;
+                let PriceNumber::Finite(value) = amount else {
+                    return Err(AppError::new(
+                        "validation",
+                        format!("{name} has a leg without an exact amount"),
+                    ));
+                };
+                if value.is_sign_negative() {
+                    sent.push((value.copy_abs(), index));
+                } else {
+                    received.push((value, index));
+                }
+            }
+            if sent.len() != received.len() {
+                return Err(AppError::new(
+                    "validation",
+                    format!(
+                        "{name} has {} outgoing and {} incoming legs",
+                        sent.len(),
+                        received.len()
+                    ),
+                )
+                .with_hint("Kassiber pairs a crypto-to-crypto trade only from the two legs Coinbase reports for it; check the trade in Coinbase."));
+            }
+            sent.sort();
+            received.sort();
+            for (n, ((_, out), (_, into))) in sent.iter().zip(&received).enumerate() {
+                pair(
+                    rows,
+                    &[*out, *into],
+                    format!("{reference}:{n}"),
+                    &name,
+                    &mut legs,
+                )?;
+            }
         }
     }
     Ok(legs)
@@ -658,6 +709,17 @@ fn swap(row: &Row<'_>, leg: &Leg) -> Result<Event, AppError> {
     })
 }
 
+/// Whether a buy, sell or convert states its fee in BTC (or LBTC).
+fn btc_fee(row: &Row<'_>) -> Result<bool, AppError> {
+    let token = kind(row.tx);
+    let token = token.as_str().unwrap_or("");
+    if !["buy", "sell", "trade"].contains(&token) {
+        return Ok(false);
+    }
+    let (fee, currency) = money(at(row.tx, token), "fee")?;
+    Ok(currency.is_some_and(|code| kassiber_store::assets::is_bitcoin(&code)) && !is_zero(&fee)?)
+}
+
 /// A buy, sell or convert whose `fee` Coinbase states in a crypto asset that
 /// is neither of the trade's assets: its own outbound `fee` row in the crypto
 /// scope, once per trade. The Bitcoin scope refuses it rather than drop it.
@@ -683,6 +745,22 @@ fn third_asset_fee(
         return Ok(None);
     }
     let (id, _, occurred_at) = identity(row.tx, &row.currency, &fee);
+    // A BTC fee must be whole msat: the record builder's exactness check
+    // skips Bitcoin, and the coordinator would round it.
+    if kassiber_store::assets::is_bitcoin(&currency) {
+        if let PriceNumber::Finite(value) = &fee {
+            if crate::file_import::assets::exact_units("BTC", "fee", value).is_err() {
+                return Err(AppError::new(
+                    "validation",
+                    format!(
+                        "Coinbase {token} '{}' pays a BTC fee of {}, finer than 1 msat",
+                        lossy(&id),
+                        repr(&fee)
+                    ),
+                ));
+            }
+        }
+    }
     if scope == Scope::Bitcoin {
         return Err(AppError::new(
             "validation",
