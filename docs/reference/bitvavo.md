@@ -109,13 +109,15 @@ never rounded ([units](../plan/24-crypto-assets.md#decisions)).
 Fiat trade values are checked against amount × price (one cent tolerance). The
 CSV states the quote amount after the fee. The API does not document it:
 the single reading that fits is used, and when both fit (a fee under two
-cents) the trade imports unpriced ("fee treatment unclear"), so `journals
-process` holds it until the user prices it. Rows are stored oldest first by
+cents) the sync refuses the trade: stored unpriced, `journals process` would
+value it from the rates cache rather than what it cost or earned. Import the
+CSV export, which states the fee, for such a wallet. Rows are stored oldest first by
 their millisecond time. A row an import adds into a second that already
-holds an opposite-direction row from an earlier import is tagged
+holds an order-sensitive row from an earlier import (the other direction, or
+the same direction at another unit cost or fee per unit) is tagged
 `same-second-order-uncertain` for review with it, since stored times are whole
-seconds. An API sync records no source positions, so its own rows sharing a
-second with an opposite-direction row are tagged too; a CSV import keeps its
+seconds. An API sync records no source positions, so its own order-sensitive
+rows sharing a second are tagged too; a CSV import keeps its
 rows' order as their source positions.
 
 ## Refusals
