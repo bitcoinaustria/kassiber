@@ -100,8 +100,10 @@ kept asset is its own fee-only row `bitstamp:<id>:fee`. Other assets are
 stored to 11 decimals, never rounded.
 
 Rows are stored oldest first by microsecond time, then id. A row a later
-import adds into a second that already holds an opposite-direction row from
-an earlier import (either route) is tagged `same-second-order-uncertain`,
+import adds into a second that already holds an order-sensitive row (the
+other direction, or the same direction at another unit cost or fee per
+unit) from an earlier import (either route) is tagged
+`same-second-order-uncertain`,
 as for [Bitvavo](bitvavo.md). Kassiber never reads `crypto-transactions`, so
 records carry no txid; pairing with on-chain wallets uses amount and time.
 
