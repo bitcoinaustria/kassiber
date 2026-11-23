@@ -226,6 +226,9 @@ fn bitvavo_api_correction_of_an_exported_row_waits_for_the_users_choice() {
     let ignored = kassiber_pyjson::dumps(at(&result, "corrections_ignored"), &kassiber_pyjson::Options::new().sort_keys(true)).unwrap();
     assert!(ignored.contains(r#""external_id": "bitvavo:dep-btc", "field": "amount", "file": "0.006", "stored": "0.005""#), "{ignored}");
     assert_eq!(count(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:dep-btc'"), 1);
+    // The answer is remembered: the next sync of the same history asks nothing.
+    let again = sync(None).unwrap();
+    assert_eq!(at(&again, "imported"), &Py::from(0));
 }
 
 /// `ui.connections.exchange.preview`: the history a pasted key reads, counted
@@ -467,8 +470,8 @@ fn bitvavo_trade_values_follow_the_source_reading() {
 }
 
 /// Within one second the sync stores rows in the order they happened, and a
-/// later sync's row in a second an earlier one filled with the opposite
-/// direction is tagged for review with it.
+/// row in a second that holds an opposite-direction row, from the same sync
+/// or an earlier one, is tagged for review with it.
 #[test]
 fn bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs() {
     let buy = [("sent", "EUR", "60.00"), ("received", "BTC", "0.001"), ("fees", "EUR", "0.15"), ("price", "EUR", "60000")];
@@ -483,14 +486,22 @@ fn bitvavo_api_orders_same_second_rows_and_tags_them_across_syncs() {
     };
     let order: Vec<&Py> = inserted.iter().map(|r| at(r, "external_id")).collect();
     assert_eq!(order, [&s("bitvavo:zzz-earlier"), &s("bitvavo:aaa-later")]);
+    let tagged = "SELECT group_concat(id) FROM (SELECT t.external_id AS id FROM transactions t JOIN transaction_tags x
+        ON x.transaction_id=t.id JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain' ORDER BY 1)";
+    // Inserted together they are tagged too: the journals order a second's
+    // rows by id, not by the milliseconds the sync stored them in.
+    let mut script = Script::new();
+    script.history = vec![later.clone(), earlier.clone()];
+    let together = book();
+    sync_into(&together, &serve_script(script));
+    let both: String = together.query_row(tagged, [], |r| r.get(0)).unwrap();
+    assert_eq!(both, "bitvavo:aaa-later,bitvavo:zzz-earlier");
     let conn = book();
     for history in [vec![later.clone()], vec![later, earlier]] {
         let mut script = Script::new();
         script.history = history;
         sync_into(&conn, &serve_script(script));
     }
-    let tagged = "SELECT group_concat(id) FROM (SELECT t.external_id AS id FROM transactions t JOIN transaction_tags x
-        ON x.transaction_id=t.id JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain' ORDER BY 1)";
     let tagged: String = conn.query_row(tagged, [], |r| r.get(0)).unwrap();
     assert_eq!(tagged, "bitvavo:aaa-later,bitvavo:zzz-earlier");
 }

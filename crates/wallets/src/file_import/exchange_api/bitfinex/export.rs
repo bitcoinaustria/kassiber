@@ -27,7 +27,8 @@ fn files(file: &str) -> Result<Vec<String>, AppError> {
     let mut magic = [0u8; 4];
     let read = std::fs::File::open(file).and_then(|mut f| std::io::Read::read(&mut f, &mut magic));
     if !read.is_ok_and(|n| n == 4 && magic == *b"PK\x03\x04") {
-        return Ok(vec![csv::read_text(file)?]);
+        // A BOM is dropped as in a zip member, so an extracted member imports.
+        return Ok(vec![csv::read_sig(file)?]);
     }
     let members = super::ledger::xlsx::archive(file)
         .map_err(|_| refused("Reports zip could not be read", EXPORT))?;
