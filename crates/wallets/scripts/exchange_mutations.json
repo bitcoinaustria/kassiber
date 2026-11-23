@@ -1715,12 +1715,22 @@
   {
     "id": "exchange-errors-withhold-request-credentials",
     "file": "crates/wallets/src/file_import/exchange_api.rs",
-    "find": "        .map_err(|error| scrub_error(error, &client.http.display_credentials()))?;\n    let contract::Mapped {",
-    "replace": "        ?;\n    let contract::Mapped {",
+    "find": "        (exchange.fetch)(&client, &mut mapper).map_err(|error| leaving(error, &client))?;\n    let contract::Mapped {",
+    "replace": "        (exchange.fetch)(&client, &mut mapper)?;\n    let contract::Mapped {",
     "expect_failing": [
       "a_kraken_error_echoing_its_signature_withholds_it"
     ],
     "rule": "Every error an exchange sync returns withholds every credential its requests carried, a computed signature too."
+  },
+  {
+    "id": "exchange-echo-replaces-partial-quotes",
+    "file": "crates/wallets/src/file_import/exchange_api.rs",
+    "find": "    if client.http.echoed() && quotes_part(&error, &credentials) {",
+    "replace": "    if false && quotes_part(&error, &credentials) {",
+    "expect_failing": [
+      "bitfinex_refuses_an_echoed_signature_before_quoting_a_mapping_error"
+    ],
+    "rule": "After a recorded credential echo, an error still quoting part of a credential leaves as the credential_echo refusal."
   },
   {
     "id": "exchange-credential-codes-dropped",
