@@ -106,25 +106,45 @@ pub fn preview(
     if exchange.reads == contract::Reads::BitcoinOnly {
         return Ok(assets::Preview::default().envelope(source));
     }
-    let mapped = with_client(
-        conn,
-        &backend,
-        (&name, exchange),
-        "ui.connections.exchange.preview",
-        gate,
-        version,
-        consent,
-        BUDGET,
-        |client| {
-            // The `crypto` scope's read: every event the sync could keep.
-            let mut mapper = Mapper::new(exchange, assets::Scope::Crypto, "");
-            (exchange.fetch)(client, &mut mapper)?;
-            if client.http.echoed() {
-                return Err(echo_refusal(exchange.provider));
-            }
-            Ok(mapper.finish())
-        },
-    )?;
+    let mut read = |scope: assets::Scope| {
+        with_client(
+            conn,
+            &backend,
+            (&name, exchange),
+            "ui.connections.exchange.preview",
+            gate,
+            version,
+            &mut *consent,
+            BUDGET,
+            |client| {
+                let mut mapper = Mapper::new(exchange, scope, "");
+                (exchange.fetch)(client, &mut mapper)?;
+                if client.http.echoed() {
+                    return Err(echo_refusal(exchange.provider));
+                }
+                Ok(mapper.finish())
+            },
+        )
+    };
+    // The `crypto` scope's read: every event the sync could keep.
+    let mapped = match read(assets::Scope::Crypto) {
+        Ok(mapped) => mapped,
+        // Only the crypto mapping refused (an event of another asset it
+        // cannot book): the Bitcoin history may still import, so the preview
+        // reads that scope and names why other assets cannot be tracked,
+        // as the file preview does.
+        Err(error) if error.code == "validation" => {
+            let mapped = read(assets::Scope::Bitcoin)?;
+            let mut preview = assets::Preview::from_tally(&mapped.tally);
+            preview.crypto_refused = Some(error.message.clone());
+            let (_, normalized) = normalized_rows(mapped.records.clone())?;
+            let token = history_token(&book_id(conn)?, &kind, &normalized);
+            let mut envelope = preview.envelope(source);
+            kassiber_envelope::set(&mut envelope, "preview_token", s(token));
+            return Ok(envelope);
+        }
+        Err(error) => return Err(error),
+    };
     let mut preview = assets::Preview::from_tally(&mapped.tally);
     // The sync after the answer imports only this history (`check_history`).
     let (_, normalized) = normalized_rows(mapped.records.clone())?;
