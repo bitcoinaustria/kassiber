@@ -2327,8 +2327,8 @@ fn other_assets(
             let market = rate.map(|rate| btc(holding.units) * rate);
             let float = |value: Option<f64>| value.map_or(Value::Null, Value::Float);
             let basis = booked.get(&code);
-            let complete = !blocked.contains(&code)
-                && basis.is_some_and(|basis| basis.units == holding.units);
+            let complete =
+                !blocked.contains(&code) && basis.is_some_and(|basis| basis.units == holding.units);
             let full_basis = basis.filter(|_| complete).map(|basis| basis.basis);
             dict([
                 ("asset", s(code.as_str())),
