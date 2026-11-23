@@ -1653,7 +1653,7 @@
   {
     "id": "bitvavo-csv-tags-same-second",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "        exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, ids)?;\n",
+    "find": "        exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, false, ids)?;\n",
     "replace": "",
     "expect_failing": [
       "bitvavo_csv_orders_same_second_rows_and_tags_them_across_imports"
