@@ -131,7 +131,7 @@ pub(super) fn record(
         None if truth(&amount) => Some(arithmetic(&value, &abs(amount.clone())?, '/')?),
         None => None,
     };
-    let mut data = json!({"txid":external,"occurred_at":occurred,"direction":direction,"asset":asset,"amount":repr(&abs(amount)?),"fee":repr(&abs(fee)?),"fiat_rate":rate.as_ref().map(repr),"fiat_value":repr(&value),"fiat_currency":"EUR","pricing_source_kind":"exchange_execution","pricing_provider":"Coinfinity","pricing_pair":format!("{asset}-EUR"),"pricing_timestamp":occurred,"pricing_method":"coinfinity_csv","pricing_external_ref":reference,"pricing_quality":"exact","kind":kind,"description":description,"counterparty":"Coinfinity","raw_json":config::stored_json(&columns.json())});
+    let mut data = json!({"txid":external,"occurred_at":occurred,"direction":direction,"asset":asset,"amount":repr(&assets::stored_abs(&asset, amount)?),"fee":repr(&assets::stored_abs(&asset, fee)?),"fiat_rate":rate.as_ref().map(repr),"fiat_value":repr(&value),"fiat_currency":"EUR","pricing_source_kind":"exchange_execution","pricing_provider":"Coinfinity","pricing_pair":format!("{asset}-EUR"),"pricing_timestamp":occurred,"pricing_method":"coinfinity_csv","pricing_external_ref":reference,"pricing_quality":"exact","kind":kind,"description":description,"counterparty":"Coinfinity","raw_json":config::stored_json(&columns.json())});
     data[synthetic::MARKER] = json!(synthetic_id);
     if economics {
         data["_exchange_evidence_match_by_economics"] = json!(true);
