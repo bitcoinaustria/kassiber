@@ -402,7 +402,7 @@ pub(crate) fn keep_command(wallet: &str) -> String {
 /// reference's context-rounded `abs` (its msat conversion rounds anyway);
 /// another asset keeps the provider's exact digits, so `exact_units` refuses
 /// a finer quantity instead of seeing it already rounded.
-pub(crate) fn stored_abs(asset: &str, n: PriceNumber) -> Result<PriceNumber, AppError> {
+pub(super) fn stored_abs(asset: &str, n: PriceNumber) -> Result<PriceNumber, AppError> {
     match n {
         PriceNumber::Finite(v) if class(asset) != Class::Bitcoin => {
             Ok(PriceNumber::Finite(v.copy_abs()))
