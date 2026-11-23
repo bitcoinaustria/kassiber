@@ -105,11 +105,14 @@ pub(super) fn record(
             },
         ));
     }
-    let fee = abs(number(c.get(&["Operation Fees"]))?
-        .filter(truth)
-        .unwrap_or_else(zero))?;
+    let fee = assets::stored_abs(
+        &asset,
+        number(c.get(&["Operation Fees"]))?
+            .filter(truth)
+            .unwrap_or_else(zero),
+    )?;
     let occurred = c.get(&["Operation Date"]);
-    let amount = abs(amount.unwrap())?;
+    let amount = assets::stored_abs(&asset, amount.unwrap())?;
     // A token transfer's fee may be paid in the chain's coin, and the export
     // does not say which: an outgoing row of another asset with a fee is
     // refused rather than charge that fee in the wrong asset.

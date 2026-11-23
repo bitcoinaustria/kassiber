@@ -266,6 +266,27 @@ pub fn sources<'a>(s: &'a Snapshot, raw: Option<&'a serde_json::Value>) -> Vec<S
         .collect()
 }
 
+/// A plain decimal quantity (`"-120000000.00000000001"`) in units of 10^-11, or `None` when it
+/// is no such decimal or finer than 11 places.
+fn decimal_units(text: &str) -> Option<i128> {
+    let text = text.trim();
+    let (negative, digits) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let (whole, fraction) = digits.split_once('.').unwrap_or((digits, ""));
+    let plain = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    if whole.is_empty() || !plain(whole) || !plain(fraction) || fraction.len() > 11 {
+        return None;
+    }
+    let units = whole
+        .parse::<i128>()
+        .ok()?
+        .checked_mul(100_000_000_000)?
+        .checked_add(format!("{fraction:0<11}").parse::<i128>().ok()?)?;
+    Some(if negative { -units } else { units })
+}
+
 /// The snapshot's `otherAssets` (one per crypto asset other than Bitcoin, in whole units of
 /// 10^-11, as every crypto quantity is stored) as `Other` rows: listed apart, never totalled
 /// with Bitcoin, valued only when the daemon gave a market value.
@@ -279,7 +300,13 @@ pub fn other_rows(raw: Option<&serde_json::Value>) -> Vec<AssetRow> {
     list.iter()
         .filter_map(|a| {
             let code = a.get("asset")?.as_str()?.trim();
-            let units = i128::from(a.get("quantityUnits")?.as_i64()?);
+            // The exact decimal `quantity`: an aggregate over wallets can exceed what a JSON
+            // integer (`quantityUnits`) carries.
+            let units = a
+                .get("quantity")
+                .and_then(|q| q.as_str())
+                .and_then(decimal_units)
+                .or_else(|| a.get("quantityUnits")?.as_i64().map(i128::from))?;
             (!code.is_empty()).then(|| AssetRow {
                 asset_id: code.to_owned(),
                 name: code.to_owned(),
@@ -436,6 +463,21 @@ mod tests {
         assert_eq!(by("L-BTC").units, 600_090_000);
         assert_eq!(by("LN-BTC").units, 1_000);
         assert_eq!(by("L-BTC").kind, UnitKind::Pegged);
+    }
+
+    /// A holding beyond the signed 64-bit unit range (120 million tokens over two wallets) is
+    /// read exactly from its decimal quantity, never dropped.
+    #[test]
+    fn other_assets_beyond_the_64_bit_unit_range_stay_listed() {
+        let raw = serde_json::json!({"otherAssets": [
+            {"asset": "PEPE", "quantity": "120000000.00000000001", "quantityUnits": 12_000_000_000_000_000_001_i128.to_string()},
+        ]});
+        let rows = other_rows(Some(&raw));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].units, 12_000_000_000_000_000_001);
+        assert_eq!(decimal_units("-0.5"), Some(-50_000_000_000));
+        assert_eq!(decimal_units("1.000000000001"), None);
+        assert_eq!(decimal_units("1e3"), None);
     }
 
     #[test]
