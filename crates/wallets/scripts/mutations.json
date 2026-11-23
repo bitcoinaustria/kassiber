@@ -5155,7 +5155,7 @@
   {
     "id": "W-cointracking-decimal-round",
     "file": "crates/wallets/src/file_import/tax_platform.rs",
-    "find": "let amount = abs(amount)?;",
+    "find": "let amount = assets::stored_abs(&base, amount)?;",
     "replace": "let amount = amount;",
     "expect_failing": [
       "python_cointracking_import_vectors"
