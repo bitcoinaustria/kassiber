@@ -39,8 +39,9 @@ pub(in crate::file_import) struct Descriptor {
     /// (Binance's export has no ids), a wallet takes one source only.
     pub shared_ids: bool,
     /// Whether an import tags rows that land in a second already holding an
-    /// opposite-direction row of an earlier import: the exchange orders
-    /// within a second, the book's whole-second times cannot.
+    /// order-sensitive row (the other direction, or another unit cost) of an
+    /// earlier import: the exchange orders within a second, the book's
+    /// whole-second times cannot.
     pub same_second_tags: bool,
 }
 
