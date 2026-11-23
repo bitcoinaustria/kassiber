@@ -215,7 +215,7 @@ pub(super) fn investment(
             ],
         )?
     };
-    let amount = abs(amount)?;
+    let amount = assets::stored_abs(&base, amount)?;
     let rate = if truth(&amount) {
         Some(arithmetic(&value, &amount, '/')?)
     } else {
@@ -337,6 +337,6 @@ pub(super) fn dividend(
         headers: vec![],
         rest: None,
         original: None,
-        data: json!({"txid":format!("binance:{reference}"),"occurred_at":occurred,"direction":"inbound","asset":asset,"amount":repr(&abs(amount)?),"fee":"0","kind":kind,"description":info.map_or_else(||"Binance income".into(),|s|format!("Binance income - {s}")),"counterparty":"Binance","raw_json":config::stored_json(&c.json()),"_synthetic_csv_id":synthetic_id}),
+        data: json!({"txid":format!("binance:{reference}"),"occurred_at":occurred,"direction":"inbound","asset":asset,"amount":repr(&assets::stored_abs(&asset, amount)?),"fee":"0","kind":kind,"description":info.map_or_else(||"Binance income".into(),|s|format!("Binance income - {s}")),"counterparty":"Binance","raw_json":config::stored_json(&c.json()),"_synthetic_csv_id":synthetic_id}),
     }))
 }
