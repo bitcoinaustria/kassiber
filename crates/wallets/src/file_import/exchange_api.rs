@@ -266,9 +266,32 @@ pub(super) fn guard_sources(
         },
         None => match contract::registry::by_format(format) {
             Some((exchange, _)) => guard_file_rows(conn, exchange, wallet),
+            None if format == Format::Binance => guard_supplemental(conn, wallet),
             None => Ok(()),
         },
     }
+}
+
+/// Refuses a Binance supplemental CSV into a wallet that holds rows of
+/// Binance's Transaction History export: the history already contains the
+/// supplemental rewards and buys under other identities, so they would be
+/// stored twice (the reverse order is refused by `guard_file_rows`).
+fn guard_supplemental(conn: &Connection, wallet: &str) -> Result<(), AppError> {
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=? AND substr(external_id,1,12)='binance:csv:'",
+            [wallet],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        "This wallet holds rows of Binance's Transaction History export, which the supplemental CSV cannot be matched to",
+    )
+    .with_hint("The Transaction History export is Binance's complete ledger and already contains these rows; import the supplemental CSV only into a wallet without it."))
 }
 
 /// Refuses an exchange file export into a wallet that holds rows of the
