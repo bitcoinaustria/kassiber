@@ -74,7 +74,8 @@ Bitcoin and Liquid only.
   `swap`) and the inbound leg (kind `swap`), each with its fiat value when the
   provider gives one, and the same `swap_ref`. The import authors the pair
   between them in the same write (`transfers.pair`, kind `manual`, pair source
-  `provider`), with
+  `provider`; a re-run keeps a pair of exactly these legs, and a leg
+  already in another pair or custody review refuses the whole import), with
   the policy the profile's country recommends: carrying value where the
   country carries basis across assets (Austria: crypto-to-crypto is
   tax-neutral), taxable elsewhere. The tax engine already handles both,

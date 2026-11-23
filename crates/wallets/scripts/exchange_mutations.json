@@ -2127,6 +2127,16 @@
     "rule": "A key with any write permission is refused before any history is read."
   },
   {
+    "id": "bitfinex-write-scope-names-only",
+    "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
+    "find": "if scope_name(scope) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "bitfinex_write_permissions_never_quote_an_entry_that_is_not_a_scope_name"
+    ],
+    "rule": "A write-permission refusal quotes only entries shaped like a Bitfinex scope name; any other entry could be an echoed credential and is only counted."
+  },
+  {
     "id": "bitfinex-signature-covers-body",
     "file": "crates/wallets/src/file_import/exchange_api/bitfinex.rs",
     "find": "for part in [\"/api/\", path, nonce, body] {",
