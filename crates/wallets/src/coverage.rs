@@ -19,7 +19,7 @@ use crate::completeness;
 use crate::{database_error, resolve};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pyjson::Value;
-use kassiber_store::rusqlite::{params, Connection};
+use kassiber_store::rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value as Json};
 use std::collections::BTreeMap;
 
@@ -30,6 +30,7 @@ pub const EXCHANGE_SYNC_KEY: &str = "exchange_sync";
 /// Attestation kinds: nothing happened after the date, or the account was
 /// closed on it (nothing happens after it, for any period).
 pub const ATTESTATION_KINDS: [&str; 2] = ["no_activity_after", "closed_on"];
+const NOTE_LIMIT: usize = 500;
 const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
 
 /// What a coverage read covers.
@@ -937,11 +938,177 @@ pub fn report(
     ]))
 }
 
+/// A requested attestation change: set one, or clear it (`None`).
+pub struct AttestationRequest<'a> {
+    pub wallet: &'a str,
+    pub attestation: Option<(&'a str, &'a str, &'a str)>,
+}
+
+/// Validate an attestation before it is shown for confirmation or stored.
+pub fn validate(kind: &str, date: &str, note: &str, today: &str) -> Result<(), AppError> {
+    if !ATTESTATION_KINDS.contains(&kind) {
+        return Err(
+            AppError::new("validation", format!("Unknown attestation kind '{kind}'"))
+                .with_hint("Use no_activity_after or closed_on."),
+        );
+    }
+    if !valid_day(date) {
+        return Err(AppError::new("validation", "date must be YYYY-MM-DD"));
+    }
+    if day_of(today).is_some_and(|today| date > today.as_str()) {
+        return Err(
+            AppError::new("validation", "An attestation cannot be dated in the future")
+                .with_hint("State what you know today; extend it later."),
+        );
+    }
+    if note.chars().count() > NOTE_LIMIT {
+        return Err(AppError::new(
+            "validation",
+            format!("The note is limited to {NOTE_LIMIT} characters"),
+        ));
+    }
+    Ok(())
+}
+
+/// Rewrite one wallet's stored config under a write transaction, keeping
+/// every other key's bytes (Python-compatible JSON, sorted keys).
+fn update_config<T>(
+    conn: &Connection,
+    wallet_id: &str,
+    change: impl FnOnce(&mut Value) -> T,
+) -> Result<T, AppError> {
+    let tx = kassiber_store::write_transaction(conn).map_err(database_error)?;
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id = ?",
+            [wallet_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(database_error)?
+        .flatten();
+    let mut config = match raw
+        .as_deref()
+        .filter(|raw| !raw.trim().is_empty())
+        .map(kassiber_pytext::loads)
+    {
+        Some(Ok(parsed @ Value::Dict(_))) => parsed,
+        None => dict::<&str>([]),
+        _ => {
+            return Err(AppError::new(
+                "internal_error",
+                "Invalid wallet configuration JSON",
+            ))
+        }
+    };
+    let result = change(&mut config);
+    let stored = kassiber_pyjson::dumps(&config, &kassiber_pyjson::Options::new().sort_keys(true))
+        .map_err(|_| AppError::new("internal_error", "Invalid wallet configuration JSON"))?;
+    tx.execute(
+        "UPDATE wallets SET config_json = ? WHERE id = ?",
+        params![stored, wallet_id],
+    )
+    .map_err(database_error)?;
+    tx.commit().map_err(database_error)?;
+    Ok(result)
+}
+
+fn remove_key(config: &mut Value, key: &str) {
+    if let Value::Dict(pairs) = config {
+        pairs.retain(|(k, _)| *k != kassiber_pyjson::Key::from(key));
+    }
+}
+
+fn to_json(value: &Value) -> Json {
+    kassiber_pyjson::dumps(value, &kassiber_pyjson::Options::new())
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or(Json::Null)
+}
+
+/// `ui.sources.attest_coverage` / `wallets attest-coverage`: store or clear
+/// the user's statement. Changes only the wallet's attestation config key:
+/// no transaction, balance, journal input, or tax fact.
+pub fn attest(
+    conn: &Connection,
+    profile: &str,
+    request: &AttestationRequest<'_>,
+    now: &str,
+) -> Result<Value, AppError> {
+    let wallet = resolve(conn, profile, request.wallet)?;
+    if let Some((kind, date, note)) = request.attestation {
+        validate(kind, date, note, now)?;
+    }
+    let previous = update_config(conn, &wallet.id, |config| {
+        let previous = Attestation::parse(&to_json(config));
+        match request.attestation {
+            Some((kind, date, note)) => kassiber_envelope::set(
+                config,
+                ATTESTATION_KEY,
+                dict([
+                    ("attested_at", s(now)),
+                    ("date", s(date)),
+                    ("kind", s(kind)),
+                    ("note", s(note.trim())),
+                ]),
+            ),
+            None => remove_key(config, ATTESTATION_KEY),
+        }
+        previous
+    })?;
+    let source = sources(
+        conn,
+        profile,
+        &Options {
+            wallet: Some(&wallet.id),
+            ..Options::default()
+        },
+        now,
+    )?
+    .into_iter()
+    .next()
+    .map_or(Value::Null, |source| source.to_value());
+    Ok(dict([
+        ("wallet_id", s(wallet.id.as_str())),
+        ("wallet", s(wallet.label.as_str())),
+        (
+            "previous",
+            previous.as_ref().map_or(Value::Null, Attestation::to_value),
+        ),
+        ("cleared", Value::Bool(request.attestation.is_none())),
+        ("source", source),
+    ]))
+}
+
 /// The error classes a stored exchange sync may carry: the only failure
 /// detail the book keeps. Provider text (messages, hints, response bodies)
 /// is never stored; the class is derived from the envelope's error code.
 /// The store's open rewrites records older builds left with text.
 pub use kassiber_store::exchange_sync_errors::{exchange_error_class, EXCHANGE_ERROR_CLASSES};
+
+/// The envelope code and the locally written explanation shown for a class;
+/// what `ui.connections.exchange.status` reports for a stored failure.
+fn exchange_error_view(class: &str) -> (&'static str, &'static str) {
+    match class {
+        "auth" => (
+            "auth_error",
+            "The exchange refused the key: it is wrong, expired, restricted, or can do more than read.",
+        ),
+        "rate_limited" => ("rate_limited", "The exchange is limiting requests; try again later."),
+        "offline" => ("network_egress_disabled", "Offline mode stopped the request."),
+        "network" => ("network_error", "The exchange could not be reached in time."),
+        "protocol" => (
+            "protocol_error",
+            "The exchange sent an answer Kassiber cannot read safely; nothing was imported.",
+        ),
+        "validation" => (
+            "validation",
+            "An entry could not be booked safely; nothing was imported.",
+        ),
+        "config" => ("config_error", "The saved key is incomplete."),
+        _ => ("app_error", "The sync failed."),
+    }
+}
 
 /// The class a stored record carries; older records stored the code itself.
 fn stored_error_class(record: Option<&Json>) -> &'static str {
@@ -961,6 +1128,101 @@ fn stored_error_class(record: Option<&Json>) -> &'static str {
             .and_then(Json::as_str)
             .map_or("other", exchange_error_class)
     })
+}
+
+/// A sync count: an integer, or (Bitpanda's `skipped`) counts per category.
+fn is_count(value: &Value) -> bool {
+    match value {
+        Value::Int(_) => true,
+        Value::Dict(items) => items.iter().all(|(_, v)| matches!(v, Value::Int(_))),
+        _ => false,
+    }
+}
+
+/// A stored count read back: an integer, or an object of integers.
+fn stored_count(value: &Json) -> Option<Value> {
+    if let Some(count) = value.as_i64() {
+        return Some(Value::from(count));
+    }
+    let items = value.as_object()?;
+    let counts = items
+        .iter()
+        .map(|(key, count)| {
+            count
+                .as_i64()
+                .map(|count| (key.as_str(), Value::from(count)))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(dict(counts))
+}
+
+/// Record the outcome of one exchange API sync on its wallet so coverage,
+/// the desktop sync card, and completeness survive a restart. Success also
+/// stores `last_synced_at`. `outcome` holds `status` (`ok`/`error`), the
+/// sync's counts, and the envelope error, of which only its class (from its
+/// code) is kept: never the provider's message, hint, or response text.
+pub fn record_exchange_sync(
+    conn: &Connection,
+    wallet_id: &str,
+    at: &str,
+    outcome: &Value,
+) -> Result<(), AppError> {
+    let ok = kassiber_envelope::get(outcome, "status") == Some(&s("ok"));
+    let mut record = vec![
+        ("status", s(if ok { "ok" } else { "error" })),
+        ("at", s(at)),
+    ];
+    for key in ["imported", "updated", "fetched", "skipped"] {
+        if let Some(value) = kassiber_envelope::get(outcome, key).filter(|v| is_count(v)) {
+            record.push((key, value.clone()));
+        }
+    }
+    if !ok {
+        let code = kassiber_envelope::get(outcome, "error")
+            .and_then(|error| kassiber_envelope::get(error, "code"))
+            .map(kassiber_envelope::py_str)
+            .unwrap_or_default();
+        record.push(("error", dict([("class", s(exchange_error_class(&code)))])));
+    }
+    update_config(conn, wallet_id, |config| {
+        kassiber_envelope::set(config, EXCHANGE_SYNC_KEY, dict(record));
+        if ok {
+            kassiber_envelope::set(config, "last_synced_at", s(at));
+        }
+    })
+}
+
+/// The persisted last exchange sync of a wallet, as the desktop sync card
+/// reads it (`None` before the first one). A failure reads as its class's
+/// envelope code and local explanation; stored provider text, from records
+/// written before classes, is dropped.
+pub fn exchange_sync_record(config_json: Option<&str>) -> Option<Value> {
+    let parsed: Json = serde_json::from_str(config_json?).ok()?;
+    let stored = parsed.get(EXCHANGE_SYNC_KEY).filter(|r| r.is_object())?;
+    let mut record = vec![];
+    for key in ["status", "at"] {
+        if let Some(value) = stored.get(key).and_then(Json::as_str) {
+            record.push((key, s(value)));
+        }
+    }
+    for key in ["imported", "updated", "fetched", "skipped"] {
+        if let Some(value) = stored.get(key).and_then(stored_count) {
+            record.push((key, value));
+        }
+    }
+    if stored.get("status").and_then(Json::as_str) == Some("error") {
+        let class = stored_error_class(Some(stored));
+        let (code, message) = exchange_error_view(class);
+        record.push((
+            "error",
+            dict([
+                ("code", s(code)),
+                ("class", s(class)),
+                ("message", s(message)),
+            ]),
+        ));
+    }
+    Some(dict(record))
 }
 
 #[cfg(test)]

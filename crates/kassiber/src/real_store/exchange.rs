@@ -4,9 +4,9 @@
 //! contact an exchange, each for one explicit user action under a consent
 //! minted for exactly that route. `create` stores the backend and wallet rows
 //! `backends create` and `wallets sync-<kind>` store, and `sync` runs that
-//! very command, so the book holds the CLI's bytes. The last result of each
-//! wallet's sync lives in this open book's memory only: the CLI stores none,
-//! and its rows must stay Python's.
+//! very command, so the book holds the CLI's bytes. Every sync, CLI or desktop,
+//! leaves its outcome on the wallet (`config_json.exchange_sync`), which
+//! `status` reads, so it survives a restart.
 use super::*;
 use kassiber_envelope::get;
 use kassiber_wallets::file_import::assets::Scope;
@@ -167,7 +167,7 @@ impl RealBook {
     }
 
     /// Every exchange wallet in the active profile, its backend's presence
-    /// and this session's last sync. Local reads only.
+    /// and its last stored sync. Local reads only.
     fn exchange_status(&mut self, args: &Value) -> Result<Value, AppError> {
         let profile = self.exchange_profile()?;
         let conn = self.conn()?;
@@ -217,13 +217,7 @@ impl RealBook {
                         Value::Bool(has_secret)
                     },
                 ),
-                (
-                    "last_sync",
-                    self.exchange_syncs
-                        .get(&target.id)
-                        .cloned()
-                        .unwrap_or(Value::Null),
-                ),
+                ("last_sync", self.last_sync(conn, &target.id)?),
             ];
             // Only a wallet that stores a scope names it (absent means
             // `bitcoin`), so books that never set one answer as before.
@@ -359,22 +353,29 @@ impl RealBook {
             .connection();
         // The sync imports into any wallet already carrying the label, so a
         // new connection must not share one.
-        let taken: bool = conn
+        let taken: Option<(String, String, String, Option<String>)> = conn
             .query_row(
-                "SELECT 1 FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
+                "SELECT id,lower(trim(kind)),label,config_json FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
                 [profile.as_str(), label.as_str()],
-                |_| Ok(true),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()
-            .map_err(|e| error(map_sqlite_error(e)))?
-            .unwrap_or(false);
-        if taken && attach.is_none() {
+            .map_err(|e| error(map_sqlite_error(e)))?;
+        if let (None, Some((id, existing_kind, existing_label, config))) = (&attach, &taken) {
+            let mut details = vec![("wallet", s(label.as_str()))];
+            // The same exchange's CSV wallet can take the key instead.
+            if *existing_kind == kind && backend_of(config.as_deref()).is_none() {
+                details.push(("attachable_wallet_id", s(id.as_str())));
+                details.push(("attachable_wallet", s(existing_label.as_str())));
+            }
             return Err(AppError::new(
                 "conflict",
                 format!("A wallet named '{label}' already exists in this book"),
             )
-            .with_hint("Choose another name for this exchange connection.")
-            .with_details(dict([("wallet", s(label.as_str()))])));
+            .with_hint(
+                "Choose another name, or add the key to the existing wallet so it keeps its CSV history.",
+            )
+            .with_details(dict(details)));
         }
         let before = self.backends.clone();
         let mut merged = self.backends.clone();
@@ -430,6 +431,7 @@ impl RealBook {
         };
         Ok(dict([
             ("exchange", s(kind.as_str())),
+            ("attached", Value::Bool(attach.is_some())),
             (
                 "wallet",
                 dict([
@@ -444,7 +446,7 @@ impl RealBook {
 
     /// `ui.connections.exchange.sync`: `wallets sync-<kind> --backend B
     /// --wallet W` for the wallet's own backend, on the user's explicit
-    /// request. Its result, or its error, is this session's last sync.
+    /// request. Its result, or its error, is stored as the wallet's last sync.
     fn exchange_sync(&mut self, args: &Value) -> Result<Value, AppError> {
         let reference = text(args, "wallet")?.ok_or_else(|| {
             AppError::new(
@@ -540,43 +542,80 @@ impl RealBook {
             changed_rows,
             preview_token,
         );
-        let at = kassiber_setup::Sources::now(&SetupSources, self.conn()?)?;
-        let record = match &result {
+        // `exchange_import` stores the outcome's counts on the wallet; what
+        // the card shows besides them stays in this open book's memory, for
+        // that stored sync only (`last_sync`).
+        match &result {
             Ok(payload) => {
-                let mut record = vec![("status", s("ok")), ("at", s(at))];
-                for key in [
-                    "imported",
-                    "updated",
-                    "fetched",
-                    "skipped",
-                    "provider_balance",
-                    // docs/plan/24-crypto-assets.md: what the wallet's asset
-                    // scope left out, for the card's "also track" prompt.
-                    "assets",
-                    "swap_pairs",
-                    // docs/reference/imports.md#re-importing-a-newer-export
-                    "corrections_ignored",
-                    "changed_rows",
-                ] {
+                let at = stored_sync(self.conn()?, &target.id)?
+                    .and_then(|record| get(&record, "at").cloned());
+                let mut extras = vec![("at", at.unwrap_or(Value::Null))];
+                for key in CARD_EXTRAS {
                     if let Some(value) = get(payload, key) {
-                        record.push((key, value.clone()));
+                        extras.push((key, value.clone()));
                     }
                 }
-                dict(record)
+                self.exchange_syncs.insert(target.id.clone(), dict(extras));
             }
-            // The error exactly as the envelope reports it, already withheld.
-            Err(error) => dict([
-                ("status", s("error")),
-                ("at", s(at)),
-                (
-                    "error",
-                    get(&error.envelope(None), "error")
-                        .cloned()
-                        .unwrap_or(Value::Null),
-                ),
-            ]),
-        };
-        self.exchange_syncs.insert(target.id.clone(), record);
+            Err(_) => {
+                self.exchange_syncs.remove(&target.id);
+            }
+        }
         result
     }
+}
+
+/// What the desktop sync card shows of a sync besides its stored counts.
+const CARD_EXTRAS: [&str; 5] = [
+    "provider_balance",
+    "assets",
+    "swap_pairs",
+    "corrections_ignored",
+    "changed_rows",
+];
+
+impl RealBook {
+    /// The wallet's stored last sync, with the card's extras when this open
+    /// book ran that very sync (the same `at`).
+    fn last_sync(&self, conn: &Connection, wallet: &str) -> Result<Value, AppError> {
+        let Some(mut record) = stored_sync(conn, wallet)? else {
+            return Ok(Value::Null);
+        };
+        if let Some(extras) = self.exchange_syncs.get(wallet) {
+            if get(extras, "at").is_some() && get(extras, "at") == get(&record, "at") {
+                for key in CARD_EXTRAS {
+                    if let Some(value) = get(extras, key) {
+                        kassiber_envelope::set(&mut record, key, value.clone());
+                    }
+                }
+            }
+        }
+        Ok(record)
+    }
+}
+
+/// The persisted last sync of an exchange wallet (`None` before the first).
+fn stored_sync(conn: &Connection, wallet: &str) -> Result<Option<Value>, AppError> {
+    let config: Option<String> = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id=?",
+            [wallet],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| error(map_sqlite_error(e)))?
+        .flatten();
+    Ok(kassiber_wallets::coverage::exchange_sync_record(
+        config.as_deref(),
+    ))
+}
+
+fn backend_of(config: Option<&str>) -> Option<String> {
+    let config: serde_json::Value = serde_json::from_str(config?).ok()?;
+    config
+        .get("backend")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
 }

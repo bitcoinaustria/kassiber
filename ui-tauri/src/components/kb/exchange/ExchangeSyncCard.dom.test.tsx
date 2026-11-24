@@ -108,7 +108,7 @@ describe("ExchangeSyncCard", () => {
     expect(mocks.statusArgs[0]).toEqual([{ wallet: "w-1" }, { enabled: true, retry: false }]);
     expect(screen.getByRole("heading", { name: "Bitpanda API" })).toBeTruthy();
     expect(screen.getByText(/only when you press Sync now/)).toBeTruthy();
-    expect(screen.getByText("Not synced since Kassiber started")).toBeTruthy();
+    expect(screen.getByText("Never synced")).toBeTruthy();
     expect(screen.getByText("Stored in backend “bitpanda”")).toBeTruthy();
     expect(mocks.sync).not.toHaveBeenCalled();
   });
@@ -216,6 +216,6 @@ describe("ExchangeSyncCard", () => {
     await i18n.changeLanguage("de");
     render(<Card />);
     expect(screen.getByRole("button", { name: "Sync starten" })).toBeTruthy();
-    expect(screen.getByText("Seit dem Start von Kassiber nicht synced")).toBeTruthy();
+    expect(screen.getByText("Noch nie gesynct")).toBeTruthy();
   });
 });

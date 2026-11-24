@@ -1059,8 +1059,9 @@ struct RealBook {
     /// Report-read refresh attempts of this open book, per profile: when the
     /// last one started and its payload. A reopened book starts empty.
     report_read_attempts: std::collections::HashMap<String, (std::time::Instant, Option<Value>)>,
-    /// Each exchange wallet's last desktop sync in this open book, by wallet
-    /// id. Never stored: the CLI's sync stores none either.
+    /// What the desktop sync card shows of each exchange wallet's last
+    /// desktop sync besides the counts stored on the wallet, by wallet id.
+    /// Never stored.
     exchange_syncs: std::collections::HashMap<String, Value>,
 }
 
@@ -3575,6 +3576,10 @@ mod selected_data_root_tests {
 impl RealBook {
     /// `wallets sync-<kind>`, and the desktop's sync after the asset question
     /// (`preview_token`: only the history the user answered for imports).
+    /// Every sync, CLI or desktop, leaves its outcome on the wallet it ran
+    /// for (the importer names it, also when no `--wallet` did) so source
+    /// coverage and the desktop sync card survive a restart
+    /// (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
     pub(crate) fn exchange_import(
         &mut self,
         profile: &str,
@@ -3583,6 +3588,65 @@ impl RealBook {
         kind: &str,
         changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
         preview_token: Option<&str>,
+    ) -> Result<Value, AppError> {
+        let mut resolved = None;
+        let result = self.run_exchange_api(
+            profile,
+            wallet,
+            backend,
+            kind,
+            changed_rows,
+            preview_token,
+            &mut resolved,
+        );
+        // A run that failed before it had a wallet has nothing to record.
+        let conn = self.conn()?;
+        let target = match resolved {
+            Some(id) => Some(id),
+            None if !wallet.trim().is_empty() => kassiber_wallets::resolve(conn, profile, wallet)
+                .ok()
+                .map(|found| found.id),
+            None => None,
+        };
+        if let Some(target) = target {
+            let at = kassiber_setup::Sources::now(&SetupSources, conn)?;
+            let outcome = match &result {
+                Ok(payload) => {
+                    let mut record = vec![("status", s("ok"))];
+                    for key in ["imported", "updated", "fetched", "skipped"] {
+                        if let Some(value) = kassiber_envelope::get(payload, key) {
+                            record.push((key, value.clone()));
+                        }
+                    }
+                    dict(record)
+                }
+                // Only the error's code reaches the recorder, which keeps its class.
+                Err(error) => dict([
+                    ("status", s("error")),
+                    (
+                        "error",
+                        kassiber_envelope::get(&error.envelope(None), "error")
+                            .cloned()
+                            .unwrap_or(Value::Null),
+                    ),
+                ]),
+            };
+            kassiber_wallets::coverage::record_exchange_sync(conn, &target, &at, &outcome)?;
+        }
+        result
+    }
+
+    /// One exchange API sync under the user's explicit grant for this route.
+    #[allow(clippy::too_many_arguments)]
+    fn run_exchange_api(
+        &mut self,
+        profile: &str,
+        wallet: &str,
+        backend: &str,
+        kind: &str,
+        changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
+        preview_token: Option<&str>,
+        resolved: &mut Option<String>,
     ) -> Result<Value, AppError> {
         use kassiber_net::{Consent, Gate, Ledger, Offline};
         use kassiber_wallets::file_import::{exchange_api, Identity};
@@ -3614,7 +3678,7 @@ impl RealBook {
         let identity: Option<Identity> = None;
         // This command is the user's explicit request for exactly this
         // backend's signed history; the grant covers only the reported route.
-        exchange_api::execute_with(
+        exchange_api::execute_recording(
             self.conn()?,
             profile,
             wallet,
@@ -3626,6 +3690,7 @@ impl RealBook {
             identity.as_ref(),
             changed_rows,
             preview_token,
+            resolved,
         )
     }
 }

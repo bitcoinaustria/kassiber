@@ -953,12 +953,8 @@ pub fn sync_card(app: &App, _cx: &mut Cx<App>, tk: &Tk, c: &Conn, disabled: bool
     } else if let (Some(e), false) = (&error, needs_rust) {
         card = card.child(error_notice(tk, provider, e));
     }
-    card.child(
-        text(t("connections:exchange.sync.sessionNote"))
-            .font(tk.t2xs(400.0))
-            .color(tk.muted_fg)
-            .wrap(),
-    )
+    // The last sync's outcome is stored with the book now (no "kept until restart" note).
+    card
 }
 
 /// The card's provider balance line (`ExchangeProviderBalance`, Bitpanda only).

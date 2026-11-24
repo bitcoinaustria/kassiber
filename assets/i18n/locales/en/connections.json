@@ -1565,7 +1565,7 @@
       "keyStored": "Stored in backend “{{backend}}”",
       "keyMissing": "Missing — add the exchange again",
       "lastSync": "Last sync",
-      "never": "Not synced since Kassiber started",
+      "never": "Never synced",
       "ok": "{{time}} · {{imported}} new of {{fetched}} read",
       "failed": "{{time}} · failed",
       "balance": "{{provider}} balance",
@@ -1575,8 +1575,7 @@
       "binanceSpotTrades": "Binance's API does not list spot trades. For a complete ledger, import Binance's Transaction History CSV export into its own wallet instead.",
       "balanceMismatchNote": "The book and {{provider}} disagree. Check for excluded transactions, transactions added to this wallet from other sources, or {{provider}} history the API did not return.",
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
-      "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
-      "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions."
+      "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat."
     }
   },
   "catalog": {

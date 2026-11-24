@@ -38,6 +38,7 @@ fn main() {
         "test",
         &mut |route| Some(Consent::explicit_trigger(route.request())),
         Some(&identity),
+        &mut None,
     );
     let envelope = match result {
         Ok(data) => success(&format!("wallets.sync-{expected}"), data),

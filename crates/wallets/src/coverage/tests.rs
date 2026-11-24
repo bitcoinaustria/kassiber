@@ -82,6 +82,7 @@ fn import(conn: &Connection, wallet: &str, file: &TempFile) -> kassiber_pyjson::
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -386,6 +387,45 @@ fn import_snapshots_hash_only_up_to_their_limit() {
     );
 }
 
+#[test]
+fn hybrid_exchanges_combine_the_api_sync_with_csv_history() {
+    let conn = book();
+    wallet(
+        &conn,
+        "kraken",
+        "kraken",
+        r#"{"backend":"kraken","source_file":"/nonexistent/k.csv","source_format":"kraken_csv"}"#,
+    );
+    batch(
+        &conn,
+        "kraken",
+        "b1",
+        "2023-07-01T00:00:00Z",
+        Some(("2023-01-05T00:00:00Z", "2023-06-01T00:00:00Z")),
+    );
+    let csv_only = source(&conn, "kraken", Some("2025-12-31"));
+    assert_eq!(csv_only.source_mode, "hybrid");
+    assert_eq!(
+        (csv_only.freshness_state, csv_only.action),
+        ("behind", "sync_or_import")
+    );
+
+    record_exchange_sync(
+        &conn,
+        "kraken",
+        "2026-07-14T12:00:00Z",
+        &dict([("status", s("ok")), ("imported", Value::from(4_i64))]),
+    )
+    .unwrap();
+    let synced = source(&conn, "kraken", Some("2025-12-31"));
+    assert_eq!(synced.freshness_state, "current");
+    assert_eq!(synced.covered_from.as_deref(), Some("2023-01-05T00:00:00Z"));
+    assert_eq!(
+        synced.covered_through.as_deref(),
+        Some("2026-07-14T12:00:00Z")
+    );
+}
+
 /// Finding 8: a CSV whose rows an API wallet already holds still makes it a
 /// hybrid source, through the run the re-import records.
 #[test]
@@ -407,6 +447,240 @@ fn a_csv_import_that_adds_nothing_still_counts_as_csv_evidence() {
             .and_then(day_of)
             .as_deref(),
         Some("2024-02-01")
+    );
+}
+
+#[test]
+fn exchange_sync_outcomes_persist_and_a_newer_failure_wins() {
+    let conn = book();
+    wallet(
+        &conn,
+        "kraken",
+        "kraken",
+        r#"{"backend":"kraken","deprecated":false}"#,
+    );
+    let never = source(&conn, "kraken", None);
+    assert_eq!(
+        (never.source_mode, never.freshness_state),
+        ("live", "never_imported")
+    );
+    record_exchange_sync(
+        &conn,
+        "kraken",
+        "2026-07-15T09:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("imported", Value::from(2_i64)),
+            ("fetched", Value::from(9_i64)),
+        ]),
+    )
+    .unwrap();
+    let ok = source(&conn, "kraken", None);
+    assert_eq!(
+        (ok.freshness_state, ok.last_sync_status.as_deref()),
+        ("current", Some("ok"))
+    );
+    // completeness no longer calls a synced API wallet never synced.
+    assert!(!ok.scan_warnings.iter().any(|w| w == "never_synced"));
+    record_exchange_sync(
+        &conn,
+        "kraken",
+        "2026-07-15T09:30:00Z",
+        &dict([
+            ("status", s("error")),
+            (
+                "error",
+                dict([
+                    ("code", s("auth_error")),
+                    (
+                        "message",
+                        s("HTTP 401: {\"error\":[\"EAPI:Invalid key ABC\"]}"),
+                    ),
+                    ("hint", s("provider says: rotate key ABC")),
+                    ("details", s("withheld")),
+                ]),
+            ),
+        ]),
+    )
+    .unwrap();
+    let failed = source(&conn, "kraken", None);
+    assert_eq!(failed.freshness_state, "sync_failed");
+    assert_eq!(failed.last_sync_error_code.as_deref(), Some("auth"));
+    assert_eq!(
+        failed.covered_through.as_deref(),
+        Some("2026-07-15T09:00:00Z")
+    );
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='kraken'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    // Finding 2: no provider text is stored, only the class.
+    for leaked in ["withheld", "EAPI", "ABC", "401", "rotate"] {
+        assert!(!stored.contains(leaked), "{leaked} in {stored}");
+    }
+    assert!(stored.contains(r#""class": "auth""#), "{stored}");
+    // Other keys keep their bytes.
+    assert!(stored.contains(r#""deprecated": false"#), "{stored}");
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    assert_eq!(kassiber_envelope::get(&record, "status"), Some(&s("error")));
+    let error = kassiber_envelope::get(&record, "error").unwrap();
+    assert_eq!(
+        kassiber_envelope::get(error, "code"),
+        Some(&s("auth_error"))
+    );
+    assert!(!kassiber_pyjson::dumps(&record, &Default::default())
+        .unwrap()
+        .contains("ABC"));
+}
+
+/// Finding 2: a record written before error classes keeps no provider text
+/// when it is read back.
+#[test]
+fn older_stored_sync_errors_read_back_as_their_class_only() {
+    let stored = r#"{"exchange_sync":{"at":"2026-01-01T00:00:00Z","status":"error","error":{"code":"rate_limited","message":"429 body: secret-ish","hint":"x"}}}"#;
+    let record = exchange_sync_record(Some(stored)).unwrap();
+    let error = kassiber_envelope::get(&record, "error").unwrap();
+    assert_eq!(
+        kassiber_envelope::get(error, "class"),
+        Some(&s("rate_limited"))
+    );
+    let text = kassiber_pyjson::dumps(&record, &Default::default()).unwrap();
+    assert!(
+        !text.contains("secret-ish") && !text.contains("429"),
+        "{text}"
+    );
+}
+
+/// Finding 4: "no activity after D" closes the gap after the covered end only
+/// when D is not later than that end; a later D leaves (end, D] open.
+#[test]
+fn an_attestation_closes_the_gap_only_from_the_covered_end() {
+    let conn = book();
+    wallet(&conn, "csv", "custom", r#"{"source_format":"csv"}"#);
+    batch(
+        &conn,
+        "csv",
+        "b1",
+        "2025-04-01T00:00:00Z",
+        Some(("2025-01-10T00:00:00Z", "2025-03-01T00:00:00Z")),
+    );
+    let before = source(&conn, "csv", Some("2025-12-31"));
+    assert_eq!(before.freshness_state, "behind");
+
+    // A date after the covered end: March 2 to June 30 stays unattested.
+    attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "csv",
+            attestation: Some(("no_activity_after", "2025-06-30", "")),
+        },
+        NOW,
+    )
+    .unwrap();
+    let open = source(&conn, "csv", Some("2025-12-31"));
+    assert_eq!(
+        (open.freshness_state, open.reason),
+        ("behind", "attestation_leaves_gap")
+    );
+    assert_eq!(
+        field(&open, &["attestation_gap", "from"]),
+        s("2025-03-01T00:00:00Z")
+    );
+    assert_eq!(
+        field(&open, &["attestation_gap", "through"]),
+        s("2025-06-30")
+    );
+
+    // From the covered end: every later period end is covered.
+    let request = AttestationRequest {
+        wallet: "csv",
+        attestation: Some(("no_activity_after", "2025-03-01", " moved to cold storage ")),
+    };
+    attest(&conn, "p", &request, NOW).unwrap();
+    for end in ["2025-12-31", "2026-06-30"] {
+        let closed = source(&conn, "csv", Some(end));
+        assert_eq!(
+            (closed.freshness_state, closed.reason),
+            ("current", "attested")
+        );
+        assert_eq!(field(&closed, &["attestation_gap"]), Value::Null);
+    }
+    let attested = source(&conn, "csv", Some("2025-12-31"));
+    assert_eq!(
+        attested.attestation.as_ref().unwrap().note,
+        "moved to cold storage"
+    );
+    // The coverage window itself is unchanged.
+    assert_eq!(attested.covered_through, before.covered_through);
+
+    // "Closed on" follows the same rule: a closing date after the covered
+    // end leaves the time up to it unattested.
+    attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "csv",
+            attestation: Some(("closed_on", "2025-05-01", "")),
+        },
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        source(&conn, "csv", Some("2026-06-30")).reason,
+        "attestation_leaves_gap"
+    );
+    attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "csv",
+            attestation: Some(("closed_on", "2025-02-15", "")),
+        },
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        source(&conn, "csv", Some("2026-06-30")).freshness_state,
+        "current"
+    );
+    // A statement never stands in for a source with nothing covered.
+    wallet(&conn, "empty", "custom", r#"{"source_format":"csv"}"#);
+    attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "empty",
+            attestation: Some(("closed_on", "2025-01-01", "")),
+        },
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        source(&conn, "empty", None).freshness_state,
+        "never_imported"
+    );
+
+    let cleared = attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "csv",
+            attestation: None,
+        },
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&cleared, "cleared"),
+        Some(&Value::Bool(true))
+    );
+    assert_eq!(
+        source(&conn, "csv", Some("2025-12-31")).freshness_state,
+        "behind"
     );
 }
 
@@ -483,6 +757,19 @@ fn transactions_outside_import_runs_never_extend_file_coverage() {
         ),
         (Some("2024-02-01T00:00:00Z"), Some("2024-05-01T00:00:00Z"))
     );
+}
+
+#[test]
+fn attestations_are_validated() {
+    let error = |kind, date, note: &str| validate(kind, date, note, NOW).unwrap_err().message;
+    assert!(error("someday", "2025-01-01", "").contains("Unknown attestation kind"));
+    assert_eq!(
+        error("closed_on", "2025-02-30", ""),
+        "date must be YYYY-MM-DD"
+    );
+    assert!(error("closed_on", "2026-07-16", "").contains("future"));
+    assert!(error("closed_on", "2025-01-01", &"x".repeat(501)).contains("500"));
+    assert!(validate("closed_on", "2026-07-15", "", NOW).is_ok());
 }
 
 #[test]
@@ -683,6 +970,41 @@ fn surviving_rows_bound_an_older_range() {
         Some("2025-03-01T00:00:00Z")
     );
     assert_eq!(bounded.freshness_state, "behind");
+}
+
+/// Second review, finding 5: the unattested days shown stop at the period
+/// end asked for.
+#[test]
+fn the_attestation_gap_stops_at_the_period_end() {
+    let conn = book();
+    wallet(&conn, "csv", "custom", r#"{"source_format":"csv"}"#);
+    batch(
+        &conn,
+        "csv",
+        "b1",
+        "2025-04-01T00:00:00Z",
+        Some(("2025-01-10T00:00:00Z", "2025-03-01T00:00:00Z")),
+    );
+    attest(
+        &conn,
+        "p",
+        &AttestationRequest {
+            wallet: "csv",
+            attestation: Some(("no_activity_after", "2026-06-30", "")),
+        },
+        NOW,
+    )
+    .unwrap();
+    let june = source(&conn, "csv", Some("2025-06-30"));
+    assert_eq!(
+        field(&june, &["attestation_gap", "through"]),
+        s("2025-06-30")
+    );
+    let later = source(&conn, "csv", Some("2026-07-15"));
+    assert_eq!(
+        field(&later, &["attestation_gap", "through"]),
+        s("2026-06-30")
+    );
 }
 
 /// Second review, finding 4: the metadata signal is only advisory; an
@@ -931,4 +1253,78 @@ fn an_incomplete_sync_is_no_coverage() {
     )
     .unwrap();
     assert_eq!(source(&conn, "sp", None).freshness_state, "current");
+}
+
+/// Codex 4660313536: a Bitpanda sync reports `skipped` as counts per
+/// category. The stored outcome keeps that map and reads it back, so the
+/// sync cards still show the skipped-operation notice after a reload; a map
+/// holding anything but counts is not stored.
+#[test]
+fn categorized_skipped_counts_survive_the_stored_sync_outcome() {
+    let conn = book();
+    wallet(&conn, "bitpanda", "bitpanda", r#"{"backend":"bitpanda"}"#);
+    let skipped = dict([
+        ("fiat_only_operations", Value::from(2_i64)),
+        ("non_btc_operations", Value::from(3_i64)),
+        ("internal_btc_moves", Value::from(0_i64)),
+    ]);
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T12:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("imported", Value::from(1_i64)),
+            ("skipped", skipped.clone()),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    let back = kassiber_envelope::get(&record, "skipped").unwrap();
+    for (key, count) in [
+        ("fiat_only_operations", 2_i64),
+        ("non_btc_operations", 3),
+        ("internal_btc_moves", 0),
+    ] {
+        assert_eq!(
+            kassiber_envelope::get(back, key),
+            Some(&Value::from(count)),
+            "{key}"
+        );
+    }
+    // Not counts: dropped, never stored as text.
+    record_exchange_sync(
+        &conn,
+        "bitpanda",
+        "2026-07-14T13:00:00Z",
+        &dict([
+            ("status", s("ok")),
+            ("skipped", dict([("x", s("provider text"))])),
+        ]),
+    )
+    .unwrap();
+    let stored: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='bitpanda'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!stored.contains("provider text"), "{stored}");
+    let record = exchange_sync_record(Some(&stored)).unwrap();
+    assert_eq!(kassiber_envelope::get(&record, "skipped"), None);
+    // An integer count still reads back as before.
+    let plain = r#"{"exchange_sync":{"at":"2026-01-01T00:00:00Z","status":"ok","skipped":4}}"#;
+    let record = exchange_sync_record(Some(plain)).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&record, "skipped"),
+        Some(&Value::from(4_i64))
+    );
 }
