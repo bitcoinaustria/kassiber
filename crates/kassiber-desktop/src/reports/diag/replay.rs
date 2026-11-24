@@ -27,9 +27,7 @@ pub struct State {
     pub passphrase: TextEdit,
     pub confirmation: TextEdit,
     pub pending: bool,
-    /// The export request this dialog waits for: a reply to any other (sent before the dialog
-    /// was closed or reopened) is not this dialog's.
-    pub request: Option<String>,
+    pub export: Option<crate::app::Ticket>,
     /// The saved bundle's path, as the daemon reports it.
     pub saved: Option<String>,
     pub error: Option<String>,
@@ -83,22 +81,25 @@ fn submit(a: &mut App) {
     let s = st(a);
     s.error = None;
     s.pending = true;
-    match a.send(KIND, args, TAG) {
-        Some(id) => st(a).request = Some(id),
-        None => st(a).pending = false,
-    }
+    st(a).export = Some(a.send_ticket(KIND, args, TAG));
 }
 
 pub fn on_reply(a: &mut App, tag: &str, r: &Reply) {
     if tag != TAG {
         return;
     }
-    let current = a.reply_id().map(str::to_owned);
-    let s = st(a);
-    if s.request.is_none() || s.request != current {
+    if !a
+        .reports
+        .diag
+        .replay
+        .export
+        .as_ref()
+        .is_some_and(|t| t.answers(a))
+    {
         return;
     }
-    s.request = None;
+    let s = st(a);
+    s.export = None;
     s.pending = false;
     s.passphrase = TextEdit::new("");
     s.confirmation = TextEdit::new("");
@@ -418,8 +419,8 @@ mod tests {
     fn a_reply_lands_only_in_the_dialog_that_sent_it() {
         let mut app = crate::app::tests::quiet_app();
         open(&mut app);
-        let earlier = crate::app::tests::inject(&mut app, KIND, TAG);
-        st(&mut app).request = Some(earlier.clone());
+        let (earlier, ticket) = crate::app::tests::inject_ticket(&mut app, KIND, TAG);
+        st(&mut app).export = Some(ticket);
         st(&mut app).pending = true;
         close(&mut app);
         open(&mut app);
@@ -437,8 +438,8 @@ mod tests {
             (None, "new passphrase")
         );
         // The dialog's own request lands.
-        let current = crate::app::tests::inject(&mut app, KIND, TAG);
-        st(&mut app).request = Some(current.clone());
+        let (current, ticket) = crate::app::tests::inject_ticket(&mut app, KIND, TAG);
+        st(&mut app).export = Some(ticket);
         st(&mut app).pending = true;
         crate::app::tests::answer(
             &mut app,
@@ -449,7 +450,7 @@ mod tests {
         app.pump();
         let s = &app.reports.diag.replay;
         assert_eq!(s.saved.as_deref(), Some("/new.kassiber-replay"));
-        assert!(!s.pending && s.request.is_none() && s.passphrase.text.is_empty());
+        assert!(!s.pending && s.export.is_none() && s.passphrase.text.is_empty());
     }
 
     /// Consent belongs to the book it was given for: leaving Logs or switching books forgets

@@ -286,19 +286,19 @@ pub struct State {
     pub preview_pending: bool,
     /// Bumped whenever wallet material / script type / form resets, dropping stale preview replies.
     pub preview_gen: u64,
-    pub preview_req: Option<(u64, Option<String>)>,
+    pub preview_req: Option<(u64, Option<submit::Sent>)>,
     /// Key material removed from the address list: (private, public).
     pub purged: Option<(usize, usize)>,
     pub core_detection: Option<Vec<Value>>,
     pub core_detect_pending: bool,
-    pub core_detect_req: Option<(u64, Option<String>)>,
+    pub core_detect_req: Option<(u64, Option<submit::Sent>)>,
     pub core_test: Option<CoreTest>,
     pub core_test_pending: bool,
-    pub core_test_req: Option<(u64, Option<String>)>,
+    pub core_test_req: Option<(u64, Option<submit::Sent>)>,
     pub coverage: Coverage,
     /// Bumped whenever the coverage inputs change, so a stale probe reply is dropped.
     pub coverage_gen: u64,
-    pub coverage_req: Option<(u64, Option<String>)>,
+    pub coverage_req: Option<(u64, Option<submit::Sent>)>,
     /// Bumped on open/reset so stale Core detect/test replies are dropped.
     pub form_gen: u64,
     pub copied_address: Option<String>,
@@ -1562,6 +1562,7 @@ mod tests {
                 source_id: "descriptor",
                 label: "Cold".into(),
                 request_id: Some("req-sync-ui".into()),
+                ticket: None,
                 sync_wallet: Some("Cold".into()),
                 syncs: std::collections::VecDeque::new(),
                 done: None,
