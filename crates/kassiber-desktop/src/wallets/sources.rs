@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use super::coverage;
 use super::detail::Read;
 use super::detail::ui::{self as dui, amber};
-use crate::app::{App, Reply};
+use crate::app::{App, Reply, Ticket};
 use crate::i18n::{has, t, tc, tr};
 use crate::icons as I;
 use crate::overview::add_connection::Source;
@@ -42,6 +42,10 @@ pub struct State {
     pub import_result: Option<String>,
     pub attest: Option<AttestForm>,
     pub clear: Option<ClearForm>,
+    /// Statement and clear requests in flight. A dialog keeps its own request's ticket, so only
+    /// that dialog takes the answer; these copies outlive a dialog closed meanwhile, whose saved
+    /// statement still has the card read again.
+    pub mutations: Vec<Ticket>,
 }
 
 /// The statement dialog.
@@ -52,12 +56,16 @@ pub struct AttestForm {
     pub note: TextEdit,
     pub error: Option<String>,
     pub pending: bool,
+    /// The request this dialog sent.
+    pub ticket: Option<Ticket>,
 }
 
 #[derive(Default)]
 pub struct ClearForm {
     pub error: Option<String>,
     pub pending: bool,
+    /// The request this dialog sent.
+    pub ticket: Option<Ticket>,
 }
 
 // ---- Model -----------------------------------------------------------------------------------
@@ -327,6 +335,7 @@ fn open_attest(a: &mut App) {
         note: TextEdit::new(current.and_then(|x| x["note"].as_str()).unwrap_or("")),
         error: None,
         pending: false,
+        ticket: None,
     });
 }
 
@@ -349,7 +358,12 @@ fn submit_attest(a: &mut App) {
     f.pending = true;
     f.error = None;
     let args = attest_args(&wallet, f);
-    a.send("ui.sources.attest_coverage", args, "wallets.sources.attest");
+    let ticket = a.send_ticket("ui.sources.attest_coverage", args, "wallets.sources.attest");
+    let st = &mut a.wallets.sources;
+    st.mutations.push(ticket.clone());
+    if let Some(f) = st.attest.as_mut() {
+        f.ticket = Some(ticket);
+    }
 }
 
 fn submit_clear(a: &mut App) {
@@ -362,11 +376,16 @@ fn submit_clear(a: &mut App) {
     }
     f.pending = true;
     f.error = None;
-    a.send(
+    let ticket = a.send_ticket(
         "ui.sources.attest_coverage",
         json!({"wallet": wallet, "clear": true}),
         "wallets.sources.clear",
     );
+    let st = &mut a.wallets.sources;
+    st.mutations.push(ticket.clone());
+    if let Some(f) = st.clear.as_mut() {
+        f.ticket = Some(ticket);
+    }
 }
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
@@ -407,30 +426,54 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                     .to_owned(),
             );
         }
-        "wallets.sources.attest" | "wallets.sources.clear" => match &r.error {
-            Some(e) => {
-                let e = if e.trim().is_empty() {
-                    t("connections:coverage.attestDialog.failed")
-                } else {
-                    e.clone()
-                };
-                let st = &mut app.wallets.sources;
-                if let Some(f) = st.attest.as_mut().filter(|_| tag.ends_with("attest")) {
-                    f.pending = false;
-                    f.error = Some(e);
-                } else if let Some(f) = st.clear.as_mut() {
-                    f.pending = false;
-                    f.error = Some(e);
+        "wallets.sources.attest" | "wallets.sources.clear" => {
+            // Only the dialog that sent the request takes its answer: one closed meanwhile, or
+            // reopened as a new dialog, is not this request's (Codex 4682769605).
+            let Some(at) = app
+                .wallets
+                .sources
+                .mutations
+                .iter()
+                .position(|m| m.answers(app))
+            else {
+                return;
+            };
+            let ticket = app.wallets.sources.mutations.swap_remove(at);
+            let st = &mut app.wallets.sources;
+            let attest = st.attest.as_ref().and_then(|f| f.ticket.as_ref()) == Some(&ticket);
+            let clear = st.clear.as_ref().and_then(|f| f.ticket.as_ref()) == Some(&ticket);
+            match &r.error {
+                Some(e) => {
+                    let e = if e.trim().is_empty() {
+                        t("connections:coverage.attestDialog.failed")
+                    } else {
+                        e.clone()
+                    };
+                    let form = if attest {
+                        st.attest.as_mut().map(|f| (&mut f.error, &mut f.pending))
+                    } else if clear {
+                        st.clear.as_mut().map(|f| (&mut f.error, &mut f.pending))
+                    } else {
+                        None
+                    };
+                    if let Some((error, pending)) = form {
+                        *pending = false;
+                        *error = Some(e);
+                    }
+                }
+                None => {
+                    if attest {
+                        st.attest = None;
+                    }
+                    if clear {
+                        st.clear = None;
+                    }
+                    // Coverage and the status derived from it change: the card and the shell
+                    // read again with the refresh cycle.
+                    app.refresh_reads();
                 }
             }
-            None => {
-                app.wallets.sources.attest = None;
-                app.wallets.sources.clear = None;
-                // Coverage and the status derived from it change: the card and the shell read
-                // again with the refresh cycle.
-                app.refresh_reads();
-            }
-        },
+        }
         _ => {}
     }
 }
@@ -755,6 +798,7 @@ pub fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>) {
                 note: TextEdit::new(""),
                 error: None,
                 pending: false,
+                ticket: None,
             })
         }
         let date_label = t("connections:coverage.attestDialog.date");
@@ -988,6 +1032,71 @@ mod tests {
         assert!(!app.wallets.sources.checking);
     }
 
+    /// The id of the request `send` registers.
+    fn sent(app: &mut App, send: fn(&mut App)) -> String {
+        let before: Vec<String> = app.pending.keys().cloned().collect();
+        send(app);
+        app.pending
+            .keys()
+            .find(|id| !before.contains(id))
+            .cloned()
+            .expect("a request")
+    }
+
+    fn mutation_reply(error: Option<&str>) -> Reply {
+        Reply {
+            kind: "ui.sources.attest_coverage".into(),
+            data: json!({}),
+            error: error.map(str::to_owned),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Codex 4682769605: a statement or clear sent from a dialog that was closed and reopened
+    /// answers into neither the new dialog's draft nor its error; the new dialog's own answer
+    /// does.
+    #[test]
+    fn a_closed_dialogs_answer_leaves_the_reopened_dialog_alone() {
+        let mut app = crate::app::tests::quiet_app();
+        read(&mut app, "w1");
+        let dated = |a: &mut App| {
+            open_attest(a);
+            a.wallets.sources.attest.as_mut().unwrap().date = TextEdit::new("2026-09-30");
+        };
+        dated(&mut app);
+        let first = sent(&mut app, submit_attest);
+        close_attest(&mut app);
+        dated(&mut app);
+        let second = sent(&mut app, submit_attest);
+        app.deliver_as(
+            "wallets.sources.attest",
+            &first,
+            mutation_reply(Some("refused")),
+        );
+        let f = app.wallets.sources.attest.as_ref().expect("the new dialog");
+        assert!(
+            f.pending && f.error.is_none(),
+            "the old failure is not the new dialog's"
+        );
+        app.deliver_as("wallets.sources.attest", &second, mutation_reply(None));
+        assert!(
+            app.wallets.sources.attest.is_none(),
+            "its own answer closes it"
+        );
+
+        app.wallets.sources.clear = Some(ClearForm::default());
+        let cleared = sent(&mut app, submit_clear);
+        close_clear(&mut app);
+        app.wallets.sources.clear = Some(ClearForm::default());
+        app.deliver_as("wallets.sources.clear", &cleared, mutation_reply(None));
+        assert!(
+            app.wallets.sources.clear.is_some(),
+            "the old success does not close the new dialog"
+        );
+        assert!(app.wallets.sources.mutations.is_empty());
+    }
+
     fn cov(v: Value) -> Value {
         let mut base = json!({
             "wallet_id": "w1", "wallet": "River", "source_mode": "file",
@@ -1051,6 +1160,7 @@ mod tests {
             note: TextEdit::new(" moved "),
             error: None,
             pending: false,
+            ticket: None,
         };
         assert_eq!(
             attest_args("w1", &f),
