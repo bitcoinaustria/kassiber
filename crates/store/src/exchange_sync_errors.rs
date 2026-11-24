@@ -122,27 +122,37 @@ pub fn cleanup_pending(conn: &Connection) -> Result<bool> {
     .map_err(map_sqlite_error)
 }
 
+/// Every wallet whose stored exchange sync still holds more than its error
+/// class, with its rewritten config.
+fn pending(conn: &Connection) -> Result<Vec<(String, String)>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT id, config_json FROM wallets \
+             WHERE instr(config_json, '\"exchange_sync\"') > 0 ORDER BY id",
+        )
+        .map_err(map_sqlite_error)?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(map_sqlite_error)?
+        .collect::<rusqlite::Result<Vec<(String, String)>>>()
+        .map_err(map_sqlite_error)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(id, raw)| rewritten(&raw).map(|updated| (id, updated)))
+        .collect())
+}
+
+/// Whether a migrating open would write here: a record to rewrite or a
+/// cleanup to finish. The open's preflight rehearses such a book first, so a
+/// stored-value refusal still leaves it untouched.
+pub(crate) fn work_pending(conn: &Connection) -> Result<bool> {
+    Ok(!pending(conn)?.is_empty() || cleanup_pending(conn)?)
+}
+
 pub(crate) fn migrate(
     conn: &mut Connection,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
-    let pending = |conn: &Connection| -> Result<Vec<(String, String)>> {
-        let mut statement = conn
-            .prepare(
-                "SELECT id, config_json FROM wallets \
-                 WHERE instr(config_json, '\"exchange_sync\"') > 0 ORDER BY id",
-            )
-            .map_err(map_sqlite_error)?;
-        let rows = statement
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(map_sqlite_error)?
-            .collect::<rusqlite::Result<Vec<(String, String)>>>()
-            .map_err(map_sqlite_error)?;
-        Ok(rows
-            .into_iter()
-            .filter_map(|(id, raw)| rewritten(&raw).map(|updated| (id, updated)))
-            .collect())
-    };
     if pending(conn)?.is_empty() {
         // A rewrite an earlier open could not finish cleaning up.
         return if cleanup_pending(conn)? {

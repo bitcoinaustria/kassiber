@@ -93,8 +93,8 @@ fn expected_columns(
 
 /// Whether the ordered pass may have layout work to do: an object of the
 /// current schema (or one it retires) differs by type and name, a table lacks
-/// or has other columns than the current schema's, or a required audit is
-/// missing. Archived `gl_*` objects are ignored; a book whose names
+/// or has other columns than the current schema's, a data-only cleanup is
+/// pending, or a required audit is missing. Archived `gl_*` objects are ignored; a book whose names
 /// and audits are current (historical `ALTER` layouts included) skips the
 /// rehearsal, and the gate's own stored-value checks still refuse it before
 /// the pass changes anything.
@@ -130,6 +130,11 @@ pub(crate) fn layout_pending(conn: &Connection) -> crate::Result<bool> {
         })
         .collect();
     if actual != expected {
+        return Ok(true);
+    }
+    // Data-only cleanup the pass commits leaves the layout current too
+    // (Codex 4683024220).
+    if crate::exchange_sync_errors::work_pending(conn)? {
         return Ok(true);
     }
     // A column the ordered pass adds to an existing table (the import-run
@@ -401,6 +406,27 @@ mod tests {
         let conn = encryption::open_container(&database, None).unwrap();
         assert!(super::layout_pending(&conn).unwrap());
         drop(conn);
+        let book = Book::open_migrating(&data, OpenOptions::default(), true).unwrap();
+        assert!(!super::layout_pending(book.connection()).unwrap());
+    }
+
+    /// Codex 4683024220: a current book whose only pending work is the
+    /// exchange sync error cleanup is rehearsed too, so an unsupported value
+    /// elsewhere refuses it before the cleanup rewrites anything.
+    #[test]
+    fn a_book_pending_only_data_cleanup_is_refused_before_anything_is_written() {
+        let message = "this book stores NaN or infinity where Kassiber needs an exact number";
+        let legacy = r#""exchange_sync": {"at": "t", "status": "error", "error": {"code": "rate_limited", "message": "429 body"}}"#;
+        let sql = wallet_config(&format!(
+            r#"{{{legacy}, "ownership_history": null, "fee": NaN}}"#
+        ));
+        let (_root, _data, database) = book(false, &sql);
+        let conn = encryption::open_container(&database, None).unwrap();
+        assert!(super::layout_pending(&conn).unwrap());
+        drop(conn);
+        refused(false, &sql, "non_finite_number", message);
+        // Without such a value it migrates, and nothing is pending after.
+        let (_root, data, _database) = book(false, &wallet_config(&format!("{{{legacy}}}")));
         let book = Book::open_migrating(&data, OpenOptions::default(), true).unwrap();
         assert!(!super::layout_pending(book.connection()).unwrap());
     }
