@@ -11,6 +11,33 @@ fn count(conn: &Connection, sql: &str, profile: &str) -> Result<i64> {
     conn.query_row(sql, rusqlite::params_from_iter(parameters), |r| r.get(0))
         .map_err(sql_error)
 }
+/// A keep-decisions reset replaces a 'changed' reservation with the changed
+/// transaction's facts, so the next resync settles it and releases the bank
+/// decisions it withholds (`bank_statements::store::CURRENT_DECISION`)
+/// without a review. Until a durable stale-decision marker exists, such a
+/// reset waits for those lines to be reviewed again (TODO.md).
+fn refuse_releasing_withheld_bank_decisions(conn: &Connection, profile: &str) -> Result<()> {
+    if !kassiber_store::optional::bank_statements_present(conn)
+        .map_err(|e| AppError::new(e.code, e.message))?
+    {
+        return Ok(());
+    }
+    let withheld = count(
+        conn,
+        "SELECT COUNT(DISTINCT d.line_id) FROM bank_statement_line_decisions d JOIN book_reset_transactions r ON r.transaction_id = d.transaction_id AND r.state = 'changed' WHERE d.profile_id = ? AND d.state = 'accepted' AND d.updated_at <= r.created_at",
+        profile,
+    )?;
+    if withheld == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "book_reset_withheld_bank_decisions",
+        "Bank-line decisions are waiting for a new review after an earlier reset; another reset that keeps decisions would release them without one.",
+    )
+    .with_hint("Accept or reject those bank lines again (source-funds bank-lines suggest lists them), or reset with wipe_everything.")
+    .with_details(dict([("bank_lines", Value::Int(withheld.into()))])))
+}
+
 pub fn execute(
     conn: &Connection,
     args: &Value,
@@ -28,6 +55,9 @@ pub fn execute(
     }
     sensitive::require_no_legacy(conn, std::slice::from_ref(&pid), "resetting its data")?;
     let wipe = flag(args, "wipe_everything");
+    if !wipe {
+        refuse_releasing_withheld_bank_decisions(conn, &pid)?;
+    }
     let root = kassiber_paths::canonicalize_allow_missing(attachments).map_err(storage_error)?;
     let mut paths = vec![];
     for row in if wipe {
