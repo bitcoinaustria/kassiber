@@ -28,8 +28,10 @@ pub struct Job {
     /// The catalog source id submitted (`selected(app).id` at submit time).
     pub source_id: &'static str,
     pub label: String,
-    /// Daemon request id of the step currently in flight.
+    /// Daemon request id of the step currently in flight (its cancel and progress name it).
     pub request_id: Option<String>,
+    /// The claim on that step's answer: dropped with the job, the answer reaches nobody.
+    pub ticket: Option<crate::app::Ticket>,
     /// Immutable wallet label submitted to `ui.wallets.sync` for the current `Stage::Sync`.
     pub sync_wallet: Option<String>,
     /// Wallets still to `ui.wallets.sync`.
@@ -825,7 +827,9 @@ fn dispatch_job(app: &mut App, mut job: Job, stage: Stage, kind: &str, args: Val
     job.stage = stage;
     job.sent = Some((kind.to_owned(), args.clone()));
     let args = scoped(app, args);
-    job.request_id = app.send(kind, args, "wallets.add.job");
+    let (id, ticket) = app.send_ticket_id(kind, args, "wallets.add.job");
+    job.request_id = Some(id);
+    job.ticket = Some(ticket);
     if job.dismissed {
         stm(app).background_jobs.push(job);
     } else {
@@ -847,6 +851,7 @@ fn start(app: &mut App, label: &str) {
         source_id,
         label: label.to_owned(),
         request_id: None,
+        ticket: None,
         sync_wallet: None,
         syncs: VecDeque::new(),
         done: None,
@@ -1830,26 +1835,29 @@ fn sync_failure_detail(results: &[Value]) -> Option<String> {
         .or_else(|| pick(bad.get("status")))
 }
 
+/// Whether `job`'s step is the one answering now: by its ticket, or for an answer or a job
+/// without one, any.
+fn answers_job(app: &App, job: &Job) -> bool {
+    match &job.ticket {
+        Some(ticket) if app.delivering_ticketed() => ticket.answers(app),
+        _ => true,
+    }
+}
+
 fn take_matching_job(app: &mut App) -> Option<Job> {
-    let reply_id = app.reply_id().map(str::to_owned);
-    let fg_matches = st(app).job.as_ref().is_some_and(|j| {
-        match (j.request_id.as_deref(), reply_id.as_deref()) {
-            (Some(exp), Some(got)) => exp == got,
-            (None, _) | (_, None) => true,
-        }
-    });
-    if fg_matches {
+    if st(app).job.as_ref().is_some_and(|j| answers_job(app, j)) {
         return stm(app).job.take();
     }
-    let bg = &mut stm(app).background_jobs;
-    let idx = if let Some(got) = reply_id.as_deref() {
-        bg.iter().position(|j| j.request_id.as_deref() == Some(got))
+    let bg = &st(app).background_jobs;
+    let idx = if app.delivering_ticketed() {
+        bg.iter()
+            .position(|j| j.ticket.as_ref().is_some_and(|ticket| ticket.answers(app)))
     } else if bg.len() == 1 {
         Some(0)
     } else {
         None
     };
-    idx.map(|i| bg.remove(i))
+    idx.map(|i| stm(app).background_jobs.remove(i))
 }
 
 fn on_job(app: &mut App, r: &Reply) {
@@ -2347,22 +2355,21 @@ fn on_job(app: &mut App, r: &Reply) {
 
 // ---- Setup actions ---------------------------------------------------------------------------
 
-fn req_matches(
-    slot: &Option<(u64, Option<String>)>,
-    expected_gen: u64,
-    reply_id: Option<&str>,
-) -> bool {
-    let Some((g, id)) = slot else {
+fn req_matches(slot: &Option<(u64, Option<Sent>)>, expected_gen: u64, app: &App) -> bool {
+    let Some((g, sent)) = slot else {
         return false;
     };
     if *g != expected_gen {
         return false;
     }
-    match (id.as_deref(), reply_id) {
-        (Some(exp), Some(got)) => exp == got,
+    match sent {
+        Some((_, ticket)) if app.delivering_ticketed() => ticket.answers(app),
         _ => true,
     }
 }
+
+/// A setup check's request id and the claim on its answer.
+pub type Sent = (String, crate::app::Ticket);
 
 /// "Preview addresses": detect script types first for a bare xpub on auto, then derive five.
 /// Script-type detection asks the backend (egress), as the web's does.
@@ -2384,12 +2391,12 @@ pub fn preview_addresses(app: &mut App) {
         wallet_material::detect(&f.wallet_material.text).kind == wallet_material::Kind::BareXpub;
     if bare && f.script_type.is_empty() {
         let args = json!({"wallet_material": txt(&f.wallet_material), "backend": opt(&f.backend), "chain": m.chain, "network": m.network});
-        let req_id = app.send(
+        let req_id = app.send_ticket_id(
             "ui.wallets.detect_script_types",
             strip_nulls(args),
             "wallets.add.preview_detect",
         );
-        stm(app).preview_req = Some((epoch, req_id));
+        stm(app).preview_req = Some((epoch, Some(req_id)));
     } else {
         let types = if bare {
             Some(vec![f.script_type.clone()])
@@ -2403,12 +2410,12 @@ pub fn preview_addresses(app: &mut App) {
 fn derive(app: &mut App, script_types: Option<Vec<String>>, epoch: u64) {
     let m = meta(selected(app).id);
     let args = json!({"wallet_material": txt(&st(app).form.wallet_material), "script_types": script_types, "chain": m.chain, "network": m.network, "count": 5});
-    let req_id = app.send(
+    let req_id = app.send_ticket_id(
         "ui.wallets.preview_descriptor",
         strip_nulls(args),
         "wallets.add.preview",
     );
-    stm(app).preview_req = Some((epoch, req_id));
+    stm(app).preview_req = Some((epoch, Some(req_id)));
 }
 
 /// "Detect" (`ui.backends.detect_core`): looks for a local node (loopback probes) — only on
@@ -2420,12 +2427,12 @@ pub fn detect_core(app: &mut App) {
         s.core_detect_pending = true;
         s.form_gen
     };
-    let req_id = app.send(
+    let req_id = app.send_ticket_id(
         "ui.backends.detect_core",
         json!({}),
         "wallets.add.core_detect",
     );
-    stm(app).core_detect_req = Some((epoch, req_id));
+    stm(app).core_detect_req = Some((epoch, Some(req_id)));
 }
 
 /// "Test connection" (`ui.backends.bitcoinrpc.test`) — only on its press.
@@ -2437,8 +2444,8 @@ pub fn test_core(app: &mut App) {
         s.form_gen
     };
     let args = core_probe_args(app);
-    let req_id = app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.core_test");
-    stm(app).core_test_req = Some((epoch, req_id));
+    let req_id = app.send_ticket_id("ui.backends.bitcoinrpc.test", args, "wallets.add.core_test");
+    stm(app).core_test_req = Some((epoch, Some(req_id)));
 }
 
 /// "Check coverage" (`checkWalletCoreCoverage`) — only on its press.
@@ -2456,8 +2463,8 @@ pub fn check_coverage(app: &mut App) {
         s.coverage = Coverage::Checking;
         s.coverage_gen
     };
-    let req_id = app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.coverage");
-    stm(app).coverage_req = Some((epoch, req_id));
+    let req_id = app.send_ticket_id("ui.backends.bitcoinrpc.test", args, "wallets.add.coverage");
+    stm(app).coverage_req = Some((epoch, Some(req_id)));
 }
 
 /// The coverage inputs changed: drop a verdict about the old ones.
@@ -2555,7 +2562,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.preview_detect" => {
-            if !req_matches(&st(app).preview_req, st(app).preview_gen, app.reply_id()) {
+            if !req_matches(&st(app).preview_req, st(app).preview_gen, app) {
                 return;
             }
             let epoch = st(app).preview_gen;
@@ -2587,7 +2594,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.preview" => {
-            if !req_matches(&st(app).preview_req, st(app).preview_gen, app.reply_id()) {
+            if !req_matches(&st(app).preview_req, st(app).preview_gen, app) {
                 return;
             }
             let s = stm(app);
@@ -2620,7 +2627,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.core_detect" => {
-            if !req_matches(&st(app).core_detect_req, st(app).form_gen, app.reply_id()) {
+            if !req_matches(&st(app).core_detect_req, st(app).form_gen, app) {
                 return;
             }
             stm(app).core_detect_pending = false;
@@ -2649,7 +2656,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.core_test" => {
-            if !req_matches(&st(app).core_test_req, st(app).form_gen, app.reply_id()) {
+            if !req_matches(&st(app).core_test_req, st(app).form_gen, app) {
                 return;
             }
             let s = stm(app);
@@ -2675,7 +2682,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
         }
         "wallets.add.coverage" => {
             if !matches!(st(app).coverage, Coverage::Checking)
-                || !req_matches(&st(app).coverage_req, st(app).coverage_gen, app.reply_id())
+                || !req_matches(&st(app).coverage_req, st(app).coverage_gen, app)
             {
                 return; // inputs changed or a newer check replaced this one
             }
@@ -2853,6 +2860,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: None,
+            ticket: None,
             sync_wallet: None,
             syncs: VecDeque::new(),
             done: None,
@@ -2888,6 +2896,7 @@ mod tests {
                 source_id: "bisq",
                 label: "Bisq".into(),
                 request_id: None,
+                ticket: None,
                 sync_wallet: None,
                 syncs: VecDeque::new(),
                 done: None,
@@ -2934,6 +2943,7 @@ mod tests {
                 source_id: "descriptor",
                 label: "CoinTracking".into(),
                 request_id: None,
+                ticket: None,
                 sync_wallet: None,
                 syncs: VecDeque::new(),
                 done: None,
@@ -3050,6 +3060,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: Some("req-sync-prefetch".into()),
+            ticket: None,
             sync_wallet: Some("Cold".into()),
             syncs: VecDeque::from(["NextWallet".to_owned()]),
             done: None,
@@ -3138,6 +3149,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: Some("req-sync-1".into()),
+            ticket: None,
             sync_wallet: Some("Cold".into()),
             syncs: VecDeque::new(),
             done: None,
@@ -3221,6 +3233,7 @@ mod tests {
             source_id: "wasabi",
             label: "WasabiMain".into(),
             request_id: Some("req-wasabi-create".into()),
+            ticket: None,
             sync_wallet: None,
             syncs: VecDeque::new(),
             done: Some((
@@ -3289,6 +3302,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: Some("req-desc-create".into()),
+            ticket: None,
             sync_wallet: None,
             syncs: VecDeque::from(["Cold".to_owned()]),
             done: Some(("Added".into(), "Cold added".into(), ToastTone::Success)),
@@ -3335,6 +3349,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: Some("req-sync-1".into()),
+            ticket: None,
             sync_wallet: Some("Cold".into()),
             syncs: VecDeque::new(),
             done: None,
@@ -3420,7 +3435,7 @@ mod tests {
         let req_a = st(&app)
             .coverage_req
             .as_ref()
-            .and_then(|(_, id)| id.clone())
+            .and_then(|(_, sent)| sent.as_ref().map(|(id, _)| id.clone()))
             .expect("coverage A id");
 
         // Change birthday and start coverage check B.
@@ -3430,7 +3445,7 @@ mod tests {
         let req_b = st(&app)
             .coverage_req
             .as_ref()
-            .and_then(|(_, id)| id.clone())
+            .and_then(|(_, sent)| sent.as_ref().map(|(id, _)| id.clone()))
             .expect("coverage B id");
         assert_ne!(req_a, req_b);
 
@@ -3468,13 +3483,13 @@ mod tests {
         let prev_req = st(&app)
             .preview_req
             .as_ref()
-            .and_then(|(_, id)| id.clone())
+            .and_then(|(_, sent)| sent.as_ref().map(|(id, _)| id.clone()))
             .expect("preview id");
         detect_core(&mut app);
         let detect_req = st(&app)
             .core_detect_req
             .as_ref()
-            .and_then(|(_, id)| id.clone())
+            .and_then(|(_, sent)| sent.as_ref().map(|(id, _)| id.clone()))
             .expect("detect id");
 
         let src = super::super::meta::source("descriptor").unwrap();
@@ -3521,6 +3536,7 @@ mod tests {
             source_id: "descriptor",
             label: "Cold".into(),
             request_id: None,
+            ticket: None,
             sync_wallet: Some("Cold".into()),
             syncs: VecDeque::new(),
             done: None,

@@ -289,8 +289,6 @@ pub struct App {
     /// order they asked.
     parked: HashMap<String, (u64, Value)>,
     next_seq: u64,
-    /// The request whose answer is being delivered now ([`App::reply_id`]).
-    delivering: Option<String>,
     delivering_ticket: Option<Weak<()>>,
     tickets: HashMap<String, Weak<()>>,
     /// While true, error toasts are not shown: the answer is a refusal the app handles itself
@@ -557,7 +555,6 @@ impl App {
             orphaned: HashMap::new(),
             parked: HashMap::new(),
             next_seq: 0,
-            delivering: None,
             delivering_ticket: None,
             tickets: HashMap::new(),
             quiet_errors: false,
@@ -611,13 +608,6 @@ impl App {
     /// A data-root switch is warming its replacement.
     pub fn switching(&self) -> bool {
         self.root_switch.is_some()
-    }
-
-    /// The request whose answer `on_reply` is handling now. The add-wallet flow keeps several
-    /// requests with one tag in flight and tells their answers apart by it; new screens hold a
-    /// [`Ticket`] instead.
-    pub fn reply_id(&self) -> Option<&str> {
-        self.delivering.as_deref()
     }
 
     pub fn dark(&self) -> bool {
@@ -821,12 +811,29 @@ impl App {
 
     /// [`send`](Self::send), keeping the answer for as long as the returned ticket lives.
     pub fn send_ticket(&mut self, kind: &str, args: Value, tag: &'static str) -> Ticket {
+        self.send_ticket_id(kind, args, tag).1
+    }
+
+    /// [`send_ticket`](Self::send_ticket), also naming the request: for a caller that cancels it
+    /// or matches its progress records by id. Its answer still reaches only the ticket's holder.
+    pub fn send_ticket_id(
+        &mut self,
+        kind: &str,
+        args: Value,
+        tag: &'static str,
+    ) -> (String, Ticket) {
         let id = self
             .send(kind, args, tag)
             .expect("send answers every request");
         let ticket = Ticket(Arc::new(()));
-        self.tickets.insert(id, Arc::downgrade(&ticket.0));
-        ticket
+        self.tickets.insert(id.clone(), Arc::downgrade(&ticket.0));
+        (id, ticket)
+    }
+
+    /// Whether the answer `on_reply` is handling now was sent with a ticket ([`Ticket::answers`]
+    /// tells whose). An answer without one names no caller.
+    pub fn delivering_ticketed(&self) -> bool {
+        self.delivering_ticket.is_some()
     }
 
     /// Hands a registered request to the daemon.
@@ -889,7 +896,6 @@ impl App {
             if let Err(panic) =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.handle(pgen, m)))
             {
-                self.delivering = None;
                 self.delivering_ticket = None;
                 self.quiet_errors = false;
                 // Ahead of anything queued since: the order the records came in is kept.
@@ -1128,8 +1134,8 @@ impl App {
         true
     }
 
-    /// Hands a finished reply to the app and every module, naming its request (`reply_id`).
-    /// An answer whose caller dropped every clone of its ticket is not delivered.
+    /// Hands a finished reply to the app and every module. An answer whose caller dropped
+    /// every clone of its ticket is not delivered.
     pub(crate) fn deliver_as(&mut self, tag: &'static str, id: &str, reply: Reply) {
         let ticket = self.tickets.remove(id);
         if ticket
@@ -1138,11 +1144,9 @@ impl App {
         {
             return;
         }
-        let before = self.delivering.replace(id.to_owned());
-        let before_ticket = std::mem::replace(&mut self.delivering_ticket, ticket);
+        let before = std::mem::replace(&mut self.delivering_ticket, ticket);
         self.deliver(tag, reply);
-        self.delivering = before;
-        self.delivering_ticket = before_ticket;
+        self.delivering_ticket = before;
     }
 
     /// Hands a finished reply to the app and every module.

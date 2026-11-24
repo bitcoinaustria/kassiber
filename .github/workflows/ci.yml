@@ -5,14 +5,39 @@ on:
   push:
     branches:
       - main
+  # Runs only the desktop app checks on one OS, on the branch it is started
+  # from: the macOS and Windows desktop checks for a change merged without them.
+  workflow_dispatch:
+    inputs:
+      desktop_os:
+        description: Desktop app checks to run
+        required: true
+        default: windows-latest
+        type: choice
+        options:
+          - windows-latest
+          - macos-latest
+          - ubuntu-latest
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  # Manual desktop runs get their own group so they never cancel main's CI.
+  group: ci-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}-{1}', inputs.desktop_os, github.ref) || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+# A pull request into another pull request's branch (a stacked layer) runs the
+# fast lane: frontend, Rust crates, tooling and the Linux desktop build. The
+# recorded-session replay (32 runners), the chain-observer harness and the
+# macOS/Windows desktop builds run on pull requests into main and on main
+# itself. A stack therefore pays the full lane once, on the layer that targets
+# main; each layer pays it again when it becomes that layer. The condition is
+# spelled out per job because job-level `if:` cannot read workflow `env`:
+#   github.event_name == 'push' || github.base_ref == 'main'
+# A manual run (workflow_dispatch) runs only the desktop job, on the chosen OS.
 
 jobs:
   frontend:
     name: Frontend checks
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -63,6 +88,7 @@ jobs:
 
   tax-engine:
     name: Rust crates
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     # With every backend crate the workspace's test binaries alone run about
     # 18 minutes on the build machine (4 test threads), before this job's
@@ -145,6 +171,7 @@ jobs:
 
   tooling:
     name: Tooling scripts
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -160,6 +187,7 @@ jobs:
 
   session-replay-build:
     name: Recorded sessions (build)
+    if: github.event_name == 'push' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -196,6 +224,7 @@ jobs:
   session-replay:
     name: Recorded sessions (${{ matrix.part }})
     needs: session-replay-build
+    if: github.event_name == 'push' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     # About 24,000 sessions take hours on one 4-core runner. Each part
     # replays every 32nd session (session-replay --part K/N): about 760
@@ -273,6 +302,7 @@ jobs:
 
   chain-observers:
     name: Chain observers (Linux Docker)
+    if: github.event_name == 'push' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -345,10 +375,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        # Stacked layers build Linux only; see the lane note at the top.
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.desktop_os) || ((github.event_name == 'push' || github.base_ref == 'main') && '["ubuntu-latest", "macos-latest", "windows-latest"]' || '["ubuntu-latest"]')) }}
     env:
       # As in the Rust crates job: no debug info keeps the test build within
       # the runner's disk. Panic messages keep their file and line.
@@ -398,7 +426,7 @@ jobs:
 
   required:
     name: required
-    if: always()
+    if: always() && github.event_name != 'workflow_dispatch'
     needs:
       - frontend
       - tax-engine
@@ -419,6 +447,23 @@ jobs:
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Desktop app: ${{ needs.desktop.result }}" >> "$GITHUB_STEP_SUMMARY"
 
+      # The full-lane jobs are skipped, not failed, on stacked layers; there a
+      # skip counts as passing. Into main and on main every job must succeed.
       - name: Enforce required checks
-        if: ${{ needs.frontend.result != 'success' || needs.tax-engine.result != 'success' || needs.session-replay.result != 'success' || needs.tooling.result != 'success' || needs.chain-observers.result != 'success' || needs.desktop.result != 'success' }}
-        run: exit 1
+        env:
+          FULL_LANE: ${{ github.event_name == 'push' || github.base_ref == 'main' }}
+          RESULTS: >-
+            ${{ needs.frontend.result }} ${{ needs.tax-engine.result }}
+            ${{ needs.tooling.result }} ${{ needs.desktop.result }}
+          FULL_LANE_RESULTS: >-
+            ${{ needs.session-replay.result }} ${{ needs.chain-observers.result }}
+        shell: bash
+        run: |
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
+          for result in $FULL_LANE_RESULTS; do
+            if [ "$result" = success ]; then continue; fi
+            if [ "$FULL_LANE" != true ] && [ "$result" = skipped ]; then continue; fi
+            exit 1
+          done
