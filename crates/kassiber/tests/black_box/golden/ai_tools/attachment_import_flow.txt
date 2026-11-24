@@ -59,4 +59,4 @@
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:8 | revision=i:33
 + chain_index_dirty: source_table=t:"wallets" | source_key=i:-1 | revision=i:28
 + import_batch_transactions: batch_id=t:"<uuid>" | transaction_id=t:"<uuid>" | source_position=i:1
-… [6858 bytes, 21 lines fnv128 21a9e28167892dc5b1284299f909cc41]
+… [7054 bytes, 21 lines fnv128 6f6db13eafc9ea85d00617f0e9108fd3]

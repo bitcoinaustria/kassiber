@@ -53,4 +53,4 @@ POST /v1/responses {"input":[{"content":[{"text":"Extract a draft Kassiber trans
 + chain_index_clock: id=i:1 | revision=i:38
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:38
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:9 | revision=i:36
-… [6396 bytes, 19 lines fnv128 30383cf11f6fcf5d0dbb10124e453540]
+… [6488 bytes, 19 lines fnv128 d2fbcec46de8f9c7e55a4d1b86106ab6]
