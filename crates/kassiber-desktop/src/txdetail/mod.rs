@@ -201,7 +201,7 @@ pub struct Open {
 static NEXT_SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl Open {
-    fn new(query: &str, tab: Tab, trail: Vec<String>) -> Open {
+    pub(crate) fn new(query: &str, tab: Tab, trail: Vec<String>) -> Open {
         let empty = draft::baseline(&Value::Null);
         Open {
             generation: None,

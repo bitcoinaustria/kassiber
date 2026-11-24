@@ -6,8 +6,10 @@
 //! how it failed. `replay:<file>` serves the recorded bytes instead of
 //! connecting. A recorded failure is replayed at connect time; a recorded
 //! connection is bound to the replayed one at its first write, to the unused
-//! recording for that endpoint whose first write was the same bytes, since
-//! parallel connections open in any order (recorded order is the fallback).
+//! recording for that endpoint whose first write matches, since parallel
+//! connections open in any order (recorded order is the fallback). An exact
+//! match takes priority over an HTTP match that differs only in Kassiber's
+//! User-Agent version.
 //! `replay-strict:<file>` has no fallback: a first write no unused recording
 //! began with gets a connection that delivers nothing, so a request the
 //! recording never made fails instead of reading another request's reply.
@@ -309,7 +311,21 @@ fn bind(key: &str, first: Option<&[u8]>) -> Option<Recorded> {
     let strict = replays.strict;
     let slots = replays.by_key.get_mut(key)?;
     match pick(slots, first, strict) {
-        Some(index) => slots[index].take(),
+        Some(index) => {
+            let mut recorded = slots[index].take()?;
+            if let (Some(actual), Some(saved)) = (first, recorded.first_write.as_deref()) {
+                if saved != actual && same_http_request(saved, actual) {
+                    // Keep the strict replay's byte budget accurate when the version has a
+                    // different length. Retain the recorded budget for malformed tapes.
+                    recorded.recorded_written = recorded
+                        .recorded_written
+                        .checked_sub(saved.len())
+                        .and_then(|remaining| remaining.checked_add(actual.len()))
+                        .unwrap_or(recorded.recorded_written);
+                }
+            }
+            Some(recorded)
+        }
         None => {
             drop(replays);
             if strict {
@@ -341,14 +357,57 @@ fn miss(key: &str, what: &str) {
 fn pick(slots: &[Option<Recorded>], first: Option<&[u8]>, strict: bool) -> Option<usize> {
     let open = |slot: &Option<Recorded>| slot.as_ref().is_some_and(|r| r.failure.is_none());
     let matching = first.and_then(|bytes| {
-        slots.iter().position(|slot| {
-            open(slot) && slot.as_ref().and_then(|r| r.first_write.as_deref()) == Some(bytes)
-        })
+        let find = |matches: &dyn Fn(&[u8]) -> bool| {
+            slots.iter().position(|slot| {
+                open(slot)
+                    && slot
+                        .as_ref()
+                        .and_then(|r| r.first_write.as_deref())
+                        .is_some_and(matches)
+            })
+        };
+        find(&|saved| saved == bytes).or_else(|| find(&|saved| same_http_request(saved, bytes)))
     });
     if strict && first.is_some() {
         return matching;
     }
     matching.or_else(|| slots.iter().position(open))
+}
+
+fn same_http_request(saved: &[u8], actual: &[u8]) -> bool {
+    match (http_agent_parts(saved), http_agent_parts(actual)) {
+        (Some(saved), Some(actual)) => saved == actual,
+        _ => false,
+    }
+}
+
+/// Split around only a numeric Kassiber version in an HTTP request's User-Agent.
+/// Keep the request line, other headers and body in the comparison.
+fn http_agent_parts(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let mut lines = bytes.split_inclusive(|&byte| byte == b'\n');
+    let request = lines.next()?;
+    if !request.ends_with(b" HTTP/1.1\r\n") {
+        return None;
+    }
+    let mut offset = request.len();
+    for line in lines.take_while(|line| *line != b"\r\n") {
+        if let Some(value) = line.strip_prefix(b"User-Agent: ") {
+            let (product, version) = value.split_at_checked(b"kassiber/".len())?;
+            let version = version.strip_suffix(b"\r\n")?;
+            if product.eq_ignore_ascii_case(b"kassiber/")
+                && version.first().is_some_and(u8::is_ascii_digit)
+                && version.contains(&b'.')
+                && version
+                    .iter()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b".-+".contains(byte))
+            {
+                let end = offset + line.len() - 2;
+                return Some((&bytes[..end - version.len()], &bytes[end..]));
+            }
+        }
+        offset += line.len();
+    }
+    None
 }
 
 /// A connection's handle while recording.
@@ -630,6 +689,32 @@ mod tests {
         assert_eq!(pick(slots, Some(b"never"), false), Some(0));
         assert_eq!(pick(slots, Some(b"never"), true), None);
         assert_eq!(pick(slots, None, true), Some(0));
+    }
+
+    #[test]
+    fn a_recording_matches_a_new_version_only_in_its_user_agent() {
+        let previous = b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/0.22.78\r\n\r\n";
+        let current = b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/1.0.0-alpha.0\r\n\r\n";
+        let slot = |first: &[u8]| {
+            Some(Recorded {
+                first_write: Some(first.to_vec()),
+                ..Recorded::default()
+            })
+        };
+        let slots = [slot(previous), slot(current)];
+        assert_eq!(pick(&slots, Some(current), true), Some(1));
+        assert_eq!(pick(&slots[..1], Some(current), true), Some(0));
+        for changed in [
+            b"GET /other HTTP/1.1\r\nUser-Agent: kassiber/1.0.0\r\n\r\n".as_slice(),
+            b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/ai\r\n\r\n",
+            b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/1.0.0\r\n\r\nchanged body",
+        ] {
+            assert_eq!(pick(&slots, Some(changed), true), None);
+        }
+        assert!(!same_http_request(
+            b"GET /tx HTTP/1.1\r\n\r\nUser-Agent: kassiber/0.22.78\r\n",
+            b"GET /tx HTTP/1.1\r\n\r\nUser-Agent: kassiber/1.0.0\r\n",
+        ));
     }
 
     #[test]

@@ -140,14 +140,16 @@ fn partition_snapshot(conn: &Connection, profile: &str, args: &Value) -> Result<
             .with_details(dict([("reason", s("bank_statements_partition"))])));
     }
     // Held Bisq trades name txids, not rows: a partition cannot carry them.
-    // A cleared hold whose trade legs are gone (a rolled-back import) is
-    // open again: the same predicate as kassiber_wallets' bisq holds `OPEN`.
+    // A cleared hold is refused too: the partition copies the completing
+    // trade's legs but not the hold, so rolling that import back in the
+    // exported book could not reopen it (kassiber_wallets' bisq holds `OPEN`
+    // reads the table).
     let holds = kassiber_store::optional::PROVIDER_TRADE_HOLDS;
     if kassiber_store::optional::present(conn, holds)
         .map_err(|e| AppError::new(e.code, e.message))?
         && !rows(
             conn,
-            "SELECT 1 FROM provider_trade_holds h WHERE h.profile_id=? AND (h.state='held' OR NOT EXISTS(SELECT 1 FROM transactions l WHERE l.profile_id=h.profile_id AND l.excluded=0 AND substr(l.external_id,1,length(h.provider)+length(h.trade_id)+2)=h.provider||':'||h.trade_id||':'))",
+            "SELECT 1 FROM provider_trade_holds WHERE profile_id=? LIMIT 1",
             [profile],
         )?
         .is_empty()

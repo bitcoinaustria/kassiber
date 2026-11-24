@@ -298,6 +298,14 @@ fn main() {
             .max(1);
         env.insert("KASSIBER_TEST_SQLITE_SEED".into(), seed.to_string());
         command.env("KASSIBER_TEST_SQLITE_SEED", seed.to_string());
+        // The version the binary reports, pinned so the session replays
+        // unchanged after a version bump. A test that set one keeps it.
+        let version = kassiber_session_replay::VERSION_OVERRIDE;
+        if !env.contains_key(version) {
+            let current = kassiber_session_replay::package_version();
+            env.insert(version.into(), current.into());
+            command.env(version, current);
+        }
     }
     // The session's wall clock (crates/session-replay/clock-shim): a short
     // process reads the same times, and the book the same hashes over them,

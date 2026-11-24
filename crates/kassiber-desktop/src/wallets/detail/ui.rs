@@ -103,6 +103,8 @@ pub fn input(
     let mut f = text_input(edit, tk.tsm(400.0))
         .key(format!("{key}-field"))
         .single_line()
+        .px(tk.r(0.75))
+        .py(tk.r(0.4))
         .placeholder(placeholder.to_owned(), tk.muted_fg)
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(label.to_owned())
@@ -114,8 +116,8 @@ pub fn input(
     }
     field_frame(tk, key)
         .h(tk.r(2.25))
-        .px(tk.r(0.75))
         .center_y()
+        .clip_rounded(tk.r(0.375))
         .child(f)
 }
 
@@ -134,6 +136,8 @@ pub fn input_submit(
     let mut f = text_input(edit, tk.tsm(400.0))
         .key(format!("{key}-field"))
         .single_line()
+        .px(tk.r(0.75))
+        .py(tk.r(0.4))
         .placeholder(placeholder.to_owned(), tk.muted_fg)
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(label.to_owned())
@@ -146,13 +150,14 @@ pub fn input_submit(
     }
     field_frame(tk, key)
         .h(tk.r(2.25))
-        .px(tk.r(0.75))
         .center_y()
+        .clip_rounded(tk.r(0.375))
         .child(f)
 }
 
 /// shadcn `Textarea` (`min-h-16 rounded-md border border-input px-3 py-2`), here with the
-/// caller's style (`font-mono text-xs` in the edit dialog) and minimum height.
+/// caller's style (`font-mono text-xs` in the edit dialog), hard-wrap for spaceless descriptors,
+/// full-box click targeting, Enter newlines, and bounded vertical scrolling.
 #[allow(clippy::too_many_arguments)]
 pub fn textarea(
     tk: &Tk,
@@ -164,19 +169,33 @@ pub fn textarea(
     min_h: f32,
     access: EditFn,
 ) -> El {
+    let inner_min_h = (min_h - 2.0).max(tk.r(2.0));
+    let max_h = (min_h * 1.75).max(tk.r(12.0)).min(tk.r(16.0));
     let f = text_input(edit, style)
         .key(format!("{key}-field"))
+        .wrap_anywhere()
+        .w_full()
+        .min_w(0.0)
+        .px(tk.r(0.75))
+        .py(tk.r(0.5))
+        .min_h(inner_min_h)
         .placeholder(placeholder.to_owned(), tk.muted_fg)
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(label.to_owned())
         .on_edit(access)
-        .w_full();
-    field_frame(tk, key)
-        .min_h(min_h)
-        .px(tk.r(0.75))
-        .py(tk.r(0.5))
-        .items_start()
-        .child(f)
+        .on_submit(move |a: &mut App, _| access(a).insert("\n"));
+    let scroll = col()
+        .key(format!("{key}-scroll"))
+        .w_full()
+        .min_w(0.0)
+        .shrink()
+        .min_h(inner_min_h)
+        .max_h(max_h)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(f);
+    field_frame(tk, key).clip_rounded(tk.r(0.375)).child(scroll)
 }
 
 fn field_frame(tk: &Tk, key: &str) -> El {

@@ -27,12 +27,13 @@ use crate::catalog::load_tools_entry;
 use crate::catalog::{get_tool_py, KindClass};
 use crate::consent::CONSENT_TIMEOUT;
 use crate::executor::{
-    denial_for, execute_read_only, is_advertised, model_output, parse_tool_call, run_auto_reads,
-    tool_result_denied, tool_result_record, ParsedCall, ReadHost, Runtime,
+    denial_for, execute_read_only, is_advertised, model_output, parse_tool_call,
+    run_auto_reads_pinned, tool_result_denied, tool_result_record, ParsedCall, ReadHost, Runtime,
 };
 use crate::mutate::{execute_mutating, record_nonexecuted_custody_call, CustodyAudit};
 use crate::planner::{
-    cross_book_read_allowed, insert_auto_tool_context_message, planned_auto_reads,
+    cross_book_read_allowed, insert_auto_tool_context_message, pinned_entity_read,
+    planned_auto_reads, with_pinned_entity_read,
 };
 use crate::previews::{plan_consent_preview, preview_arguments, review_preview};
 use crate::prompt::{build_chat_messages, PromptKind};
@@ -741,6 +742,21 @@ impl Worker {
         // profile, so `advertised_tools` stays both the authorization set and
         // the receipt's count.
         let planned = planned_auto_reads(kind, &validated.messages);
+        // "Ask about this": the pinned item's own review packet, read first.
+        // Opt-in per request, and only after the daemon bound the context to
+        // the open book; the read runs through the same advertised, local,
+        // read-only gate as every other auto-read.
+        let pinned = (validated.read_pinned_entity && kind == Some("kassiber"))
+            .then(|| {
+                pinned_entity_read(
+                    screen_context
+                        .as_ref()
+                        .filter(|c| matches!(c, Value::Dict(_))),
+                )
+            })
+            .flatten();
+        let pinned_first = pinned.is_some();
+        let planned = with_pinned_entity_read(planned, pinned);
         for read in &planned {
             if let Some(entry) = crate::catalog::get_tool(read.name) {
                 if !entries
@@ -826,8 +842,9 @@ impl Worker {
             let mut emitted: Vec<Value> = Vec::new();
             let context = {
                 let reads = host.reads();
-                run_auto_reads(
+                run_auto_reads_pinned(
                     &planned,
+                    pinned_first,
                     &mut runtime,
                     reads,
                     &mut |record| emitted.push(record),

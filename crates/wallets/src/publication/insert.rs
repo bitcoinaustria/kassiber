@@ -10,7 +10,7 @@ use kassiber_pydecimal::{Context, Decimal, Rounding};
 use kassiber_pyjson::{Key, Value};
 use kassiber_store::rusqlite::{params_from_iter, types::Value as Sql, Connection};
 
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 const RATES_CACHE: &str = "rates_cache";
 const OBSERVER_DERIVED_KINDS: [&str; 3] = ["deposit", "withdrawal", "fee"];
 const AUTHORED_COLUMNS: [&str; 6] = [

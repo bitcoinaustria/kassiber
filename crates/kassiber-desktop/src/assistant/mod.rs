@@ -31,6 +31,7 @@ pub mod stream;
 pub mod synthetic;
 pub mod think;
 pub mod thread;
+pub mod tray;
 
 use rune::{Cx, El, Key, KeyEvent, TextEdit, Tx};
 use serde_json::{Value, json};
@@ -113,13 +114,39 @@ pub enum Front {
     Detail,
 }
 
-/// The item "Ask about this" pinned (`AssistantFocus` + its book): the typed context replaces
-/// the page's while it is pinned; the label stays on the local chip and is never sent.
+/// What an item is: the `entity_type` the daemon binds it to the open book as and reads for
+/// the model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Transaction,
+    CustodyGap,
+}
+
+impl Kind {
+    pub fn entity_type(self) -> &'static str {
+        match self {
+            Kind::Transaction => "transaction",
+            Kind::CustodyGap => "custody_gap",
+        }
+    }
+}
+
+/// The item a turn is about (`AssistantFocus` + its book): the one "Ask about this" pinned, or
+/// the one open (the transaction in the detail panel, else the custody gap under review). Its
+/// typed entity joins the page's context (`tray::build`); the label stays on the local chip and
+/// is never sent.
 #[derive(Clone, Debug)]
 pub struct Focus {
+    pub kind: Kind,
+    pub id: String,
     pub label: String,
     pub context: Value,
     pub book: chat::Book,
+    /// The user asked about it ("Ask about this", the panel's Assistant surface): the daemon
+    /// reads its review packet for the model (`read_pinned_entity`). An item that is only open
+    /// in the detail panel travels as its typed entity; the model reads it when the question
+    /// needs it, so unrelated questions don't pay for the packet.
+    pub read: bool,
 }
 
 /// This area's UI state (`app.assistant`): the web's `AssistantSessionProvider` state plus the
@@ -162,6 +189,10 @@ pub struct Ui {
     pub chat_modes: std::collections::HashMap<String, PermissionMode>,
     /// The last page the user was on (the assistant page answers about it).
     pub last_screen: Option<Value>,
+    /// The open item the user removed from the tray, kept out until another opens.
+    pub hidden_open: Option<(Kind, String)>,
+    /// The Transactions chart selection removed from the tray, kept out until it changes.
+    pub hidden_chart: Option<crate::transactions::model::ChartSel>,
     /// Bumped by every fresh conversation (`generationRef`) and every submit (`promptRevisionRef`).
     pub generation: u64,
     pub prompt_revision: u64,
@@ -263,6 +294,8 @@ impl Default for Ui {
             shown: Default::default(),
             chat_modes: Default::default(),
             last_screen: None,
+            hidden_open: None,
+            hidden_chart: None,
             generation: 0,
             prompt_revision: 0,
             turn_generation: 0,
@@ -609,6 +642,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     changed |= picker::poll(app, tx);
     changed |= closed::poll(app, tx);
     changed |= thread::poll_thought(app, tx);
+    changed |= thread::action::poll(app);
     changed |= chat::poll(app);
     changed |= evidence::poll(app, tx);
     if std::mem::take(&mut app.assistant.thread.anchor_new_turn) {
@@ -920,56 +954,125 @@ pub fn open_panel(app: &mut App) {
 /// question (which never contains its identity) and open the panel. A draft, not a send: the
 /// user reviews the question and the model before anything leaves the device.
 pub fn ask_about(app: &mut App, tx_id: &str, date: Option<&str>, quarantine: bool) {
-    let context = screen::context_for(
-        if quarantine {
-            "/review"
-        } else {
-            "/transactions"
-        },
-        &format!("?tx={}", urlencode(tx_id)),
-    );
-    if context["entity_type"] != "transaction" || context["entity_id"].is_null() {
+    if !pin_transaction(app, tx_id, date, quarantine) {
         return;
     }
-    let day = date
-        .map(|d| d.chars().take(10).collect::<String>())
-        .filter(|d| !d.is_empty())
-        .unwrap_or_else(|| "—".into());
-    let (label_key, prompt_key) = if quarantine {
-        (
-            "assistant:panel.focusQuarantine",
-            "assistant:panel.askAboutQuarantinePrompt",
-        )
+    let prompt_key = if quarantine {
+        "assistant:panel.askAboutQuarantinePrompt"
     } else {
-        (
-            "assistant:panel.focusTransaction",
-            "assistant:panel.askAboutTransactionPrompt",
-        )
+        "assistant:panel.askAboutTransactionPrompt"
     };
-    // `captureBook()`: not taken before the open book's ids are known.
-    let Some(book) = chat::book_now(app) else {
-        chat::refuse_book_loading(app, None);
-        return;
-    };
-    app.assistant.focus = Some(Focus {
-        label: crate::i18n::tr(label_key, &[("date", &day)]),
-        context,
-        book,
-    });
     chat::replace_draft(app, &crate::i18n::t(prompt_key), true);
     open_panel(app);
 }
 
-fn urlencode(s: &str) -> String {
-    s.bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
-        .collect()
+/// Pin a transaction as the typed context of the following turns (the composer's "About"
+/// chip); the daemon reads its review packet for the model while the pin is live. Its identity
+/// travels only as the typed entity, never in prompt text. False when the id is not a safe
+/// entity id or the open book's ids are not known yet (a notice says so).
+pub fn pin_transaction(app: &mut App, tx_id: &str, date: Option<&str>, quarantine: bool) -> bool {
+    if screen::item_context(tx_id, quarantine).is_none() {
+        return false;
+    }
+    pin(app, |book| transaction_focus(tx_id, date, quarantine, book))
+}
+
+/// Pin an item `make` builds for the open book, as `pin_transaction` does.
+fn pin(app: &mut App, make: impl FnOnce(chat::Book) -> Option<Focus>) -> bool {
+    // `captureBook()`: not taken before the open book's ids are known.
+    let Some(book) = chat::book_now(app) else {
+        chat::refuse_book_loading(app, None);
+        return false;
+    };
+    let Some(focus) = make(book) else {
+        return false;
+    };
+    app.assistant.focus = Some(focus);
+    true
+}
+
+/// "Ask about this" on a custody gap under review: pin it, prefill the question and open the
+/// panel, as `ask_about` does for a transaction.
+pub fn ask_about_gap(app: &mut App, gap_id: &str, started: Option<&str>) {
+    if screen::gap_context(gap_id).is_none() || !pin(app, |book| gap_focus(gap_id, started, book)) {
+        return;
+    }
+    let prompt = crate::i18n::t("assistant:panel.askAboutGapPrompt");
+    chat::replace_draft(app, &prompt, true);
+    open_panel(app);
+}
+
+/// The chip's day: the first ten characters of a date ("unconfirmed" for a placeholder time),
+/// or a dash.
+fn day(date: Option<&str>) -> String {
+    date.map(|d| match crate::format::is_unknown_time(d) {
+        true => crate::format::tx_date(d, false),
+        false => d.chars().take(10).collect::<String>(),
+    })
+    .filter(|d| !d.is_empty())
+    .unwrap_or_else(|| "—".into())
+}
+
+/// A transaction as the item of a turn: its typed context, its date label (the chip's words,
+/// never its id) and the book it belongs to. None for an unsafe id.
+pub fn transaction_focus(
+    tx_id: &str,
+    date: Option<&str>,
+    quarantine: bool,
+    book: chat::Book,
+) -> Option<Focus> {
+    let context = screen::item_context(tx_id, quarantine)?;
+    let label_key = if quarantine {
+        "assistant:panel.focusQuarantine"
+    } else {
+        "assistant:panel.focusTransaction"
+    };
+    Some(Focus {
+        kind: Kind::Transaction,
+        id: context["entity_id"].as_str()?.to_owned(),
+        label: crate::i18n::tr(label_key, &[("date", &day(date))]),
+        context,
+        book,
+        read: true,
+    })
+}
+
+/// A custody gap as the item of a turn, labelled by the day it started (never its id or its
+/// wallets). None for an unsafe id.
+pub fn gap_focus(gap_id: &str, started: Option<&str>, book: chat::Book) -> Option<Focus> {
+    let context = screen::gap_context(gap_id)?;
+    Some(Focus {
+        kind: Kind::CustodyGap,
+        id: context["entity_id"].as_str()?.to_owned(),
+        label: crate::i18n::tr("assistant:panel.focusGap", &[("date", &day(started))]),
+        context,
+        book,
+        read: true,
+    })
+}
+
+/// The transaction panel's "Assistant" surface: the transaction on screen becomes the pinned
+/// context (the user's draft stays as it is), then the panel opens as its own launcher opens it
+/// (`panel::open_surface`). With no record loaded it only opens the panel; on the assistant
+/// page, where the panel is not offered, it does nothing.
+pub fn open_about_detail(app: &mut App) {
+    if app.route.path() == "/assistant" {
+        return;
+    }
+    let record = app.detail.open.as_ref().and_then(|o| o.record.clone());
+    if let Some(r) = record {
+        use crate::txdetail::draft::{opt_s, s};
+        // As the record's own "Ask about this" button pins it (`header::record_actions`).
+        let (id, date, held) = (
+            s(&r, "id").to_owned(),
+            opt_s(&r, "date"),
+            opt_s(&r, "quarantineReason").is_some(),
+        );
+        if !id.is_empty() {
+            pin_transaction(app, &id, date.as_deref(), held);
+        }
+    }
+    panel::open_surface(app, 0);
 }
 
 /// A page's own request to the assistant (`handOffToAssistant`: the quarantine fix, and any
@@ -1311,6 +1414,12 @@ pub const SCENES: &[crate::app::Scene] = &[
         scene_model(a);
         scene_page(a);
         synthetic::load_approvals(a);
+    }),
+    // SYNTHETIC: the common changes as native cards (Apply waiting, Undo after).
+    ("assistant-thread-actions", |a| {
+        scene_model(a);
+        scene_page(a);
+        synthetic::load_actions(a);
     }),
     ("assistant-picker", picker::scene_open),
     ("assistant-picker-model", picker::scene_model),

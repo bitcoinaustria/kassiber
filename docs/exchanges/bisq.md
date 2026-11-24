@@ -85,7 +85,7 @@ re-import such a trade. Nothing is written for a refused file.
 
 Older Rust builds refuse a book with the holds table; the released Python app
 ignores it ([opt-in schema groups](../reference/database-compatibility.md#opt-in-schema-groups)).
-A book with holds cannot be split by network partition yet.
+A book with holds, held or cleared, cannot be split by network partition yet: the partition would not carry them, so rolling a completing import back there could not reopen a cleared hold.
 
 ## Follow-ups
 

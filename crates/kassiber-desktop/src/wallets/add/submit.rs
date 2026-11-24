@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 use super::libs::{address_list, samourai, wallet_material, wasabi};
 use super::meta::{SetupKind, is_exchange_evidence, meta};
 use super::{
-    CoreTest, Coverage, PendingSave, history_import, history_target, history_uses_existing,
-    is_history_source, scoped, selected, st, stm,
+    CoreTest, Coverage, PendingSave, SyncProgress, history_import, history_target,
+    history_uses_existing, is_history_source, scoped, selected, st, stm,
 };
 use crate::app::{App, Reply, ToastTone};
 use crate::i18n::{t, tc, tr};
@@ -24,13 +24,23 @@ pub const MAX_GAP: i64 = 5000;
 /// The submit in flight.
 pub struct Job {
     pub stage: Stage,
+    /// The catalog source id submitted (`selected(app).id` at submit time).
+    pub source_id: &'static str,
     pub label: String,
+    /// Daemon request id of the step currently in flight.
+    pub request_id: Option<String>,
+    /// Immutable wallet label submitted to `ui.wallets.sync` for the current `Stage::Sync`.
+    pub sync_wallet: Option<String>,
     /// Wallets still to `ui.wallets.sync`.
     pub syncs: VecDeque<String>,
     /// The toast once everything is done.
     pub done: Option<(String, String, ToastTone)>,
     /// Keep the dialog open when done (an import into an existing wallet shows its summary).
     pub stay_open: bool,
+    /// The user closed the dialog while this submit was still in flight.
+    pub dismissed: bool,
+    /// Cancellation has been requested for the active `Stage::Sync`; waiting for worker exit.
+    pub cancelling: bool,
     /// The form as submitted: later steps (detection, coverage, the create after them) use
     /// it, not the form's current values, which stay editable while the steps run.
     pub form: super::Form,
@@ -283,7 +293,10 @@ pub fn wallet_for_bull_network(app: &App, network: &str) -> String {
 
 /// `selectedBullWalletRoutes`.
 pub fn bull_routes(app: &App) -> Vec<(&'static str, String)> {
-    let f = form(app);
+    bull_routes_for(app, form(app))
+}
+
+fn bull_routes_for(app: &App, f: &super::Form) -> Vec<(&'static str, String)> {
     f.bull_networks
         .iter()
         .map(|n| {
@@ -356,7 +369,7 @@ pub fn submit_label(app: &App) -> String {
 // ---- Validation ------------------------------------------------------------------------------
 
 fn parse_date(s: &str) -> bool {
-    crate::format::Day::parse(s.trim()).is_some()
+    crate::ui::date_picker::is_valid_date(s)
 }
 
 /// `validateSetupForm`: field key → message.
@@ -488,6 +501,12 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
                 e.push((
                     "spScanStartHeight",
                     t("connections:add.silentPayments.errorStartHeight"),
+                ));
+            }
+            if !f.sp_full_history && has_d && !parse_date(&f.sp_start_date.text) {
+                e.push((
+                    "spScanStartDate",
+                    t("connections:add.silentPayments.errorStartDate"),
                 ));
             }
             if !has_h && !has_d && !f.sp_full_history {
@@ -679,22 +698,37 @@ pub fn validate(app: &mut App) -> Vec<(&'static str, String)> {
 
 // ---- Submit ----------------------------------------------------------------------------------
 
-fn send_job(app: &mut App, stage: Stage, kind: &str, args: Value) {
-    if let Some(j) = stm(app).job.as_mut() {
-        j.stage = stage;
-    }
+fn dispatch_job(app: &mut App, mut job: Job, stage: Stage, kind: &str, args: Value) {
+    job.stage = stage;
     let args = scoped(app, args);
-    app.send(kind, args, "wallets.add.job");
+    job.request_id = app.send(kind, args, "wallets.add.job");
+    if job.dismissed {
+        stm(app).background_jobs.push(job);
+    } else {
+        stm(app).job = Some(job);
+    }
+}
+
+fn send_job(app: &mut App, stage: Stage, kind: &str, args: Value) {
+    if let Some(job) = stm(app).job.take() {
+        dispatch_job(app, job, stage, kind, args);
+    }
 }
 
 fn start(app: &mut App, label: &str) {
+    let source_id = selected(app).id;
     let form = st(app).form.clone();
     stm(app).job = Some(Job {
         stage: Stage::Create,
+        source_id,
         label: label.to_owned(),
+        request_id: None,
+        sync_wallet: None,
         syncs: VecDeque::new(),
         done: None,
         stay_open: false,
+        dismissed: false,
+        cancelling: false,
         form,
     });
 }
@@ -760,8 +794,8 @@ pub fn submit(app: &mut App) {
                     args["birthday"] = json!(iso_date(&form(app).birthday.text));
                 }
                 send_job(app, Stage::Coverage, "ui.backends.bitcoinrpc.test", args);
-            } else {
-                after_coverage(app);
+            } else if let Some(job) = stm(app).job.take() {
+                after_coverage(app, job);
             }
         }
         SetupKind::SilentPayment => {
@@ -951,11 +985,15 @@ pub fn first_required_missing(app: &App) -> Option<(&'static str, bool)> {
     // The source-file input is `required` except for the generic ledger (read-only there).
     let file_required = m.source_format != Some("generic_ledger");
     match m.kind() {
-        SetupKind::Descriptor => {
+        SetupKind::Descriptor => select(
+            backend_required(descriptor_options(app)),
+            "connection-backend",
+        )
+        .or_else(|| text(empty(&f.wallet_material), "connection-wallet-material")),
+        SetupKind::AddressList => {
             select(backend_required(address_options(app)), "connection-backend")
-                .or_else(|| text(empty(&f.wallet_material), "connection-wallet-material"))
         }
-        SetupKind::AddressList | SetupKind::Samourai => select(
+        SetupKind::Samourai => select(
             backend_required(descriptor_options(app)),
             "connection-backend",
         ),
@@ -1041,35 +1079,27 @@ fn strip_nulls(mut v: Value) -> Value {
     v
 }
 
-/// A date field's value as `YYYY-MM-DD` (`type="date"` gives ISO; a typed `mm/dd/yyyy` or
-/// `dd.mm.yyyy` is converted).
+/// A date field's value as `YYYY-MM-DD` (`YYYY-MM-DD`, `mm/dd/yyyy`, or `dd.mm.yyyy` is
+/// converted with strict calendar validation).
 pub fn iso_date(s: &str) -> String {
-    let s = s.trim();
-    if crate::format::Day::parse(s).is_some() {
-        return s.to_owned();
-    }
-    let parts: Vec<&str> = s.split(['/', '.']).collect();
-    if parts.len() == 3 {
-        let (a, b, y) = (parts[0], parts[1], parts[2]);
-        let (m, d) = if s.contains('/') { (a, b) } else { (b, a) };
-        if let (Ok(m), Ok(d), Ok(y)) = (m.parse::<u32>(), d.parse::<u32>(), y.parse::<i32>()) {
-            return format!("{y:04}-{m:02}-{d:02}");
-        }
-    }
-    s.to_owned()
+    crate::ui::date_picker::normalize_date(s).unwrap_or_else(|| s.trim().to_owned())
 }
 
-fn after_coverage(app: &mut App) {
-    let src = selected(app);
-    let m = meta(src.id);
-    let f = form(app);
+fn after_coverage(app: &mut App, mut job: Job) {
+    let m = meta(job.source_id);
     if m.kind() == SetupKind::Descriptor {
-        let bare = wallet_material::detect(&f.wallet_material.text).kind
+        let bare = wallet_material::detect(&job.form.wallet_material.text).kind
             == wallet_material::Kind::BareXpub;
-        if bare && f.script_type.is_empty() {
-            let args = json!({"wallet_material": txt(&f.wallet_material), "backend": opt(&f.backend), "chain": m.chain, "network": m.network});
-            send_job(
+        if bare && job.form.script_type.is_empty() {
+            let args = json!({
+                "wallet_material": txt(&job.form.wallet_material),
+                "backend": opt(&job.form.backend),
+                "chain": m.chain,
+                "network": m.network,
+            });
+            dispatch_job(
                 app,
+                job,
                 Stage::DetectScripts,
                 "ui.wallets.detect_script_types",
                 strip_nulls(args),
@@ -1077,77 +1107,74 @@ fn after_coverage(app: &mut App) {
             return;
         }
         let types = if bare {
-            Some(vec![f.script_type.clone()])
+            Some(vec![job.form.script_type.clone()])
         } else {
             None
         };
-        create_descriptor(app, types);
+        create_descriptor(app, job, types);
     } else {
-        let parsed = address_list::parse(&f.address_list.text);
-        let label = st(app)
-            .job
-            .as_ref()
-            .map(|j| j.label.clone())
-            .unwrap_or_default();
+        let parsed = address_list::parse(&job.form.address_list.text);
+        let label = job.label.clone();
         let args = json!({
             "label": label,
             "kind": m.wallet_kind.unwrap_or("address"),
-            "backend": opt(&f.backend),
+            "backend": opt(&job.form.backend),
             "chain": m.chain,
             "network": m.network,
             "addresses": parsed.valid,
-            "birthday": opt(&iso_date(&f.birthday.text)),
+            "birthday": opt(&iso_date(&job.form.birthday.text)),
         });
-        let sync = f.sync_after;
-        if let Some(j) = stm(app).job.as_mut() {
-            if sync {
-                j.syncs.push_back(label.clone());
-            }
-            j.done = Some((
-                t("connections:add.added.title"),
-                tc(
-                    "connections:add.addressList.addedBody",
-                    parsed.valid.len(),
-                    &[("label", &label)],
-                ),
-                ToastTone::Success,
-            ));
+        if job.form.sync_after {
+            job.syncs.push_back(label.clone());
         }
-        send_job(app, Stage::Create, "ui.wallets.create", strip_nulls(args));
+        job.done = Some((
+            t("connections:add.added.title"),
+            tc(
+                "connections:add.addressList.addedBody",
+                parsed.valid.len(),
+                &[("label", &label)],
+            ),
+            ToastTone::Success,
+        ));
+        dispatch_job(
+            app,
+            job,
+            Stage::Create,
+            "ui.wallets.create",
+            strip_nulls(args),
+        );
     }
 }
 
-fn create_descriptor(app: &mut App, script_types: Option<Vec<String>>) {
-    let m = meta(selected(app).id);
-    let f = form(app);
-    let label = st(app)
-        .job
-        .as_ref()
-        .map(|j| j.label.clone())
-        .unwrap_or_default();
+fn create_descriptor(app: &mut App, mut job: Job, script_types: Option<Vec<String>>) {
+    let m = meta(job.source_id);
+    let label = job.label.clone();
     let args = json!({
         "label": label,
         "kind": m.wallet_kind.unwrap_or("descriptor"),
-        "backend": opt(&f.backend),
+        "backend": opt(&job.form.backend),
         "chain": m.chain,
         "network": m.network,
-        "wallet_material": txt(&f.wallet_material),
+        "wallet_material": txt(&job.form.wallet_material),
         "script_types": script_types,
-        "gap_limit": txt(&f.gap_limit).parse::<i64>().ok(),
-        "birthday": opt(&iso_date(&f.birthday.text)),
+        "gap_limit": txt(&job.form.gap_limit).parse::<i64>().ok(),
+        "birthday": opt(&iso_date(&job.form.birthday.text)),
     });
-    let sync = f.sync_after;
-    if let Some(j) = stm(app).job.as_mut() {
-        if sync {
-            j.syncs.push_back(label.clone());
-        }
-        j.done = Some((
-            t("connections:add.added.title"),
-            tr("connections:add.added.body", &[("label", &label)]),
-            ToastTone::Success,
-        ));
+    if job.form.sync_after {
+        job.syncs.push_back(label.clone());
     }
-    send_job(app, Stage::Create, "ui.wallets.create", strip_nulls(args));
+    job.done = Some((
+        t("connections:add.added.title"),
+        tr("connections:add.added.body", &[("label", &label)]),
+        ToastTone::Success,
+    ));
+    dispatch_job(
+        app,
+        job,
+        Stage::Create,
+        "ui.wallets.create",
+        strip_nulls(args),
+    );
 }
 
 fn submit_file_wallet(app: &mut App, label: &str) {
@@ -1233,8 +1260,7 @@ fn f_sync(b: bool) -> bool {
 }
 
 /// `coreRpcConfig` / `coreRpcProbeArgs`.
-fn core_config(app: &App) -> Value {
-    let f = form(app);
+fn core_config_for(f: &super::Form) -> Value {
     let mut c = json!({"display_name": txt(&f.label)});
     if f.core_auth == "cookiefile" {
         c["cookiefile"] = json!(txt(&f.core_cookiefile));
@@ -1250,7 +1276,7 @@ pub fn core_probe_args(app: &App) -> Value {
     if !f.core_credential_ref.is_empty() {
         json!({"credential_ref": f.core_credential_ref, "timeout": 10})
     } else {
-        json!({"url": txt(&f.core_url), "network": if f.core_network.is_empty() { "main" } else { f.core_network.as_str() }, "config": core_config(app), "timeout": 10})
+        json!({"url": txt(&f.core_url), "network": if f.core_network.is_empty() { "main" } else { f.core_network.as_str() }, "config": core_config_for(f), "timeout": 10})
     }
 }
 
@@ -1275,15 +1301,14 @@ fn backend_name_from_label(label: &str) -> String {
     }
 }
 
-fn core_backend_args(app: &App) -> Value {
-    let f = form(app);
+fn core_backend_args_for(f: &super::Form) -> Value {
     let mut a = json!({
         "name": backend_name_from_label(&f.label.text),
         "kind": "bitcoinrpc",
         "url": txt(&f.core_url),
         "chain": "bitcoin",
         "network": if f.core_network.is_empty() { "main" } else { f.core_network.as_str() },
-        "config": core_config(app),
+        "config": core_config_for(f),
     });
     if !f.core_credential_ref.is_empty() {
         a["credential_ref"] = json!(f.core_credential_ref);
@@ -1307,43 +1332,229 @@ pub fn open_configured_backend(app: &mut App, settings_hash: Option<String>) {
 }
 
 fn fail(app: &mut App, message: String) {
-    let s = stm(app);
-    s.job = None;
-    s.progress = None;
-    s.setup_error = Some(message);
+    let job = stm(app).job.take();
+    match job {
+        Some(j) => fail_job(app, j, message),
+        None => {
+            let s = stm(app);
+            s.progress = None;
+            s.setup_error = Some(message);
+            app.refresh_reads();
+            app.send("ui.wallets.list", Value::Null, "wallets.add.wallets");
+        }
+    }
+}
+
+fn fail_job(app: &mut App, job: Job, message: String) {
+    if job.dismissed {
+        let body = if job.label.trim().is_empty() {
+            message
+        } else {
+            tr(
+                "connections:add.dismissed.failedBody",
+                &[("label", &job.label), ("error", &message)],
+            )
+        };
+        app.toast(
+            ToastTone::Error,
+            &t("connections:add.dismissed.failedTitle"),
+            Some(body),
+            Some("connection-setup"),
+        );
+    } else {
+        let s = stm(app);
+        s.progress = None;
+        s.setup_error = Some(message);
+    }
     app.refresh_reads();
     app.send("ui.wallets.list", Value::Null, "wallets.add.wallets");
 }
 
-fn finish(app: &mut App) {
-    let Some(job) = stm(app).job.take() else {
-        return;
-    };
-    stm(app).progress = None;
+fn finish_job(app: &mut App, job: Job) {
+    if !job.dismissed {
+        stm(app).progress = None;
+    }
     if let Some((title, body, tone)) = job.done {
         app.toast(tone, &title, Some(body), Some("connection-setup"));
     }
     app.refresh_reads();
     app.send("ui.wallets.list", Value::Null, "wallets.add.wallets");
-    // A Bisq import that held trades keeps its summary open: those trades booked nothing, and
-    // the toast alone would read as success.
-    let held = st(app)
-        .last_import
-        .as_ref()
-        .is_some_and(|r| !super::bisq::held_lines(r).is_empty());
-    if !job.stay_open && !held {
-        app.ov.add_open = false;
+    if !job.dismissed {
+        // A Bisq import that held trades keeps its summary open: those trades booked nothing, and
+        // the toast alone would read as success.
+        let held = st(app)
+            .last_import
+            .as_ref()
+            .is_some_and(|r| !super::bisq::held_lines(r).is_empty());
+        if !job.stay_open && !held {
+            app.ov.add_open = false;
+        }
     }
 }
 
-fn next_sync(app: &mut App) {
-    let next = stm(app).job.as_mut().and_then(|j| j.syncs.pop_front());
-    match next {
-        Some(w) => {
-            stm(app).progress = Some((w.clone(), 0, 0));
-            send_job(app, Stage::Sync, "ui.wallets.sync", json!({"wallet": w}));
+fn send_freshness_cancel(
+    app: &mut App,
+    target_request_id: Option<&str>,
+    job_id: Option<&str>,
+) -> bool {
+    let mut args = serde_json::Map::new();
+    if let Some(req_id) = target_request_id.map(str::trim).filter(|s| !s.is_empty()) {
+        args.insert("target_request_id".into(), json!(req_id));
+    }
+    if let Some(jid) = job_id.map(str::trim).filter(|s| !s.is_empty()) {
+        args.insert("job_id".into(), json!(jid));
+    }
+    if args.is_empty() {
+        return false;
+    }
+    let args = scoped(app, Value::Object(args));
+    app.send("ui.freshness.cancel", args, "wallets.add.cancel");
+    true
+}
+
+/// Requests cancellation of an active scan during `Stage::Sync` and keeps tracking the job until
+/// the daemon's freshness worker exits and replies (so reads refresh only once the slot is free).
+pub fn stop_scan(app: &mut App) {
+    let Some((stage, req_id, cancelling)) = st(app)
+        .job
+        .as_ref()
+        .map(|j| (j.stage.clone(), j.request_id.clone(), j.cancelling))
+    else {
+        stm(app).progress = None;
+        return;
+    };
+    if stage != Stage::Sync || cancelling {
+        return;
+    }
+    let job_id = st(app).progress.as_ref().and_then(|p| p.job_id.clone());
+    send_freshness_cancel(app, req_id.as_deref(), job_id.as_deref());
+    if let Some(j) = stm(app).job.as_mut() {
+        j.cancelling = true;
+        j.syncs.clear();
+    }
+}
+
+/// Dismisses the dialog mid-submit without leaving half-configured connections behind:
+/// required multi-step writes continue in `background_jobs`, optional post-create scans are
+/// skipped with a summary toast, and an active `Stage::Sync` is cancelled and tracked through
+/// worker exit before reads refresh.
+pub fn dismiss_job(app: &mut App) {
+    let Some(mut job) = stm(app).job.take() else {
+        stm(app).progress = None;
+        return;
+    };
+    let prog_job_id = stm(app).progress.take().and_then(|p| p.job_id);
+    if job.stage == Stage::Bip329Preview {
+        return;
+    }
+    job.dismissed = true;
+    if job.stage == Stage::Sync {
+        job.syncs.clear();
+        if !job.cancelling {
+            send_freshness_cancel(app, job.request_id.as_deref(), prog_job_id.as_deref());
+            job.cancelling = true;
         }
-        None => finish(app),
+    }
+    stm(app).background_jobs.push(job);
+}
+
+/// Live `ui.wallets.sync.progress` updates while Add connection is running `Stage::Sync`.
+pub fn on_progress(app: &mut App, tag: &str, request_id: &str, env: &Value) {
+    if tag != "wallets.add.job" {
+        return;
+    }
+    let Some((expected_id, expected_wallet)) = st(app).job.as_ref().and_then(|j| {
+        (j.stage == Stage::Sync).then(|| {
+            (
+                j.request_id.clone(),
+                j.sync_wallet.clone().unwrap_or_else(|| j.label.clone()),
+            )
+        })
+    }) else {
+        return;
+    };
+    if let Some(exp) = expected_id.as_deref()
+        && !request_id.is_empty()
+        && exp != request_id
+    {
+        return;
+    }
+    let data = &env["data"];
+    let p = if data.get("phase").and_then(Value::as_str).is_none()
+        && data.get("progress").is_some_and(Value::is_object)
+    {
+        &data["progress"]
+    } else {
+        data
+    };
+    let prev = st(app)
+        .progress
+        .as_ref()
+        .map(|pr| pr.percent)
+        .unwrap_or(crate::shell::maint::STARTING_VALUE);
+    let percent = crate::shell::maint::progress_value(p, prev);
+    let slot = stm(app).progress.get_or_insert_with(|| SyncProgress {
+        wallet: expected_wallet.clone(),
+        ..SyncProgress::default()
+    });
+    if slot.wallet.is_empty() {
+        slot.wallet = expected_wallet;
+    }
+    if let Some(id) = p
+        .get("job_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        slot.job_id = Some(id.to_owned());
+    }
+    if let Some(ph) = p
+        .get("phase")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        slot.phase = Some(ph.to_owned());
+    }
+    if let Some(done) = p.get("processed").and_then(Value::as_u64) {
+        slot.processed = done;
+    }
+    if let Some(total) = p.get("total").and_then(Value::as_u64) {
+        slot.total = total;
+    }
+    slot.percent = percent;
+}
+
+fn next_sync_job(app: &mut App, mut job: Job) {
+    if job.dismissed && !job.syncs.is_empty() {
+        job.syncs.clear();
+        job.done = Some((
+            t("connections:add.dismissed.savedScanSkippedTitle"),
+            tr(
+                "connections:add.dismissed.savedScanSkippedBody",
+                &[("label", &job.label)],
+            ),
+            ToastTone::Info,
+        ));
+        return finish_job(app, job);
+    }
+    match job.syncs.pop_front() {
+        Some(w) => {
+            job.sync_wallet = Some(w.clone());
+            if !job.dismissed {
+                stm(app).progress = Some(SyncProgress {
+                    wallet: w.clone(),
+                    percent: crate::shell::maint::STARTING_VALUE,
+                    ..SyncProgress::default()
+                });
+            }
+            dispatch_job(
+                app,
+                job,
+                Stage::Sync,
+                "ui.wallets.sync",
+                json!({"wallet": w}),
+            );
+        }
+        None => finish_job(app, job),
     }
 }
 
@@ -1357,20 +1568,74 @@ fn import_result_from_sync(result: &Value) -> Option<Value> {
     has.then(|| result.clone())
 }
 
+fn sync_failure_detail(results: &[Value]) -> Option<String> {
+    let bad = results
+        .iter()
+        .find(|x| x.get("status").and_then(Value::as_str) != Some("synced"))?;
+    let pick = |v: Option<&Value>| {
+        v.and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    pick(bad.get("message"))
+        .or_else(|| pick(bad.pointer("/error/message")))
+        .or_else(|| pick(bad.get("reason")))
+        .or_else(|| pick(bad.get("error")))
+        .or_else(|| pick(bad.get("status")))
+}
+
+fn take_matching_job(app: &mut App) -> Option<Job> {
+    let reply_id = app.reply_id().map(str::to_owned);
+    let fg_matches = st(app).job.as_ref().is_some_and(|j| {
+        match (j.request_id.as_deref(), reply_id.as_deref()) {
+            (Some(exp), Some(got)) => exp == got,
+            (None, _) | (_, None) => true,
+        }
+    });
+    if fg_matches {
+        return stm(app).job.take();
+    }
+    let bg = &mut stm(app).background_jobs;
+    let idx = if let Some(got) = reply_id.as_deref() {
+        bg.iter().position(|j| j.request_id.as_deref() == Some(got))
+    } else if bg.len() == 1 {
+        Some(0)
+    } else {
+        None
+    };
+    idx.map(|i| bg.remove(i))
+}
+
 fn on_job(app: &mut App, r: &Reply) {
-    let Some(stage) = st(app).job.as_ref().map(|j| j.stage.clone()) else {
+    let Some(mut job) = take_matching_job(app) else {
         return;
     };
+    if job.stage == Stage::Sync && job.cancelling {
+        job.done = Some((
+            t("connections:add.dismissed.scanStoppedTitle"),
+            tr(
+                "connections:add.dismissed.savedScanStopped",
+                &[("label", &job.label)],
+            ),
+            ToastTone::Info,
+        ));
+        job.stay_open = false;
+        finish_job(app, job);
+        return;
+    }
     if let Some(e) = &r.error {
-        fail(app, e.clone());
+        fail_job(app, job, e.clone());
         return;
     }
     let d = &r.data;
+    let stage = job.stage.clone();
     match stage {
         Stage::CoreTest => {
             if d.get("reachable").and_then(Value::as_bool) != Some(true) {
-                return fail(
+                return fail_job(
                     app,
+                    job,
                     d.pointer("/error/message")
                         .and_then(Value::as_str)
                         .map(str::to_owned)
@@ -1384,28 +1649,22 @@ fn on_job(app: &mut App, r: &Reply) {
                     .and_then(Value::as_str)
                     .map(str::to_owned)
                     .unwrap_or_else(|| t("connections:add.core.walletRpcUnavailable"));
-                return fail(app, msg);
+                return fail_job(app, job, msg);
             }
-            let label = st(app)
-                .job
-                .as_ref()
-                .map(|j| j.label.clone())
-                .unwrap_or_default();
-            if let Some(j) = stm(app).job.as_mut() {
-                j.done = Some((
-                    t("connections:add.added.title"),
-                    tr("connections:add.core.addedBody", &[("label", &label)]),
-                    ToastTone::Success,
-                ));
-            }
-            let args = core_backend_args(app);
-            send_job(app, Stage::CoreCreate, "ui.backends.create", args);
+            job.done = Some((
+                t("connections:add.added.title"),
+                tr("connections:add.core.addedBody", &[("label", &job.label)]),
+                ToastTone::Success,
+            ));
+            let args = core_backend_args_for(&job.form);
+            dispatch_job(app, job, Stage::CoreCreate, "ui.backends.create", args);
         }
-        Stage::CoreCreate => finish(app),
+        Stage::CoreCreate => finish_job(app, job),
         Stage::Coverage => {
             if d.get("reachable").and_then(Value::as_bool) != Some(true) {
-                return fail(
+                return fail_job(
                     app,
+                    job,
                     d.pointer("/error/message")
                         .and_then(Value::as_str)
                         .map(str::to_owned)
@@ -1413,21 +1672,26 @@ fn on_job(app: &mut App, r: &Reply) {
                 );
             }
             if d.get("pruned").and_then(Value::as_bool) == Some(true)
-                && txt(&form(app).birthday).is_empty()
+                && txt(&job.form.birthday).is_empty()
             {
-                return fail(app, t("connections:add.core.birthdayRequiredForPruned"));
+                return fail_job(
+                    app,
+                    job,
+                    t("connections:add.core.birthdayRequiredForPruned"),
+                );
             }
-            after_coverage(app);
+            after_coverage(app, job);
         }
         Stage::DetectScripts => match wallet_material::script_types_from_detection_payload(Some(d))
         {
-            Ok(types) => create_descriptor(app, Some(types)),
+            Ok(types) => create_descriptor(app, job, Some(types)),
             Err(reason) => {
                 let reason = reason.unwrap_or_else(|| {
                     t("connections:add.descriptor.autoDetectUnavailableReasonUnknown")
                 });
-                fail(
+                fail_job(
                     app,
+                    job,
                     tr(
                         "connections:add.descriptor.autoDetectUnavailable",
                         &[("reason", &reason)],
@@ -1436,34 +1700,34 @@ fn on_job(app: &mut App, r: &Reply) {
             }
         },
         Stage::Create => {
-            let rpc = meta(selected(app).id).source_format == Some("wasabi_bundle")
-                && form(app).wasabi_mode == "rpc";
+            let rpc = meta(job.source_id).source_format == Some("wasabi_bundle")
+                && job.form.wasabi_mode == "rpc";
             if rpc {
-                let w = &form(app).wasabi;
+                let w = &job.form.wasabi;
                 let b = wasabi::build_bundle(&w[0].text, &w[1].text, &w[2].text, &w[3].text);
-                let label = st(app)
-                    .job
-                    .as_ref()
-                    .map(|j| j.label.clone())
-                    .unwrap_or_default();
-                send_job(
+                let label = job.label.clone();
+                dispatch_job(
                     app,
+                    job,
                     Stage::WasabiImport,
                     "ui.wallets.import_file",
                     json!({"wallet": label, "source_format": "wasabi_bundle", "source_bundle": b.bundle}),
                 );
             } else {
-                next_sync(app);
+                next_sync_job(app, job);
             }
         }
         Stage::WasabiImport | Stage::ImportFile => {
-            stm(app).last_import = Some(d.clone());
-            if meta(selected(app).id).kind() == SetupKind::FileEnrichment {
-                let book = is_exchange_evidence(meta(selected(app).id).source_format);
+            if !job.dismissed {
+                stm(app).last_import = Some(d.clone());
+            }
+            let m = meta(job.source_id);
+            if m.kind() == SetupKind::FileEnrichment {
+                let book = is_exchange_evidence(m.source_format);
                 let scope = if book {
                     t("connections:add.enrichment.bookScope")
                 } else {
-                    form(app).target_wallet.clone()
+                    job.form.target_wallet.clone()
                 };
                 let n = |k: &str| {
                     crate::format::count(d.get(k).and_then(Value::as_u64).unwrap_or(0) as usize)
@@ -1476,15 +1740,22 @@ fn on_job(app: &mut App, r: &Reply) {
                         ("skipped", &n("skipped")),
                     ],
                 );
-                if let Some(j) = stm(app).job.as_mut() {
-                    j.done = Some((
-                        t("connections:add.enrichment.finishedTitle"),
-                        body,
-                        ToastTone::Success,
-                    ));
-                }
+                job.done = Some((
+                    t("connections:add.enrichment.finishedTitle"),
+                    body,
+                    ToastTone::Success,
+                ));
+            } else if job.dismissed && !super::bisq::held_lines(d).is_empty() {
+                job.done = Some((
+                    t("connections:add.dismissed.bisqHeldTitle"),
+                    tr(
+                        "connections:add.dismissed.bisqHeldBody",
+                        &[("label", &job.label)],
+                    ),
+                    ToastTone::Warning,
+                ));
             }
-            finish(app);
+            finish_job(app, job);
         }
         Stage::ImportSamourai => {
             let children: Vec<String> = d
@@ -1496,68 +1767,55 @@ fn on_job(app: &mut App, r: &Reply) {
                         .collect()
                 })
                 .unwrap_or_default();
-            let label = st(app)
-                .job
-                .as_ref()
-                .map(|j| j.label.clone())
-                .unwrap_or_default();
-            let sync = form(app).sync_after;
+            let sync = job.form.sync_after;
             let value = crate::format::count(children.len());
             let body = if sync {
                 tr(
                     "connections:add.samourai.importedBodyScanning",
-                    &[("label", &label), ("value", &value)],
+                    &[("label", &job.label), ("value", &value)],
                 )
             } else {
                 tr(
                     "connections:add.samourai.importedBody",
-                    &[("label", &label), ("value", &value)],
+                    &[("label", &job.label), ("value", &value)],
                 )
             };
-            if let Some(j) = stm(app).job.as_mut() {
-                if sync {
-                    j.syncs.extend(children);
+            if sync {
+                job.syncs.extend(children);
+            }
+            job.done = Some((
+                t("connections:add.samourai.importedTitle"),
+                body,
+                ToastTone::Success,
+            ));
+            if !job.dismissed {
+                for e in stm(app).form.samourai.iter_mut() {
+                    *e = rune::TextEdit::new("");
                 }
-                j.done = Some((
-                    t("connections:add.samourai.importedTitle"),
-                    body,
-                    ToastTone::Success,
-                ));
             }
-            for e in stm(app).form.samourai.iter_mut() {
-                *e = rune::TextEdit::new("");
-            }
-            next_sync(app);
+            next_sync_job(app, job);
         }
         Stage::PriorReport => {
             let label = d
                 .pointer("/document/label")
                 .and_then(Value::as_str)
                 .map(str::to_owned)
-                .unwrap_or_else(|| {
-                    st(app)
-                        .job
-                        .as_ref()
-                        .map(|j| j.label.clone())
-                        .unwrap_or_default()
-                });
-            if let Some(j) = stm(app).job.as_mut() {
-                j.done = Some((
-                    t("connections:add.priorReport.archivedTitle"),
-                    tr(
-                        "connections:add.priorReport.archivedBody",
-                        &[("label", &label)],
-                    ),
-                    ToastTone::Success,
-                ));
-            }
-            finish(app);
+                .unwrap_or_else(|| job.label.clone());
+            job.done = Some((
+                t("connections:add.priorReport.archivedTitle"),
+                tr(
+                    "connections:add.priorReport.archivedBody",
+                    &[("label", &label)],
+                ),
+                ToastTone::Success,
+            ));
+            finish_job(app, job);
         }
         Stage::BullCreate => {
-            let existing = form(app).bull_mode == "existing_wallets";
+            let existing = job.form.bull_mode == "existing_wallets";
             let labels: Vec<String> = if existing {
                 let mut v: Vec<String> = Vec::new();
-                for (_, w) in bull_routes(app) {
+                for (_, w) in bull_routes_for(app, &job.form) {
                     if !v.contains(&w) {
                         v.push(w);
                     }
@@ -1581,7 +1839,7 @@ fn on_job(app: &mut App, r: &Reply) {
                             .unwrap_or_default()
                     })
             };
-            let sync = form(app).sync_after;
+            let sync = job.form.sync_after;
             let n = labels.len();
             let title = if existing {
                 t("connections:add.bullWallet.mappingSavedTitle")
@@ -1596,24 +1854,19 @@ fn on_job(app: &mut App, r: &Reply) {
                 (false, true) => "connections:add.bullWallet.sourcesBodyImported",
                 (false, false) => "connections:add.bullWallet.sourcesBody",
             };
-            if let Some(j) = stm(app).job.as_mut() {
-                if sync {
-                    j.syncs.extend(labels);
-                }
-                j.done = Some((title, tc(key, n, &[]), ToastTone::Success));
+            if sync {
+                job.syncs.extend(labels);
             }
-            next_sync(app);
+            job.done = Some((title, tc(key, n, &[]), ToastTone::Success));
+            next_sync_job(app, job);
         }
         Stage::BtcpayCreate => {
             let created = super::btcpay::created(app, d);
-            let sync = form(app).sync_after;
-            if let Some(j) = stm(app).job.as_mut() {
-                if sync {
-                    j.syncs.extend(created.sync);
-                }
-                j.done = Some((created.title, created.body, created.tone));
+            if job.form.sync_after {
+                job.syncs.extend(created.sync);
             }
-            next_sync(app);
+            job.done = Some((created.title, created.body, created.tone));
+            next_sync_job(app, job);
         }
         Stage::ExchangeCreate => {
             let wallet = d.get("wallet").cloned().unwrap_or(Value::Null);
@@ -1621,69 +1874,65 @@ fn on_job(app: &mut App, r: &Reply) {
                 .get("label")
                 .and_then(Value::as_str)
                 .map(str::to_owned)
-                .unwrap_or_else(|| {
-                    st(app)
-                        .job
-                        .as_ref()
-                        .map(|j| j.label.clone())
-                        .unwrap_or_default()
-                });
+                .unwrap_or_else(|| job.label.clone());
             let provider =
-                super::exchange::provider_name(meta(selected(app).id).exchange.unwrap_or(""));
-            if form(app).sync_after && wallet.is_object() {
-                if let Some(j) = stm(app).job.as_mut() {
-                    j.label = label;
-                }
-                let id = wallet.get("id").cloned().unwrap_or(Value::Null);
-                send_job(
-                    app,
-                    Stage::ExchangeSync,
-                    "ui.connections.exchange.sync",
-                    json!({"wallet": id}),
-                );
-            } else {
-                if let Some(j) = stm(app).job.as_mut() {
-                    j.done = Some((
+                super::exchange::provider_name(meta(job.source_id).exchange.unwrap_or(""));
+            if job.form.sync_after && wallet.is_object() {
+                job.label = label;
+                if job.dismissed {
+                    job.done = Some((
+                        t("connections:add.dismissed.savedScanSkippedTitle"),
                         tr(
-                            "connections:exchange.added.title",
-                            &[("provider", provider)],
+                            "connections:add.dismissed.savedScanSkippedBody",
+                            &[("label", &job.label)],
                         ),
-                        tr("connections:exchange.added.body", &[("label", &label)]),
-                        ToastTone::Success,
+                        ToastTone::Info,
                     ));
+                    finish_job(app, job);
+                } else {
+                    let id = wallet.get("id").cloned().unwrap_or(Value::Null);
+                    dispatch_job(
+                        app,
+                        job,
+                        Stage::ExchangeSync,
+                        "ui.connections.exchange.sync",
+                        json!({"wallet": id}),
+                    );
                 }
-                finish(app);
-            }
-        }
-        Stage::ExchangeSync => {
-            let label = st(app)
-                .job
-                .as_ref()
-                .map(|j| j.label.clone())
-                .unwrap_or_default();
-            let provider =
-                super::exchange::provider_name(meta(selected(app).id).exchange.unwrap_or(""));
-            let n = d.get("imported").and_then(Value::as_u64).unwrap_or(0) as usize;
-            if let Some(j) = stm(app).job.as_mut() {
-                j.done = Some((
+            } else {
+                job.done = Some((
                     tr(
                         "connections:exchange.added.title",
                         &[("provider", provider)],
                     ),
-                    tc(
-                        "connections:exchange.added.importedBody",
-                        n,
-                        &[("label", &label)],
-                    ),
+                    tr("connections:exchange.added.body", &[("label", &label)]),
                     ToastTone::Success,
                 ));
+                finish_job(app, job);
             }
-            finish(app);
+        }
+        Stage::ExchangeSync => {
+            let provider =
+                super::exchange::provider_name(meta(job.source_id).exchange.unwrap_or(""));
+            let n = d.get("imported").and_then(Value::as_u64).unwrap_or(0) as usize;
+            job.done = Some((
+                tr(
+                    "connections:exchange.added.title",
+                    &[("provider", provider)],
+                ),
+                tc(
+                    "connections:exchange.added.importedBody",
+                    n,
+                    &[("label", &job.label)],
+                ),
+                ToastTone::Success,
+            ));
+            finish_job(app, job);
         }
         Stage::Bip329Preview => {
-            let s = stm(app);
-            s.bip329_preview = Some(d.clone());
-            s.job = None;
+            if !job.dismissed {
+                stm(app).bip329_preview = Some(d.clone());
+            }
         }
         Stage::Bip329Import => {
             let n = |p: &str| {
@@ -1700,31 +1949,27 @@ fn on_job(app: &mut App, r: &Reply) {
                     ("skipped", &n("/preview/counts/tag_skipped_ambiguous")),
                 ],
             );
-            if let Some(j) = stm(app).job.as_mut() {
-                j.done = Some((
-                    t("connections:add.bip329.labelsImportedTitle"),
-                    body,
-                    ToastTone::Success,
-                ));
-            }
-            finish(app);
+            job.done = Some((
+                t("connections:add.bip329.labelsImportedTitle"),
+                body,
+                ToastTone::Success,
+            ));
+            finish_job(app, job);
         }
         Stage::Sync => {
             // `recordConnectionSetupMutation`: a sync that is not fully "synced" leaves the
-            // connection saved but partial.
-            let wallet = st(app)
-                .progress
-                .as_ref()
-                .map(|p| p.0.clone())
-                .unwrap_or_default();
+            // connection saved but partial. Match against the submitted wallet identity rather
+            // than the live progress slot (whose label can change during journal follow-up).
+            let wallet = job.sync_wallet.clone().unwrap_or_else(|| job.label.clone());
             let results = d
                 .get("results")
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            if let Some(res) = results
-                .iter()
-                .find(|x| x.get("wallet").and_then(Value::as_str) == Some(wallet.as_str()))
+            if !job.dismissed
+                && let Some(res) = results
+                    .iter()
+                    .find(|x| x.get("wallet").and_then(Value::as_str) == Some(wallet.as_str()))
                 && let Some(summary) = import_result_from_sync(res)
             {
                 stm(app).last_import = Some(summary);
@@ -1734,14 +1979,38 @@ fn on_job(app: &mut App, r: &Reply) {
                     .iter()
                     .any(|x| x.get("status").and_then(Value::as_str) != Some("synced"))
             {
-                return fail(app, t("connections:add.setupFailed.notFullySynced"));
+                let msg = match sync_failure_detail(&results) {
+                    Some(detail) => tr(
+                        "connections:add.setupFailed.notFullySyncedDetail",
+                        &[("detail", &detail)],
+                    ),
+                    None => t("connections:add.setupFailed.notFullySynced"),
+                };
+                return fail_job(app, job, msg);
             }
-            next_sync(app);
+            next_sync_job(app, job);
         }
     }
 }
 
 // ---- Setup actions ---------------------------------------------------------------------------
+
+fn req_matches(
+    slot: &Option<(u64, Option<String>)>,
+    expected_gen: u64,
+    reply_id: Option<&str>,
+) -> bool {
+    let Some((g, id)) = slot else {
+        return false;
+    };
+    if *g != expected_gen {
+        return false;
+    }
+    match (id.as_deref(), reply_id) {
+        (Some(exp), Some(got)) => exp == got,
+        _ => true,
+    }
+}
 
 /// "Preview addresses": detect script types first for a bare xpub on auto, then derive five.
 /// Script-type detection asks the backend (egress), as the web's does.
@@ -1751,58 +2020,73 @@ pub fn preview_addresses(app: &mut App) {
     if txt(&f.wallet_material).is_empty() || st(app).preview_pending {
         return;
     }
-    stm(app).preview_error = None;
-    stm(app).preview_pending = true;
+    let epoch = {
+        let s = stm(app);
+        s.preview_gen += 1;
+        s.preview_error = None;
+        s.preview_pending = true;
+        s.preview_gen
+    };
     let f = &st(app).form;
     let bare =
         wallet_material::detect(&f.wallet_material.text).kind == wallet_material::Kind::BareXpub;
     if bare && f.script_type.is_empty() {
         let args = json!({"wallet_material": txt(&f.wallet_material), "backend": opt(&f.backend), "chain": m.chain, "network": m.network});
-        app.send(
+        let req_id = app.send(
             "ui.wallets.detect_script_types",
             strip_nulls(args),
             "wallets.add.preview_detect",
         );
+        stm(app).preview_req = Some((epoch, req_id));
     } else {
         let types = if bare {
             Some(vec![f.script_type.clone()])
         } else {
             None
         };
-        derive(app, types);
+        derive(app, types, epoch);
     }
 }
 
-fn derive(app: &mut App, script_types: Option<Vec<String>>) {
+fn derive(app: &mut App, script_types: Option<Vec<String>>, epoch: u64) {
     let m = meta(selected(app).id);
     let args = json!({"wallet_material": txt(&st(app).form.wallet_material), "script_types": script_types, "chain": m.chain, "network": m.network, "count": 5});
-    app.send(
+    let req_id = app.send(
         "ui.wallets.preview_descriptor",
         strip_nulls(args),
         "wallets.add.preview",
     );
+    stm(app).preview_req = Some((epoch, req_id));
 }
 
 /// "Detect" (`ui.backends.detect_core`): looks for a local node (loopback probes) — only on
 /// its press.
 pub fn detect_core(app: &mut App) {
-    let s = stm(app);
-    s.core_test = None;
-    s.core_detect_pending = true;
-    app.send(
+    let epoch = {
+        let s = stm(app);
+        s.core_test = None;
+        s.core_detect_pending = true;
+        s.form_gen
+    };
+    let req_id = app.send(
         "ui.backends.detect_core",
         json!({}),
         "wallets.add.core_detect",
     );
+    stm(app).core_detect_req = Some((epoch, req_id));
 }
 
 /// "Test connection" (`ui.backends.bitcoinrpc.test`) — only on its press.
 pub fn test_core(app: &mut App) {
-    let s = stm(app);
-    s.core_test = None;
-    s.core_test_pending = true;
+    let epoch = {
+        let s = stm(app);
+        s.core_test = None;
+        s.core_test_pending = true;
+        s.form_gen
+    };
     let args = core_probe_args(app);
-    app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.core_test");
+    let req_id = app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.core_test");
+    stm(app).core_test_req = Some((epoch, req_id));
 }
 
 /// "Check coverage" (`checkWalletCoreCoverage`) — only on its press.
@@ -1814,15 +2098,21 @@ pub fn check_coverage(app: &mut App) {
     if !txt(&form(app).birthday).is_empty() {
         args["birthday"] = json!(iso_date(&form(app).birthday.text));
     }
-    stm(app).coverage = Coverage::Checking;
-
-    app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.coverage");
+    let epoch = {
+        let s = stm(app);
+        s.coverage_gen += 1;
+        s.coverage = Coverage::Checking;
+        s.coverage_gen
+    };
+    let req_id = app.send("ui.backends.bitcoinrpc.test", args, "wallets.add.coverage");
+    stm(app).coverage_req = Some((epoch, req_id));
 }
 
 /// The coverage inputs changed: drop a verdict about the old ones.
 pub fn coverage_inputs_changed(app: &mut App) {
     let s = stm(app);
     s.coverage_gen += 1;
+    s.coverage_req = None;
     s.coverage = Coverage::Idle;
 }
 
@@ -1912,33 +2202,45 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 super::seed_history_source(app);
             }
         }
-        "wallets.add.preview_detect" => match (
-            &r.error,
-            wallet_material::script_types_from_detection_payload(Some(&r.data)),
-        ) {
-            (Some(e), _) => {
-                let s = stm(app);
-                s.preview_pending = false;
-                s.preview_addresses = None;
-                s.preview_error = Some(e.clone());
+        "wallets.add.preview_detect" => {
+            if !req_matches(&st(app).preview_req, st(app).preview_gen, app.reply_id()) {
+                return;
             }
-            (None, Ok(types)) => derive(app, Some(types)),
-            (None, Err(reason)) => {
-                let reason = reason.unwrap_or_else(|| {
-                    t("connections:add.descriptor.autoDetectUnavailableReasonUnknown")
-                });
-                let s = stm(app);
-                s.preview_pending = false;
-                s.preview_addresses = None;
-                s.preview_error = Some(tr(
-                    "connections:add.descriptor.autoDetectUnavailable",
-                    &[("reason", &reason)],
-                ));
+            let epoch = st(app).preview_gen;
+            match (
+                &r.error,
+                wallet_material::script_types_from_detection_payload(Some(&r.data)),
+            ) {
+                (Some(e), _) => {
+                    let s = stm(app);
+                    s.preview_pending = false;
+                    s.preview_req = None;
+                    s.preview_addresses = None;
+                    s.preview_error = Some(e.clone());
+                }
+                (None, Ok(types)) => derive(app, Some(types), epoch),
+                (None, Err(reason)) => {
+                    let reason = reason.unwrap_or_else(|| {
+                        t("connections:add.descriptor.autoDetectUnavailableReasonUnknown")
+                    });
+                    let s = stm(app);
+                    s.preview_pending = false;
+                    s.preview_req = None;
+                    s.preview_addresses = None;
+                    s.preview_error = Some(tr(
+                        "connections:add.descriptor.autoDetectUnavailable",
+                        &[("reason", &reason)],
+                    ));
+                }
             }
-        },
+        }
         "wallets.add.preview" => {
+            if !req_matches(&st(app).preview_req, st(app).preview_gen, app.reply_id()) {
+                return;
+            }
             let s = stm(app);
             s.preview_pending = false;
+            s.preview_req = None;
             match &r.error {
                 Some(e) => {
                     s.preview_addresses = None;
@@ -1966,7 +2268,11 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.core_detect" => {
+            if !req_matches(&st(app).core_detect_req, st(app).form_gen, app.reply_id()) {
+                return;
+            }
             stm(app).core_detect_pending = false;
+            stm(app).core_detect_req = None;
             match &r.error {
                 Some(e) => {
                     let s = stm(app);
@@ -1991,8 +2297,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.add.core_test" => {
+            if !req_matches(&st(app).core_test_req, st(app).form_gen, app.reply_id()) {
+                return;
+            }
             let s = stm(app);
             s.core_test_pending = false;
+            s.core_test_req = None;
             s.core_test = Some(match &r.error {
                 Some(e) => CoreTest::Failed {
                     message: e.clone(),
@@ -2012,9 +2322,12 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             });
         }
         "wallets.add.coverage" => {
-            if !matches!(st(app).coverage, Coverage::Checking) {
-                return; // inputs changed meanwhile
+            if !matches!(st(app).coverage, Coverage::Checking)
+                || !req_matches(&st(app).coverage_req, st(app).coverage_gen, app.reply_id())
+            {
+                return; // inputs changed or a newer check replaced this one
             }
+            stm(app).coverage_req = None;
             let birthday = !txt(&form(app).birthday).is_empty();
             stm(app).coverage = match &r.error {
                 Some(e) => {
@@ -2185,10 +2498,15 @@ mod tests {
         app.ov.add_open = true;
         stm(&mut app).job = Some(Job {
             stage: Stage::Create,
+            source_id: "descriptor",
             label: "Cold".into(),
+            request_id: None,
+            sync_wallet: None,
             syncs: VecDeque::new(),
             done: None,
             stay_open: false,
+            dismissed: false,
+            cancelling: false,
             form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
         });
         super::super::open(&mut app, Some("descriptor"));
@@ -2212,10 +2530,15 @@ mod tests {
             app.ov.add_open = true;
             stm(&mut app).job = Some(Job {
                 stage: Stage::ImportFile,
+                source_id: "bisq",
                 label: "Bisq".into(),
+                request_id: None,
+                sync_wallet: None,
                 syncs: VecDeque::new(),
                 done: None,
                 stay_open: false,
+                dismissed: false,
+                cancelling: false,
                 form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
             });
             let reply = Reply {
@@ -2265,5 +2588,583 @@ mod tests {
         assert_eq!(iso_date("2024-03-05"), "2024-03-05");
         assert_eq!(iso_date("03/05/2024"), "2024-03-05");
         assert_eq!(iso_date("05.03.2024"), "2024-03-05");
+        assert!(parse_date("2024-03-05"));
+        assert!(parse_date("03/05/2024"));
+        assert!(parse_date("05.03.2024"));
+        assert!(!parse_date("2024-02-30"));
+        assert!(!parse_date("not-a-date"));
+    }
+
+    #[test]
+    fn descriptor_and_silent_payment_validate_birthdays_strictly() {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::open(&mut app, Some("descriptor"));
+        stm(&mut app).form.label = rune::TextEdit::new("Cold");
+        stm(&mut app).form.wallet_material = rune::TextEdit::new(
+            "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+        );
+        for ok in ["2024-03-05", "03/05/2024", "05.03.2024"] {
+            stm(&mut app).form.birthday = rune::TextEdit::new(ok);
+            let errs = validate(&mut app);
+            assert!(
+                !errs.iter().any(|(k, _)| *k == "birthday"),
+                "{ok} should validate: {errs:?}"
+            );
+        }
+        for bad in ["2024-02-30", "2023-02-29", "invalid"] {
+            stm(&mut app).form.birthday = rune::TextEdit::new(bad);
+            let errs = validate(&mut app);
+            assert!(
+                errs.iter().any(|(k, _)| *k == "birthday"),
+                "{bad} should be rejected: {errs:?}"
+            );
+        }
+
+        // Silent payment start date validation.
+        super::super::open(&mut app, Some("silent-payment"));
+        stm(&mut app).form.label = rune::TextEdit::new("SP");
+        stm(&mut app).form.backend = "sp-local".into();
+        stm(&mut app).form.sp_descriptor = rune::TextEdit::new("sp(spscan1qexample)");
+        stm(&mut app).form.sp_start_date = rune::TextEdit::new("2024-02-30");
+        let errs = validate(&mut app);
+        assert!(
+            errs.iter().any(|(k, _)| *k == "spScanStartDate"),
+            "invalid SP start date must fail validation: {errs:?}"
+        );
+        stm(&mut app).form.sp_start_date = rune::TextEdit::new("2024-03-05");
+        let errs = validate(&mut app);
+        assert!(
+            !errs.iter().any(|(k, _)| *k == "spScanStartDate"),
+            "valid SP start date must pass: {errs:?}"
+        );
+    }
+
+    #[test]
+    fn stop_scan_without_job_id_cancels_by_target_request_id_and_waits_for_worker_exit() {
+        let mut app = crate::app::tests::quiet_app();
+        app.ov.add_open = true;
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Sync,
+            source_id: "descriptor",
+            label: "Cold".into(),
+            request_id: Some("req-sync-prefetch".into()),
+            sync_wallet: Some("Cold".into()),
+            syncs: VecDeque::from(["NextWallet".to_owned()]),
+            done: None,
+            stay_open: false,
+            dismissed: false,
+            cancelling: false,
+            form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+        });
+        stm(&mut app).progress = Some(SyncProgress {
+            wallet: "Cold".into(),
+            job_id: None,
+            phase: Some("backend_fetch".into()),
+            percent: 15.0,
+            ..SyncProgress::default()
+        });
+
+        // Clicking Stop scan during prefetch (before any queue job_id exists) MUST still send
+        // ui.freshness.cancel with target_request_id, keep tracking until worker exit, and NOT
+        // trigger premature reads while the daemon slot is occupied.
+        stop_scan(&mut app);
+        let cancel_ids: Vec<String> = app
+            .pending
+            .iter()
+            .filter(|(_, (tag, kind, _))| {
+                *tag == "wallets.add.cancel" && kind == "ui.freshness.cancel"
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        assert_eq!(cancel_ids.len(), 1, "must dispatch ui.freshness.cancel");
+        let sent = app.sent_args.get(&cancel_ids[0]).expect("cancel args");
+        assert_eq!(sent["target_request_id"], "req-sync-prefetch");
+        assert!(sent.get("job_id").is_none());
+
+        let job = st(&app)
+            .job
+            .as_ref()
+            .expect("job stays tracked until terminal reply");
+        assert!(job.cancelling);
+        assert!(job.syncs.is_empty(), "queued follow-up syncs cleared");
+        assert!(st(&app).progress.is_some());
+        assert!(
+            !app.pending
+                .values()
+                .any(|(tag, _, _)| *tag == "wallets.add.wallets"),
+            "must not refresh reads before the freshness worker exits"
+        );
+
+        // Once the worker exits and replies, job + progress clear, dialog closes, reads refresh,
+        // and no spurious setup_error is set.
+        let reply = Reply {
+            kind: "ui.wallets.sync".into(),
+            data: Value::Null,
+            error: Some("cancelled".into()),
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", "req-sync-prefetch", reply);
+        assert!(st(&app).job.is_none());
+        assert!(st(&app).progress.is_none());
+        assert!(!app.ov.add_open);
+        assert!(st(&app).setup_error.is_none());
+        assert!(
+            app.pending
+                .values()
+                .any(|(tag, _, _)| *tag == "wallets.add.wallets"),
+            "reads refresh once the worker has exited"
+        );
+        assert!(
+            app.toasts
+                .iter()
+                .any(|t| t.title == crate::i18n::t("connections:add.dismissed.scanStoppedTitle")),
+            "expected scan stopped toast, got {:?}",
+            app.toasts
+        );
+    }
+
+    #[test]
+    fn closing_mid_sync_cancels_and_unsticks_dialog_immediately() {
+        let mut app = crate::app::tests::quiet_app();
+        app.ov.add_open = true;
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Sync,
+            source_id: "descriptor",
+            label: "Cold".into(),
+            request_id: Some("req-sync-1".into()),
+            sync_wallet: Some("Cold".into()),
+            syncs: VecDeque::new(),
+            done: None,
+            stay_open: false,
+            dismissed: false,
+            cancelling: false,
+            form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+        });
+        stm(&mut app).progress = Some(SyncProgress {
+            wallet: "Cold".into(),
+            percent: crate::shell::maint::STARTING_VALUE,
+            ..SyncProgress::default()
+        });
+        let env = json!({
+            "kind": "ui.wallets.sync.progress",
+            "data": {
+                "job_id": "job-42",
+                "wallet": "Cold",
+                "phase": "backend_fetch",
+                "processed": 12,
+                "total": 40
+            }
+        });
+        on_progress(&mut app, "wallets.add.job", "req-sync-1", &env);
+        let p = st(&app).progress.as_ref().expect("progress present");
+        assert_eq!(p.job_id.as_deref(), Some("job-42"));
+        assert_eq!(p.phase.as_deref(), Some("backend_fetch"));
+        assert_eq!((p.processed, p.total), (12, 40));
+        assert!((p.percent - 30.0).abs() < 0.01);
+
+        // Closing the dialog immediately closes the panel, sends both target_request_id and
+        // job_id to ui.freshness.cancel, and tracks exit in background_jobs.
+        super::super::close(&mut app);
+        assert!(!app.ov.add_open);
+        assert!(!super::super::submitting(&app));
+        assert!(st(&app).progress.is_none());
+        assert_eq!(st(&app).background_jobs.len(), 1);
+        let cancel_id = app
+            .pending
+            .iter()
+            .find(|(_, (tag, kind, _))| {
+                *tag == "wallets.add.cancel" && kind == "ui.freshness.cancel"
+            })
+            .map(|(id, _)| id.clone())
+            .expect("closing during an active sync must request ui.freshness.cancel");
+        let sent = &app.sent_args[&cancel_id];
+        assert_eq!(sent["target_request_id"], "req-sync-1");
+        assert_eq!(sent["job_id"], "job-42");
+
+        // Terminal reply clears background_jobs, refreshes reads, and never pollutes setup_error.
+        let late = Reply {
+            kind: "ui.wallets.sync".into(),
+            data: Value::Null,
+            error: Some("cancelled".into()),
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", "req-sync-1", late);
+        assert!(st(&app).background_jobs.is_empty());
+        assert!(st(&app).setup_error.is_none());
+        assert!(
+            app.pending
+                .values()
+                .any(|(tag, _, _)| *tag == "wallets.add.wallets")
+        );
+    }
+
+    #[test]
+    fn closing_mid_wasabi_rpc_create_completes_bundle_import_in_background() {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::open(&mut app, Some("wasabi"));
+        stm(&mut app).form.label = rune::TextEdit::new("WasabiMain");
+        stm(&mut app).form.wasabi_mode = "rpc";
+        stm(&mut app).form.wasabi[0] = rune::TextEdit::new(r#"[{"tx":"abc"}]"#);
+        let wasabi_form = st(&app).form.clone();
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Create,
+            source_id: "wasabi",
+            label: "WasabiMain".into(),
+            request_id: Some("req-wasabi-create".into()),
+            sync_wallet: None,
+            syncs: VecDeque::new(),
+            done: Some((
+                "Added".into(),
+                "WasabiMain added".into(),
+                ToastTone::Success,
+            )),
+            stay_open: false,
+            dismissed: false,
+            cancelling: false,
+            form: wasabi_form,
+        });
+
+        // Close dialog mid-create and even reopen on a totally different source.
+        super::super::close(&mut app);
+        assert!(!app.ov.add_open);
+        assert_eq!(st(&app).background_jobs.len(), 1);
+        super::super::open(&mut app, Some("descriptor"));
+        assert_eq!(st(&app).background_jobs.len(), 1);
+
+        // Stage::Create reply arrives -> must dispatch Stage::WasabiImport, not leave empty wallet.
+        let create_reply = Reply {
+            kind: "ui.wallets.create".into(),
+            data: json!({"wallet": {"label": "WasabiMain"}}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", "req-wasabi-create", create_reply);
+        assert_eq!(st(&app).background_jobs.len(), 1);
+        assert_eq!(st(&app).background_jobs[0].stage, Stage::WasabiImport);
+        let import_req_id = st(&app).background_jobs[0]
+            .request_id
+            .clone()
+            .expect("WasabiImport dispatched");
+        let sent = &app.sent_args[&import_req_id];
+        assert_eq!(sent["wallet"], "WasabiMain");
+        assert_eq!(sent["source_format"], "wasabi_bundle");
+        assert!(sent["source_bundle"].is_object());
+
+        // Stage::WasabiImport finishes cleanly in background without closing the new dialog.
+        let import_reply = Reply {
+            kind: "ui.wallets.import_file".into(),
+            data: json!({"imported": 3}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", &import_req_id, import_reply);
+        assert!(st(&app).background_jobs.is_empty());
+        assert!(
+            app.ov.add_open,
+            "background completion must not close an unrelated reopened dialog"
+        );
+    }
+
+    #[test]
+    fn closing_mid_descriptor_create_skips_optional_sync_and_toasts() {
+        let mut app = crate::app::tests::quiet_app();
+        super::super::open(&mut app, Some("descriptor"));
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Create,
+            source_id: "descriptor",
+            label: "Cold".into(),
+            request_id: Some("req-desc-create".into()),
+            sync_wallet: None,
+            syncs: VecDeque::from(["Cold".to_owned()]),
+            done: Some(("Added".into(), "Cold added".into(), ToastTone::Success)),
+            stay_open: false,
+            dismissed: false,
+            cancelling: false,
+            form: st(&app).form.clone(),
+        });
+
+        super::super::close(&mut app);
+        let reply = Reply {
+            kind: "ui.wallets.create".into(),
+            data: json!({"wallet": {"label": "Cold"}}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", "req-desc-create", reply);
+        assert!(st(&app).background_jobs.is_empty());
+        assert!(
+            !app.pending
+                .values()
+                .any(|(_, kind, _)| kind == "ui.wallets.sync"),
+            "dismissed create must skip optional post-create scan"
+        );
+        assert!(
+            app.toasts.iter().any(|t| {
+                t.title == crate::i18n::t("connections:add.dismissed.savedScanSkippedTitle")
+            }),
+            "must inform user that wallet was saved and scan skipped: {:?}",
+            app.toasts
+        );
+    }
+
+    #[test]
+    fn journal_progress_retains_wallet_identity_for_final_import_summary() {
+        let mut app = crate::app::tests::quiet_app();
+        app.ov.add_open = true;
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Sync,
+            source_id: "descriptor",
+            label: "Cold".into(),
+            request_id: Some("req-sync-1".into()),
+            sync_wallet: Some("Cold".into()),
+            syncs: VecDeque::new(),
+            done: None,
+            stay_open: true,
+            dismissed: false,
+            cancelling: false,
+            form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+        });
+        stm(&mut app).progress = Some(SyncProgress {
+            wallet: "Cold".into(),
+            ..SyncProgress::default()
+        });
+
+        // Progress from an unrelated request ID is ignored.
+        on_progress(
+            &mut app,
+            "wallets.add.job",
+            "req-other",
+            &json!({"data": {"source_label": "Other", "phase": "backend_fetch", "processed": 99, "total": 100}}),
+        );
+        assert_eq!(st(&app).progress.as_ref().unwrap().processed, 0);
+
+        // Journal-stage progress under the same request ID emits source_label="Journals" and its
+        // own job_id: wallet identity must stay "Cold".
+        on_progress(
+            &mut app,
+            "wallets.add.job",
+            "req-sync-1",
+            &json!({"data": {"source_label": "Journals", "job_id": "journal-job-9", "phase": "journal_refresh", "processed": 5, "total": 10}}),
+        );
+        let p = st(&app).progress.as_ref().unwrap();
+        assert_eq!(
+            p.wallet, "Cold",
+            "journal source_label must not overwrite wallet"
+        );
+        assert_eq!(p.phase.as_deref(), Some("journal_refresh"));
+        assert_eq!(p.job_id.as_deref(), Some("journal-job-9"));
+
+        // Terminal Stage::Sync reply still matches "Cold" for import summary.
+        let reply = Reply {
+            kind: "ui.wallets.sync".into(),
+            data: json!({
+                "results": [{"wallet": "Cold", "status": "synced", "imported": 7, "skipped": 1}]
+            }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.job", "req-sync-1", reply);
+        let summary = st(&app)
+            .last_import
+            .as_ref()
+            .expect("import summary matched Cold");
+        assert_eq!(summary["imported"], 7);
+    }
+
+    #[test]
+    fn stale_coverage_preview_and_core_detect_replies_are_dropped() {
+        let mut app = crate::app::tests::quiet_app();
+        app.reads.insert(
+            "ui.backends.options".into(),
+            Reply {
+                kind: "ui.backends.options".into(),
+                data: json!({
+                    "backends": [
+                        {"name": "core-1", "kind": "bitcoinrpc", "chain": "bitcoin", "is_default": true}
+                    ]
+                }),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        super::super::open(&mut app, Some("descriptor"));
+        stm(&mut app).form.backend = "core-1".into();
+        stm(&mut app).form.birthday = rune::TextEdit::new("2020-01-01");
+
+        // Start coverage check A.
+        check_coverage(&mut app);
+        let req_a = st(&app)
+            .coverage_req
+            .as_ref()
+            .and_then(|(_, id)| id.clone())
+            .expect("coverage A id");
+
+        // Change birthday and start coverage check B.
+        stm(&mut app).form.birthday = rune::TextEdit::new("2024-01-01");
+        coverage_inputs_changed(&mut app);
+        check_coverage(&mut app);
+        let req_b = st(&app)
+            .coverage_req
+            .as_ref()
+            .and_then(|(_, id)| id.clone())
+            .expect("coverage B id");
+        assert_ne!(req_a, req_b);
+
+        // Stale reply A arrives first: must NOT overwrite Checking with A's verdict.
+        let reply_a = Reply {
+            kind: "ui.backends.bitcoinrpc.test".into(),
+            data: json!({"reachable": true, "pruned": true, "rescan_possible": false}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.coverage", &req_a, reply_a);
+        assert!(
+            matches!(st(&app).coverage, Coverage::Checking),
+            "stale coverage reply A must be dropped"
+        );
+
+        // Fresh reply B arrives: wins cleanly.
+        let reply_b = Reply {
+            kind: "ui.backends.bitcoinrpc.test".into(),
+            data: json!({"reachable": true, "pruned": true, "rescan_possible": true}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        app.deliver_as("wallets.add.coverage", &req_b, reply_b);
+        assert!(
+            matches!(st(&app).coverage, Coverage::Available(_)),
+            "fresh coverage reply B must apply"
+        );
+
+        // Preview + Core detect replies arriving after reset_form must be dropped.
+        stm(&mut app).form.wallet_material = rune::TextEdit::new("wpkh(xpub123/0/*)");
+        preview_addresses(&mut app);
+        let prev_req = st(&app)
+            .preview_req
+            .as_ref()
+            .and_then(|(_, id)| id.clone())
+            .expect("preview id");
+        detect_core(&mut app);
+        let detect_req = st(&app)
+            .core_detect_req
+            .as_ref()
+            .and_then(|(_, id)| id.clone())
+            .expect("detect id");
+
+        let src = super::super::meta::source("descriptor").unwrap();
+        super::super::reset_form(&mut app, src);
+
+        app.deliver_as(
+            "wallets.add.preview",
+            &prev_req,
+            Reply {
+                kind: "ui.wallets.preview_descriptor".into(),
+                data: json!({"addresses": [{"branch": "external", "index": 0, "address": "bc1qstale"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        app.deliver_as(
+            "wallets.add.core_detect",
+            &detect_req,
+            Reply {
+                kind: "ui.backends.detect_core".into(),
+                data: json!({"candidates": [{"url": "http://127.0.0.1:8332"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        assert!(
+            st(&app).preview_addresses.is_none(),
+            "stale preview reply after reset_form must be dropped"
+        );
+        assert!(
+            st(&app).core_detection.is_none(),
+            "stale core_detect reply after reset_form must be dropped"
+        );
+    }
+
+    #[test]
+    fn sync_failure_surfaces_daemon_error_detail() {
+        let mut app = crate::app::tests::quiet_app();
+        app.ov.add_open = true;
+        stm(&mut app).job = Some(Job {
+            stage: Stage::Sync,
+            source_id: "descriptor",
+            label: "Cold".into(),
+            request_id: None,
+            sync_wallet: Some("Cold".into()),
+            syncs: VecDeque::new(),
+            done: None,
+            stay_open: false,
+            dismissed: false,
+            cancelling: false,
+            form: super::super::Form::defaults(&crate::overview::catalog::SOURCES[0]),
+        });
+        stm(&mut app).progress = Some(SyncProgress {
+            wallet: "Cold".into(),
+            ..SyncProgress::default()
+        });
+        let reply = Reply {
+            kind: "ui.wallets.sync".into(),
+            data: json!({
+                "results": [{"wallet": "Cold", "status": "error", "message": "Offline mode is enabled"}]
+            }),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        on_job(&mut app, &reply);
+        assert!(!super::super::submitting(&app));
+        let err = st(&app).setup_error.as_deref().unwrap_or("");
+        assert!(
+            err.contains("Offline mode is enabled"),
+            "expected daemon error detail in {err:?}"
+        );
+    }
+
+    #[test]
+    fn liquid_descriptor_and_bitcoin_address_list_check_matching_backend_options() {
+        let mut app = crate::app::tests::quiet_app();
+        app.reads.insert(
+            "ui.backends.options".into(),
+            Reply {
+                kind: "ui.backends.options".into(),
+                data: json!({
+                    "backends": [
+                        {"name": "esplora-btc", "kind": "esplora", "chain": "bitcoin", "is_default": true}
+                    ]
+                }),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        // Liquid descriptor has NO Liquid backend configured -> backend must not be flagged as missing select.
+        super::super::open(&mut app, Some("liquid-descriptor"));
+        stm(&mut app).form.backend.clear();
+        stm(&mut app).form.wallet_material = rune::TextEdit::new("ct(slip77(...),elwpkh(...))");
+        assert!(descriptor_options(&app).is_empty());
+        assert_eq!(first_required_missing(&app), None);
+
+        // Bitcoin address list DOES have a Bitcoin backend -> empty backend must flag connection-backend.
+        super::super::open(&mut app, Some("address-list"));
+        stm(&mut app).form.backend.clear();
+        assert_eq!(address_options(&app).len(), 1);
+        assert_eq!(
+            first_required_missing(&app),
+            Some(("connection-backend", true))
+        );
     }
 }

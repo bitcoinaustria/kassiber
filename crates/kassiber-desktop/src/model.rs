@@ -778,7 +778,7 @@ pub fn recent_rows(s: &Snapshot) -> Vec<RecentRow> {
                 } else {
                     tx.external_id.clone()
                 },
-                date: tx.date.clone(),
+                date: crate::format::tx_date(&tx.date, tx.conf > 0.0),
                 counterparty,
                 type_label,
                 extra_tags: tags.len().saturating_sub(1),

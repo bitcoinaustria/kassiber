@@ -12,7 +12,9 @@
 //! reply (`anchoredEndSpace`), the room shrinking as the reply grows, until the turn fills the
 //! view and the thread follows its end again; a scroll back up drops the room.
 
+pub mod action;
 pub mod approval;
+pub mod decision;
 pub mod md;
 pub mod message;
 pub mod tool;
@@ -71,6 +73,8 @@ pub struct State {
     /// Reasoning panes seen being written (`wasStreamingRef`): key → (start, whole seconds so
     /// far), for "Thought for 3s".
     pub thought: HashMap<String, (f64, u64)>,
+    /// The native change cards' transaction reads and undos.
+    pub actions: action::State,
 }
 
 /// The thread column's laid-out width; before its first layout, the page's or panel's usual one.
@@ -361,7 +365,9 @@ pub fn poll_thought(app: &mut App, tx: &mut Tx) -> bool {
     false
 }
 
-pub fn on_reply(_app: &mut App, _tag: &str, _r: &Reply) {}
+pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+    action::on_reply(app, tag, r);
+}
 
 /// Escape closes the visual dialog, then an inline edit.
 pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {

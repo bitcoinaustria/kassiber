@@ -21,6 +21,7 @@ pub mod stored_errors;
 mod stored_values;
 pub mod transaction_order;
 mod unreleased;
+pub mod version;
 mod write_lock;
 pub use schema::table_names;
 /// The schema fingerprint of an open connection (the replay bundle's

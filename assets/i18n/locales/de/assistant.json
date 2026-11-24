@@ -696,9 +696,16 @@
     "removeFocus": "Nicht mehr zu {{label}} fragen",
     "focusTransaction": "Transaktion · {{date}}",
     "focusQuarantine": "Transaktion in Quarantäne · {{date}}",
+    "focusGap": "Verwahrungslücke · {{date}}",
+    "seesLabel": "Der Assistent sieht:",
+    "contextOpen": "Geöffnet · {{label}}",
+    "contextPage": "Seite · {{page}}",
+    "contextPageItem": "Seite · {{page}} und die angezeigte Transaktion",
+    "removeContext": "{{label}} nicht teilen",
     "askAbout": "Dazu fragen",
     "askAboutTransactionPrompt": "Erkläre diese Transaktion und ob ich mich um etwas davon kümmern muss.",
     "askAboutQuarantinePrompt": "Warum ist diese Transaktion in Quarantäne, und was muss ich bereitstellen, um sie aufzulösen?",
+    "askAboutGapPrompt": "Erkläre diese Verwahrungslücke und was ich entscheiden muss, um sie zu klären.",
     "sideLabel": "Seitenbereich",
     "tabs": "Tabs im Seitenbereich",
     "closeTab": "{{label}} schließen",
@@ -1077,5 +1084,118 @@
     "useAria": "{{name}} verwenden",
     "other": "Lokale Modelle, Server und API-Schlüssel richtest du in den Einstellungen ein.",
     "openSettings": "Einstellungen öffnen"
+  },
+  "action": {
+    "proposed": "Vom Assistenten vorgeschlagen",
+    "applied": "Mit dem Assistenten angewendet",
+    "apply": "Anwenden",
+    "changes": "Was sich ändert",
+    "reason": "Begründung des Assistenten: {{reason}}",
+    "yes": "Ja",
+    "no": "Nein",
+    "leg": {
+      "from": "Von",
+      "to": "Nach",
+      "loading": "Transaktion wird gelesen…",
+      "missing": "Diese Transaktion ist nicht im offenen Buch.",
+      "otherDirection": "Diese Referenz bezeichnet auch eine Transaktion in die andere Richtung, daher kann die Karte nicht zeigen, welche die Änderung verwendet.",
+      "noWallet": "Keine Wallet"
+    },
+    "pair": {
+      "title": "Zwei Transaktionen als eine Übertragung verknüpfen",
+      "kind": "Art",
+      "policy": "Steuerliche Behandlung",
+      "policyDefault": "Kassibers Standard für diese Art",
+      "partial": "Verknüpfter Betrag",
+      "notes": "Notiz"
+    },
+    "dismiss": {
+      "title": "Diese zwei nicht mehr als Übertragung vorschlagen",
+      "until": "Ausgeblendet für",
+      "defaultDays": "90 Tage (Standard)",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
+    },
+    "edit": {
+      "title": "Transaktion bearbeiten",
+      "transaction": "Transaktion",
+      "cleared": "Entfernt",
+      "unset": "Nicht gesetzt",
+      "noTags": "Keine Tags",
+      "field": {
+        "note": "Notiz",
+        "tags": "Tags",
+        "kind": "Erfasst als",
+        "excluded": "Aus Berichten ausgenommen",
+        "taxable": "Steuerpflichtig",
+        "review_status": "Prüfstatus",
+        "tax": "Steuerliche Klassifizierung"
+      }
+    },
+    "undo": {
+      "action": "Rückgängig machen",
+      "running": "Wird rückgängig gemacht…",
+      "done": "Rückgängig gemacht",
+      "failed": "Rückgängig machen fehlgeschlagen: {{message}}",
+      "label": "Diese Änderung rückgängig machen"
+    },
+    "resolve": {
+      "title": {
+        "exclude": "Zurückgehaltene Transaktion ausschließen",
+        "price": "Geprüften Preis für eine zurückgehaltene Transaktion festlegen"
+      },
+      "transaction": "Zurückgehaltene Transaktion",
+      "root": "Zurückgehaltene Transaktion (andere warten darauf)",
+      "heldBecause": "Zurückgehalten, weil",
+      "decision": "Entscheidung",
+      "exclude": "Aus den Büchern herausnehmen",
+      "rate": "Geprüfter Preis",
+      "perUnit": "{{rate}} {{currency}} pro {{asset}}",
+      "total": "Geprüfter Wert",
+      "effect": {
+        "exclude": "Kassiber lässt diese Transaktion in Berichten und Steuerberechnungen weg. Sie bleibt im Buch, und du kannst sie wieder einbeziehen.",
+        "price": "Kassiber bewertet diese Transaktion mit diesem Preis statt mit einem Marktkurs und erfasst ihn als manuellen Preis.",
+        "root": "Transaktionen, die darauf warten, werden freigegeben, sobald sie geklärt ist.",
+        "noReprocess": "Die Journale werden mit dieser Änderung nicht neu verarbeitet, daher bleiben die Berichte veraltet, bis das geschieht."
+      },
+      "outcome": {
+        "cleared": "Nicht mehr zurückgehalten.",
+        "stillHeld": "Nach der Neuverarbeitung weiterhin zurückgehalten.",
+        "notMeasured": "Die Journale wurden nicht neu verarbeitet, daher ist noch nicht bekannt, ob sie geklärt ist.",
+        "released_one": "{{count}} Transaktion, die darauf gewartet hat, wurde ebenfalls freigegeben.",
+        "released_other": "{{count}} Transaktionen, die darauf gewartet haben, wurden ebenfalls freigegeben.",
+        "newlyHeld_one": "{{count}} weitere Transaktion wird jetzt zurückgehalten.",
+        "newlyHeld_other": "{{count}} weitere Transaktionen werden jetzt zurückgehalten.",
+        "value": "Wert in den Büchern"
+      }
+    },
+    "custody": {
+      "title": {
+        "create": "Bestätigen, dass die Bitcoin deine geblieben sind",
+        "dismiss": "Vorschlag zu einer Verwahrungslücke verwerfen",
+        "revise": "Korrigierte Verwahrungsbrücke aktivieren",
+        "reopen": "Geprüfte Verwahrungsbrücke wieder öffnen",
+        "classify_residual": "Restbetrag einer Verwahrungslücke einordnen"
+      },
+      "gap": "Verwahrungslücke",
+      "loading": "Verwahrungslücke wird gelesen…",
+      "missing": "Diese Verwahrungslücke ist nicht im offenen Buch.",
+      "decision": {
+        "create": "Dieselben Bitcoin, weiterhin deine",
+        "dismiss": "Nicht dasselbe Bitcoin",
+        "revise": "Korrigierte Brücke aktivieren",
+        "reopen": "Zur Korrektur wieder öffnen"
+      },
+      "effect": {
+        "create": "Kassiber behandelt den übertragenen Betrag als weiterhin deinen, daher behält er seine Anschaffungskosten. Was im Verwahrungs-Suspense bleibt, blockiert die endgültigen Anschaffungskosten, bis du es einordnest.",
+        "dismiss": "Kassiber schlägt diese Lücke für ihre aktuellen Nachweise nicht mehr vor; geänderte Nachweise öffnen sie wieder. Über die Lücke wird kein Bitcoin übertragen.",
+        "revise": "Die korrigierte Brücke ersetzt die wieder geöffnete im selben Verlauf; die frühere Version bleibt erhalten und wird nicht gelöscht. Was im Verwahrungs-Suspense bleibt, blockiert die endgültigen Anschaffungskosten, bis du es einordnest.",
+        "reopen": "Die aktuelle Brücke wird ersetzt, nicht gelöscht. Die Berichte bleiben blockiert, bis du eine überarbeitete Brücke aktivierst."
+      },
+      "retained": "Als deine übertragen",
+      "suspense": "Bleibt im Verwahrungs-Suspense",
+      "classified": "Eingeordneter Betrag",
+      "statusNow": "Status der Lücke"
+    }
   }
 }

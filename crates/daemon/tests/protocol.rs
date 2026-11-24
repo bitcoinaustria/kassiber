@@ -449,3 +449,27 @@ fn status_reports_a_revision_only_when_asked() {
     // The fake store cannot tell revisions apart: null, never a made-up token.
     assert_eq!(get(&data(2), "revision"), Some(&Value::Null));
 }
+
+#[test]
+fn ui_freshness_cancel_supports_target_request_id_in_production() {
+    let input = concat!(
+        "{\"request_id\":\"c1\",\"kind\":\"ui.freshness.cancel\",\"args\":{\"target_request_id\":\"req-sync-1\"}}\n",
+        "{\"request_id\":\"c2\",\"kind\":\"ui.freshness.cancel\",\"args\":{\"target_request_id\":\"\"}}\n",
+        "{\"request_id\":\"q\",\"kind\":\"daemon.shutdown\"}\n",
+    );
+    let (code, lines, _) = run(FakeConfig::default(), input);
+    assert_eq!(code, 0);
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    let c1 = parse(&lines[1]);
+    assert_eq!(text(&c1, "request_id"), "c1");
+    assert_eq!(text(&c1, "kind"), "ui.freshness.cancel");
+    let c1_data = get(&c1, "data").unwrap();
+    assert_eq!(get(c1_data, "cancelled"), Some(&Value::Bool(true)));
+    assert_eq!(get(c1_data, "queued"), Some(&Value::Bool(true)));
+
+    let c2 = parse(&lines[2]);
+    assert_eq!(text(&c2, "request_id"), "c2");
+    assert_eq!(text(&c2, "kind"), "error");
+    let c2_err = get(&c2, "error").unwrap();
+    assert_eq!(text(c2_err, "code"), "validation");
+}

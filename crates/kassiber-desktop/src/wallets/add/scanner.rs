@@ -145,8 +145,8 @@ pub struct State {
     pub error: Option<String>,
     starting: bool,
     /// Material decoded from a QR (or a complete BBQR set).
-    scanned: Option<String>,
-    progress: Option<Progress>,
+    pub(super) scanned: Option<String>,
+    pub(super) progress: Option<Progress>,
     collector: Collector,
     /// `lastScannedRef`: the same text twice in a row is one scan.
     last: Option<String>,
@@ -160,6 +160,9 @@ pub struct State {
 
 /// Opens the dialog and starts the camera (the user's press on Scan).
 pub fn open(app: &mut App, title: String) {
+    app.wallets.add.required_hint = None;
+    app.wallets.add.date_picker = None;
+    app.wallets.add.select = None;
     app.wallets.add.scanner = State {
         open: true,
         title,
@@ -460,8 +463,16 @@ fn content_and_mount(
     modes: El,
     s: &State,
 ) {
-    // The square preview (`aspect-square rounded-lg border bg-black`) with its overlays.
-    let side = inner_w;
+    // The square preview (`aspect-square rounded-lg border bg-black`), capped to the window's
+    // height so the Cancel / Use buttons stay visible without scrolling on laptop displays.
+    let win_h = if app.shell.window_h > 0.0 {
+        app.shell.window_h
+    } else {
+        900.0
+    };
+    let top = crate::shell::dialog_top(tk, win_h);
+    let max_h = win_h - top - tk.r(1.0);
+    let side = inner_w.min((max_h - tk.r(19.0)).max(200.0)).min(420.0);
     let inset = side * 0.14;
     let frame = side - 2.0 * inset;
     let corner = tk.r(2.5);
@@ -565,7 +576,11 @@ fn content_and_mount(
         .child(target.a11y_hidden())
         .child(top_bar);
 
-    let mut body = col().w_full().gap(tk.r(1.0)).child(modes).child(preview);
+    let mut body = col()
+        .w_full()
+        .gap(tk.r(1.0))
+        .child(modes)
+        .child(row().w_full().justify_center().child(preview));
     if let Some(p) = &s.progress {
         // `space-y-2 rounded-md border bg-background p-3 text-xs`: the type, n / total, the bar.
         let pct = if p.total > 0 {
@@ -687,13 +702,7 @@ fn content_and_mount(
             .on_press(close),
         )
         .child(use_btn);
-    let content = col()
-        .w_full()
-        .gap(tk.r(1.0))
-        .child(header)
-        .child(body)
-        .child(footer);
-    mount(app, tk, layer, width, title, content);
+    mount(app, tk, layer, width, title, header, body, footer);
 }
 
 /// The camera `<select>` (`h-8 rounded-md border-white/20 bg-black/70 text-xs text-white`), its
@@ -766,8 +775,18 @@ fn camera_picker(tk: &Tk, layer: &mut Vec<El>, s: &State) -> El {
 
 /// `DialogContent` (ui/dialog.tsx): the glass backdrop and the `kb-glass-dialog` surface
 /// (`sm:max-w-[640px]`, `rounded-[1rem]`, `p-5 gap-4`) at `top: max(1rem, 8vh)`, its X button,
-/// scrolling inside past the window height.
-fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>, width: f32, label: &str, content: El) {
+/// with header and action footer pinned so Cancel / Use stay visible even on short displays.
+#[allow(clippy::too_many_arguments)]
+fn mount(
+    app: &App,
+    tk: &Tk,
+    layer: &mut Vec<El>,
+    width: f32,
+    label: &str,
+    header: El,
+    body: El,
+    footer: El,
+) {
     let wash = if tk.dark {
         Color::BLACK.alpha(0.22)
     } else {
@@ -827,19 +846,35 @@ fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>, width: f32, label: &str, conte
     .pin(None, Some(tk.r(0.75)), Some(tk.r(0.75)), None)
     .on_press(close);
     let max_h = win_h - top - tk.r(1.0);
-    let body = col()
+    let pinned_header = col()
+        .w_full()
+        .pl(tk.r(1.25))
+        .pr(tk.r(3.0))
+        .pt(tk.r(1.25))
+        .pb(tk.r(0.75))
+        .child(header);
+    let scroll_body = col()
         .key("scanner-scroll")
         .w_full()
-        .max_h(max_h - 2.0)
+        .shrink()
+        .min_h(0.0)
         .scroll(rune::ScrollSpec {
             stick_bottom: false,
         })
-        .child(col().w_full().padding(tk.r(1.25)).child(content));
+        .child(col().w_full().px(tk.r(1.25)).py(tk.r(0.5)).child(body));
+    let pinned_footer = col()
+        .w_full()
+        .px(tk.r(1.25))
+        .py(tk.r(0.75))
+        .border_sides([1.0, 0.0, 0.0, 0.0], tk.border)
+        .border_layout()
+        .child(footer);
     let mut surface = col()
         .key("scanner-dialog")
         .role("dialog")
         .label(label.to_owned())
         .w(width)
+        .max_h(max_h)
         .radius(tk.r(1.0))
         .fill(tk.background.alpha(0.8))
         .backdrop_blur(if tk.dark { 16.0 } else { 12.0 })
@@ -848,7 +883,9 @@ fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>, width: f32, label: &str, conte
         .border_layout()
         .clip_rounded(tk.r(1.0))
         .modal(true, close)
-        .child(body)
+        .child(pinned_header)
+        .child(scroll_body)
+        .child(pinned_footer)
         .child(close_btn);
     for sh in shadows {
         surface = surface.box_shadow(sh);

@@ -87,6 +87,17 @@ fn summary(conn: &Connection) -> Result<Value> {
     ]))
 }
 pub fn coverage(conn: &Connection, args: &Value) -> Result<Value> {
+    coverage_settling(conn, args, &|_, _| Ok(Default::default()))
+}
+
+/// Rows that can never book, keyed by profile id and the ids missing a price.
+pub type Settled<'a> = dyn Fn(&str, &std::collections::BTreeSet<String>) -> Result<std::collections::BTreeSet<String>>
+    + 'a;
+
+/// [`coverage`] without the rows `settled` names among those missing a price:
+/// a transaction a confirmed conflicting spend replaced never books, so it
+/// needs no price. Every row that can book still counts.
+pub fn coverage_settling(conn: &Connection, args: &Value, settled: &Settled<'_>) -> Result<Value> {
     if let Value::Dict(fields) = args {
         let mut unknown: Vec<_> = fields
             .iter()
@@ -143,7 +154,16 @@ pub fn coverage(conn: &Connection, args: &Value) -> Result<Value> {
             |r| r.get(0),
         )
         .map_err(sql_error)?;
-    let rows=query(conn,&format!("SELECT t.id,t.external_id,t.occurred_at,t.direction,t.asset,t.amount,t.fiat_currency,w.label AS wallet FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 AND (t.amount>0 OR t.fee>0) AND {} ORDER BY t.occurred_at,t.created_at,t.id",providers::missing_price_sql("t.")),[profile])?;
+    let mut rows=query(conn,&format!("SELECT t.id,t.external_id,t.occurred_at,t.direction,t.asset,t.amount,t.fiat_currency,w.label AS wallet FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 AND (t.amount>0 OR t.fee>0) AND {} ORDER BY t.occurred_at,t.created_at,t.id",providers::missing_price_sql("t.")),[&profile])?;
+    let missing: std::collections::BTreeSet<String> = rows
+        .iter()
+        .filter_map(|row| text(row, "id").map(str::to_owned))
+        .collect();
+    let settled = settled(&profile, &missing)?;
+    let before = rows.len();
+    rows.retain(|row| text(row, "id").is_none_or(|id| !settled.contains(id)));
+    // Settled rows never book, so they count as neither priced nor missing.
+    let active = active - (before - rows.len()) as i64;
     let mut items = Vec::new();
     let mut coverable = 0;
     for row in &rows {

@@ -537,6 +537,12 @@ pub fn unlinked_automatic_pair(reason: &str, actions: &[Action]) -> bool {
             .any(|a| a.kind == "restore_pairing" && a.dismissal_id.is_some())
 }
 
+/// A held collaborative receipt (a Payjoin the owner received): classifying
+/// its net amount on the transaction's Tax tab releases it.
+pub fn classifiable_receipt(reason: &str, actions: &[Action]) -> bool {
+    reason == "privacy_hop_unresolved" && actions.iter().any(|a| a.kind == "classify")
+}
+
 pub fn category_for_reason(reason: &str, evidence: &Value, detail: &Value) -> &'static str {
     cause_key(reason, evidence, detail)
         .map(cause_category)
@@ -586,6 +592,8 @@ pub fn cause_copy_full(
 ) -> CauseCopy {
     let key = if unlinked_automatic_pair(reason, actions) {
         Some("unlinkedAutomaticPair")
+    } else if classifiable_receipt(reason, actions) {
+        Some("privacyHopReceipt")
     } else {
         cause_key(reason, evidence, &Value::Null)
     };
@@ -773,9 +781,20 @@ pub fn action_label(a: &Action) -> String {
     t(&format!("journals:quarantine.cta.{k}"))
 }
 
+/// A case's day, or "Unconfirmed"/"Unknown" for the backend's placeholder time (by the row's
+/// `confirmed_at`, when it carries one).
+fn day_label(occurred_at: &str, row: &Value) -> String {
+    if crate::format::is_unknown_time(occurred_at) {
+        let confirmed = !s(row, "confirmed_at").trim().is_empty();
+        crate::format::tx_date(occurred_at, confirmed)
+    } else {
+        occurred_at.chars().take(10).collect()
+    }
+}
+
 /// `quarantineRootLabel`.
 pub fn root_label(root: &Value) -> String {
-    let date: String = s(root, "occurred_at").chars().take(10).collect();
+    let date = day_label(&s(root, "occurred_at"), root);
     [date, s(root, "wallet")]
         .into_iter()
         .filter(|x| !x.is_empty())
@@ -796,15 +815,11 @@ pub fn row_meta(i: &Item) -> String {
     } else {
         id.clone()
     };
-    [
-        i.occurred_at.chars().take(10).collect::<String>(),
-        i.wallet.clone(),
-        short,
-    ]
-    .into_iter()
-    .filter(|x| !x.is_empty())
-    .collect::<Vec<_>>()
-    .join(" · ")
+    [day_label(&i.occurred_at, &i.v), i.wallet.clone(), short]
+        .into_iter()
+        .filter(|x| !x.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// `quarantineRowAmount`: signed sats for bitcoin, units otherwise.
