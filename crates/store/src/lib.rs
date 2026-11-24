@@ -38,7 +38,8 @@ pub use write_lock::{
 /// comes from) from `KASSIBER_TEST_SQLITE_SEED`, once per process, so a
 /// recorded test session replays with the very ids it generated
 /// (crates/session-replay). Only with the `test-hooks` feature; a product
-/// build compiles this to nothing and never reads the variable.
+/// build never reads the variable. Then completes SQLite's initialization
+/// ([`initialize`]), which every build needs before a connection opens.
 pub fn seed_test_prng() {
     #[cfg(feature = "test-hooks")]
     {
@@ -73,6 +74,28 @@ pub fn seed_test_prng() {
             }
         });
     }
+    initialize();
+}
+
+/// Complete SQLite's one-time initialization before any connection opens.
+///
+/// SQLCipher's `sqlite3_initialize` marks SQLite initialized before its
+/// extra init registers the auto-extension that provides `sqlcipher_export`,
+/// so a connection another thread opens inside that window lacks the
+/// function. The store's export paths (`secrets init`, and the stored-value
+/// rehearsal on a legacy encrypted book) need it, and the operator broker
+/// opens books on one thread per client. Every store open calls this first
+/// (through [`seed_test_prng`]), and the binary calls it on its main thread
+/// before any other thread starts; later callers wait for the first.
+pub fn initialize() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: sqlite3_initialize takes no arguments and may be called at
+        // any time; a failure surfaces again when a connection opens.
+        unsafe {
+            rusqlite::ffi::sqlite3_initialize();
+        }
+    });
 }
 
 /// Development-only deterministic sources and file-layer fault injection.
