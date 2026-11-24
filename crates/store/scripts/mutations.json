@@ -234,7 +234,7 @@
   {
     "id": "write-lock-refusal-keeps-savepoint",
     "file": "crates/store/src/write_lock.rs",
-    "find": "            let _ = conn.execute_batch(&format!(\n                \"ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}\"\n            ));\n",
+    "find": "            let _ = conn.execute_batch(&rollback(name));\n",
     "replace": "",
     "expect_failing": [
       "a_refused_reservation_leaves_no_savepoint_open"
