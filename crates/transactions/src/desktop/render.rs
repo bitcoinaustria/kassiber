@@ -266,20 +266,43 @@ fn present(row: &Value, pair: Option<&Value>, tags: Vec<Value>) -> Value {
         .to_owned();
     let mut internal = lower(text(row, "kind")) == "transfer";
     let mut fee_sat = sat(fee);
+    // A pair between two different assets (ETH -> BTC) is sized by its own
+    // conversion: its legs' raw units do not compare, so their difference
+    // (`fee_msat`) is no fee and the larger leg is no amount. Such a row
+    // keeps its own leg, price and network fee.
+    let cross_asset = pair.is_some_and(|pair| {
+        !kassiber_store::assets::units_comparable(text(pair, "out_asset"), text(pair, "in_asset"))
+    });
     if let Some(pair) = pair {
         let label = text(pair, "label");
         let pair_fee = num(pair, "fee_msat").abs();
         let swap = text(pair, "pair_type") == "swap";
-        rate = positive(&val(pair, "display_rate"));
-        fee_sat = sat(pair_fee);
-        amount = if swap {
-            -num(pair, "out_amount_msat")
-                .abs()
-                .max(num(pair, "in_amount_msat").abs())
+        if cross_asset {
+            let own = if text(pair, "role") == "in" {
+                num(pair, "in_amount_msat")
+            } else {
+                num(pair, "out_amount_msat")
+            };
+            amount = -own.abs();
+            eur = match fiat(own.abs(), &rate) {
+                Value::Null => match positive(&val(row, "fiat_value")) {
+                    Value::Float(n) => Value::Float(-n.abs()),
+                    _ => Value::Null,
+                },
+                value => value,
+            };
         } else {
-            -pair_fee
-        };
-        eur = fiat(amount.abs(), &rate);
+            rate = positive(&val(pair, "display_rate"));
+            fee_sat = sat(pair_fee);
+            amount = if swap {
+                -num(pair, "out_amount_msat")
+                    .abs()
+                    .max(num(pair, "in_amount_msat").abs())
+            } else {
+                -pair_fee
+            };
+            eur = fiat(amount.abs(), &rate);
+        }
         kind = if swap { "Swap" } else { "Transfer" };
         internal = !swap;
         account = format!(
@@ -422,10 +445,22 @@ fn present(row: &Value, pair: Option<&Value>, tags: Vec<Value>) -> Value {
                 ("inWallet", val(pair, "in_wallet")),
                 ("inAsset", val(pair, "in_asset")),
                 ("inAmountSat", sat(num(pair, "in_amount_msat"))),
-                ("feeSat", fee_sat),
-                ("feeKind", val(pair, "fee_kind")),
+                ("feeSat", if cross_asset { Value::Null } else { fee_sat }),
+                (
+                    "feeKind",
+                    if cross_asset {
+                        Value::Null
+                    } else {
+                        val(pair, "fee_kind")
+                    },
+                ),
             ]),
         );
+        if cross_asset {
+            let mut view = val(&output, "pair");
+            set(&mut view, "crossAsset", Value::Bool(true));
+            set(&mut output, "pair", view);
+        }
     }
     if truthy(&val(row, "quarantine_reason")) {
         set(

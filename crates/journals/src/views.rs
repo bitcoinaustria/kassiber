@@ -536,6 +536,11 @@ fn pair(row: &Row) -> Result<Option<Py>, AppError> {
     let out_asset = row.get("pair_out_asset");
     let in_asset = row.get("pair_in_asset");
     let swap_fee = int_or_zero(row.get("pair_swap_fee_msat"))?;
+    let code = |asset: &Sql| match asset {
+        Sql::Text(text) => text.clone(),
+        _ => String::new(),
+    };
+    let comparable = kassiber_store::assets::units_comparable(&code(out_asset), &code(in_asset));
     let side = |prefix: &str, asset: &Sql| -> Result<Py, AppError> {
         Ok(dict([
             (
@@ -570,8 +575,24 @@ fn pair(row: &Row) -> Result<Option<Py>, AppError> {
         ),
         ("kind", py(row.get("pair_kind"))),
         ("policy", py(row.get("pair_policy"))),
-        ("swapFeeMsat", int_py(swap_fee.clone())),
-        ("swapFee", Py::Float(btc(&Sql::Text(swap_fee.to_string()))?)),
+        // A cross-asset pair's raw-unit difference is no fee
+        // (docs/plan/24-crypto-assets.md): unknown, not a number.
+        (
+            "swapFeeMsat",
+            if comparable {
+                int_py(swap_fee.clone())
+            } else {
+                Py::Null
+            },
+        ),
+        (
+            "swapFee",
+            if comparable {
+                Py::Float(btc(&Sql::Text(swap_fee.to_string()))?)
+            } else {
+                Py::Null
+            },
+        ),
         ("out", side("pair_out", out_asset)?),
         ("in", side("pair_in", in_asset)?),
     ])))

@@ -1,5 +1,6 @@
 //! Shared storage. Runtime admission remains read-only; creation, semantic
 //! migration and encryption maintenance are explicit operations.
+pub mod assets;
 mod compat;
 mod creation;
 pub mod custody_hooks;
