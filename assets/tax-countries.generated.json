@@ -1,0 +1,299 @@
+{
+  "countries": [
+    {
+      "code": "generic",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": null,
+      "long_term": "profile_days",
+      "methods": [
+        "FIFO",
+        "HIFO",
+        "LIFO",
+        "LOFO",
+        "MOVING_AVERAGE"
+      ],
+      "name": {
+        "de": "Allgemein",
+        "en": "Generic"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": false,
+      "tax_year_editable": true,
+      "tax_year_start": "01-01",
+      "timezone": "UTC"
+    },
+    {
+      "code": "at",
+      "default_method": "MOVING_AVERAGE_AT",
+      "default_pool_scope": "global",
+      "fiat_currency": "EUR",
+      "long_term": "never",
+      "methods": [
+        "FIFO",
+        "HIFO",
+        "LIFO",
+        "LOFO",
+        "MOVING_AVERAGE",
+        "MOVING_AVERAGE_AT"
+      ],
+      "name": {
+        "de": "Österreich",
+        "en": "Austria"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": false,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Europe/Vienna"
+    },
+    {
+      "code": "us",
+      "default_method": "FIFO",
+      "default_pool_scope": "wallet",
+      "fiat_currency": "USD",
+      "long_term": "more_than_one_year",
+      "methods": [
+        "FIFO",
+        "HIFO",
+        "LIFO",
+        "LOFO"
+      ],
+      "name": {
+        "de": "Vereinigte Staaten",
+        "en": "United States"
+      },
+      "pool_scopes": [
+        "global",
+        "global_then_wallet",
+        "wallet"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "UTC"
+    },
+    {
+      "code": "de",
+      "default_method": "FIFO",
+      "default_pool_scope": "wallet",
+      "fiat_currency": "EUR",
+      "long_term": "more_than_one_year",
+      "methods": [
+        "FIFO",
+        "MOVING_AVERAGE_FIFO_PERIOD"
+      ],
+      "name": {
+        "de": "Deutschland",
+        "en": "Germany"
+      },
+      "pool_scopes": [
+        "wallet"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Europe/Berlin"
+    },
+    {
+      "code": "ch",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "CHF",
+      "long_term": "never",
+      "methods": [
+        "FIFO",
+        "MOVING_AVERAGE"
+      ],
+      "name": {
+        "de": "Schweiz",
+        "en": "Switzerland"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Europe/Zurich"
+    },
+    {
+      "code": "ie",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "EUR",
+      "long_term": "never",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Irland",
+        "en": "Ireland"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Europe/Dublin"
+    },
+    {
+      "code": "gb",
+      "default_method": "UK_SHARE_MATCHING",
+      "default_pool_scope": "global",
+      "fiat_currency": "GBP",
+      "long_term": "never",
+      "methods": [
+        "UK_SHARE_MATCHING"
+      ],
+      "name": {
+        "de": "Vereinigtes Königreich",
+        "en": "United Kingdom"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "04-06",
+      "timezone": "Europe/London"
+    },
+    {
+      "code": "es",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "EUR",
+      "long_term": "never",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Spanien",
+        "en": "Spain"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Europe/Madrid"
+    },
+    {
+      "code": "jp",
+      "default_method": "JP_TOTAL_AVERAGE",
+      "default_pool_scope": "global",
+      "fiat_currency": "JPY",
+      "long_term": "never",
+      "methods": [
+        "JP_MOVING_AVERAGE",
+        "JP_TOTAL_AVERAGE"
+      ],
+      "name": {
+        "de": "Japan",
+        "en": "Japan"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "01-01",
+      "timezone": "Asia/Tokyo"
+    },
+    {
+      "code": "au",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "AUD",
+      "long_term": "more_than_one_year",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Australien",
+        "en": "Australia"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "07-01",
+      "timezone": "Australia/Sydney"
+    },
+    {
+      "code": "nz",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "NZD",
+      "long_term": "never",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Neuseeland",
+        "en": "New Zealand"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "04-01",
+      "timezone": "Pacific/Auckland"
+    },
+    {
+      "code": "in",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "INR",
+      "long_term": "never",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Indien",
+        "en": "India"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "04-01",
+      "timezone": "Asia/Kolkata"
+    },
+    {
+      "code": "za",
+      "default_method": "FIFO",
+      "default_pool_scope": "global",
+      "fiat_currency": "ZAR",
+      "long_term": "never",
+      "methods": [
+        "FIFO"
+      ],
+      "name": {
+        "de": "Südafrika",
+        "en": "South Africa"
+      },
+      "pool_scopes": [
+        "global"
+      ],
+      "preview": true,
+      "tax_year_editable": false,
+      "tax_year_start": "03-01",
+      "timezone": "Africa/Johannesburg"
+    }
+  ],
+  "generated": "by crates/tax-countries from its registry; do not edit by hand: run `KASSIBER_UPDATE_TAX_COUNTRIES=1 cargo test -p kassiber-tax-countries`",
+  "preview_notice": {
+    "de": "Noch nicht von einer Steuerberaterin oder einem Steuerberater für dieses Land geprüft — Ergebnisse vor der Einreichung kontrollieren.",
+    "en": "Not yet reviewed by a tax professional for this country — check results before filing."
+  }
+}

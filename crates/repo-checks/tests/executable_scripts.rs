@@ -13,10 +13,6 @@ const ETXTBSY_ALLOWED: &[(&str, &str)] = &[
         "crates/kassiber-desktop/src/daemon.rs",
         "the sidecar may be mid-install by the updater",
     ),
-    (
-        "ui-tauri/src-tauri/src/supervisor.rs",
-        "the sidecar may be mid-install by the updater",
-    ),
     ("crates/test-support/src/lib.rs", "the helper itself"),
     (
         "crates/test-support/tests/write_executable.rs",

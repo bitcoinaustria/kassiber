@@ -2,7 +2,7 @@
 //!
 //! The export dialog's redesign (owner request: a short summary preview, a wallet list behind
 //! an Edit button) needs a few words the Tauri dialog never shows, so
-//! `ui-tauri/src/i18n/locales/*/transactions.json` has no keys for them. Their English and German
+//! `assets/i18n/locales/*/transactions.json` has no keys for them. Their English and German
 //! copy lives here until the bundles gain keys; everything else goes through `t("ns:key")`.
 
 use crate::i18n::{Lang, lang};

@@ -407,8 +407,11 @@ class RpmPackagingTest(unittest.TestCase):
             )
             self.assertIn("glibc", cli_requires)
             self.assertNotIn("zlib", cli_requires)
-            self.assertIn("gtk3", desktop_requires)
-            self.assertIn("webkit2gtk4.1", desktop_requires)
+            self.assertIn("libvulkan.so.1()(64bit)", desktop_requires)
+            self.assertIn("libxkbcommon.so.0()(64bit)", desktop_requires)
+            self.assertIn("libwayland-client.so.0()(64bit)", desktop_requires)
+            self.assertNotIn("gtk", desktop_requires)
+            self.assertNotIn("webkit", desktop_requires)
 
             repository = root / "repository"
             subprocess.run(

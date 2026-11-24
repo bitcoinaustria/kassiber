@@ -36,8 +36,8 @@ concurrency:
 # as passing.
 #
 # A requested run on a pull request into another pull request's branch (a
-# stacked layer) is the fast lane: frontend, Rust crates, tooling and the Linux
-# desktop build. The recorded-session replay (32 runners), the chain-observer
+# stacked layer) is the fast lane: Rust crates, tooling and the Linux desktop
+# build. The recorded-session replay (32 runners), the chain-observer
 # harness and the macOS/Windows desktop builds run on pull requests into main
 # and on main itself. The conditions are spelled out per job because job-level
 # `if:` cannot read workflow `env`:
@@ -68,57 +68,6 @@ jobs:
             sleep $((attempt * 5))
           done
           exit 1
-
-  frontend:
-    name: Frontend checks
-    if: github.event_name == 'push' || github.event.label.name == 'ci'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      # The redaction corpora the Vitest suites read are locked test data.
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 10.33.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: ui-tauri/pnpm-lock.yaml
-
-      - name: Install desktop dependencies
-        run: pnpm --dir ui-tauri install --frozen-lockfile
-
-      - name: Desktop UI typecheck
-        run: pnpm --dir ui-tauri run typecheck
-
-      - name: Desktop UI lint
-        run: pnpm --dir ui-tauri run lint
-
-      - name: Run Vitest
-        run: |
-          mkdir -p test-results
-          pnpm --dir ui-tauri exec vitest run \
-            --reporter=default \
-            --reporter=junit \
-            --outputFile.junit=../test-results/vitest.xml
-
-      - name: Upload frontend test report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: vitest-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
 
   tax-engine:
     name: Rust crates
@@ -466,7 +415,6 @@ jobs:
     # shows a failed `required` from such a run is untested; add `ci` for it.
     if: always() && github.event_name != 'workflow_dispatch'
     needs:
-      - frontend
       - tax-engine
       - session-replay
       - tooling
@@ -485,7 +433,6 @@ jobs:
       - name: Record required-check results
         run: |
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tooling scripts: ${{ needs.tooling.result }}" >> "$GITHUB_STEP_SUMMARY"
@@ -498,7 +445,7 @@ jobs:
         env:
           FULL_LANE: ${{ github.event_name == 'push' || github.base_ref == 'main' }}
           RESULTS: >-
-            ${{ needs.frontend.result }} ${{ needs.tax-engine.result }}
+            ${{ needs.tax-engine.result }}
             ${{ needs.tooling.result }} ${{ needs.desktop.result }}
           FULL_LANE_RESULTS: >-
             ${{ needs.session-replay.result }} ${{ needs.chain-observers.result }}

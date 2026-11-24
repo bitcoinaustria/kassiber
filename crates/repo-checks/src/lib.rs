@@ -1,6 +1,6 @@
 //! Repository contracts checked by this crate's tests: GitHub Actions pins,
-//! the generated test-data lock, the product version across packages, and
-//! the locked package-manager workflow. Nothing here ships.
+//! the generated test-data lock, and repository metadata (no JavaScript
+//! package manager). Nothing here ships.
 
 use std::path::{Path, PathBuf};
 

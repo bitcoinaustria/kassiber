@@ -1,7 +1,7 @@
 #!/bin/sh
 # AppImage entry point. `--cli ARGS` runs the bundled `kassiber` CLI (as the Tauri AppImage's
 # `--cli` did); anything else opens the desktop. The app finds its daemon at
-# $APPDIR/usr/lib/Kassiber/binaries (src/bundle.rs).
+# $APPDIR/usr/lib/Kassiber/binaries (`resource_dirs` in src/daemon.rs).
 here="$(dirname "$(readlink -f "$0")")"
 export APPDIR="${APPDIR:-$here}"
 exec "$here/usr/bin/kassiber-ui" "$@"

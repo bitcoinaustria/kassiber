@@ -396,7 +396,10 @@ impl Regex {
                 let found = if *ahead {
                     self.alts(s, alts, pos, &mut |_| true)
                 } else {
-                    (0..=pos)
+                    // Only as far back as the look-behind can reach: trying every earlier
+                    // start made each pattern quadratic in the text (minutes on a 100k record).
+                    let from = max_width(alts).map_or(0, |w| pos.saturating_sub(w));
+                    (from..=pos)
                         .rev()
                         .any(|j| self.alts(s, alts, j, &mut |p| p == pos))
                 };
@@ -513,6 +516,26 @@ fn upper(c: char) -> char {
     c.to_uppercase().next().unwrap_or(c)
 }
 
+/// The most chars `alts` can match, if bounded.
+fn max_width(alts: &[Vec<Node>]) -> Option<usize> {
+    alts.iter().try_fold(0, |widest, seq| {
+        let width = seq
+            .iter()
+            .try_fold(0usize, |sum, node| sum.checked_add(node_width(node)?))?;
+        Some(widest.max(width))
+    })
+}
+
+fn node_width(node: &Node) -> Option<usize> {
+    match node {
+        Node::Ch(_) | Node::Any | Node::Class { .. } => Some(1),
+        Node::Start | Node::End | Node::WordB(_) | Node::Look { .. } => Some(0),
+        Node::Group(alts) => max_width(alts),
+        Node::Repeat { alts, max, .. } if *max != usize::MAX => max_width(alts)?.checked_mul(*max),
+        Node::Repeat { .. } => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Regex;
@@ -532,6 +555,12 @@ mod tests {
         .unwrap();
         assert_eq!(r.replace_with("key sk-abcdef123 x", "[s]"), "key [s] x");
         assert_eq!(r.replace_with("ask-abcdef123", "[s]"), "ask-abcdef123");
+        // Look-behinds of every width, bounded and not.
+        let r = Regex::new(r"(?<=ab|c)x|(?<!q{2,3})y|(?<=z.*)w", false).unwrap();
+        assert_eq!(
+            r.find_all("abx cx bx qqy qy y zzzw w"),
+            vec!["x", "x", "y", "y", "w", "w"]
+        );
         let r = Regex::new("a.*?b", false).unwrap();
         assert_eq!(r.find_all("axxbyyb"), vec!["axxb"]);
         assert!(Regex::new("(", false).is_err());

@@ -1137,7 +1137,7 @@ EOF_LIGHTNING_DISABLED
 fi)
 
 Next steps:
-  cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
+  crates/kassiber-desktop/scripts/run.sh --data-root <a copy of $DEMO_HOME/data>   # desktop on a copy of the demo book
   "$KASSIBER_RUST_BIN" --data-root "$DEMO_HOME/data" reports summary
   ./dev/regtest/bitcoin-cli.sh getblockchaininfo    # poke the regtest node
   ./scripts/integration-harness.sh demo-down         # stop the node (book + chain kept)
@@ -1731,9 +1731,8 @@ run_boltz_liquid() {
 run_custody_desktop() {
   # The gap acceptance and connection-catalog checks were pytest modules and
   # go with the Python test suite (plan 22, D1); this lane keeps the desktop
-  # route's own tests.
-  pnpm --dir ui-tauri exec vitest run \
-    src/routes/CustodyGaps.test.tsx
+  # app's own custody-gap tests (crates/kassiber-desktop, its own workspace).
+  (cd crates/kassiber-desktop && cargo test --release --locked custody::gaps)
 }
 
 case "$MODE" in

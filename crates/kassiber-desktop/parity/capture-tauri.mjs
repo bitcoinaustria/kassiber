@@ -3,8 +3,9 @@
 //
 //   node parity/capture-tauri.mjs <out-dir>        (ONLY=a,b to limit scenes)
 //
-// Env (see parity/run.sh): PARITY_DIST (built bundle), KASSIBER_BIN, KASSIBER_DEMO_DATA_ROOT and
-// the isolated KASSIBER_*_FILE preference paths. The preview server and the browser are started
+// Env (see parity/run.sh): PARITY_TAURI_CHECKOUT (a checkout of commit 33fbc2b5a, the last with
+// ui-tauri/, its dependencies installed), PARITY_DIST (built bundle), KASSIBER_BIN,
+// KASSIBER_DEMO_DATA_ROOT and the isolated KASSIBER_*_FILE preference paths. The preview server and the browser are started
 // here and stopped on exit.
 import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +14,9 @@ import { fileURLToPath } from "node:url";
 import { launch, sleep } from "./cdp.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = join(here, "../../..");
+const tauriCheckout = process.env.PARITY_TAURI_CHECKOUT;
+if (!tauriCheckout || !existsSync(join(tauriCheckout, "ui-tauri", "package.json")))
+  throw new Error("PARITY_TAURI_CHECKOUT must name a checkout of commit 33fbc2b5a (it has ui-tauri/)");
 const out = process.argv[2];
 if (!out) throw new Error("usage: capture-tauri.mjs <out-dir>");
 mkdirSync(out, { recursive: true });
@@ -65,7 +68,7 @@ const hasMise = spawnSync("sh", ["-c", "command -v mise"]).status === 0;
 let server = null, serverRoot = null, serverLog = "";
 async function startServer(dataRoot) {
   server = spawn(hasMise ? "mise" : "pnpm", hasMise ? ["exec", "pnpm@10.33.0", "node@24", "--", "pnpm", ...viteArgs] : viteArgs, {
-    cwd: join(repo, "ui-tauri"),
+    cwd: join(tauriCheckout, "ui-tauri"),
     env: { ...process.env, VITE_DAEMON: "bridge", KASSIBER_DEV_DATA_ROOT: dataRoot },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

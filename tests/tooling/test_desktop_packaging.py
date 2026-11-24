@@ -20,35 +20,35 @@ _MACOS_APP_EXECUTABLE_NAME = re.search(
 
 class DesktopPackagingTest(unittest.TestCase):
     def test_desktop_installers_integrate_the_cli_without_autostart(self):
-        config = json.loads(
-            (ROOT / "ui-tauri/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
-        )
-        bundle = config["bundle"]
+        packaging = ROOT / "crates/kassiber-desktop/packaging"
+        linux = (packaging / "linux/build-packages.sh").read_text(encoding="utf-8")
+        control = (packaging / "linux/debian/control.in").read_text(encoding="utf-8")
+        forwarder = (packaging / "linux/kassiber").read_text(encoding="utf-8")
+        msi = (packaging / "windows/kassiber.wxs").read_text(encoding="utf-8")
+        nsis = (packaging / "windows/kassiber.nsi").read_text(encoding="utf-8")
 
-        self.assertEqual(
-            bundle["linux"]["deb"]["files"]["/usr/bin/kassiber"],
-            "bin/kassiber-linux",
-        )
-        self.assertEqual(bundle["linux"]["deb"]["conflicts"], ["kassiber-cli"])
-        self.assertEqual(bundle["linux"]["deb"]["replaces"], ["kassiber-cli"])
-        self.assertEqual(bundle["windows"]["nsis"]["installMode"], "currentUser")
-        self.assertIn("windows/update-path.ps1", bundle["resources"])
         self.assertIn(
-            "KassiberCliPath", bundle["windows"]["wix"]["componentRefs"]
+            'install -m 0755 "$here/kassiber" "$root/usr/bin/kassiber"', linux
         )
-
-        hooks = (ROOT / "ui-tauri/src-tauri/windows/installer-hooks.nsh").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("NSIS_HOOK_POSTINSTALL", hooks)
-        self.assertIn("NSIS_HOOK_PREUNINSTALL", hooks)
-        self.assertIn("-Action add", hooks)
-        self.assertIn("-Action remove", hooks)
-        self.assertNotIn("autorun", hooks.lower())
-        self.assertNotIn("startup", hooks.lower())
+        self.assertIn('exec /usr/bin/kassiber-ui --cli "$@"', forwarder)
+        self.assertIn("Conflicts: kassiber-cli", control)
+        self.assertIn("Replaces: kassiber-cli", control)
+        self.assertIn("Provides: kassiber-command", control)
+        self.assertNotIn("libwebkit", control)
+        self.assertNotIn("libgtk", control)
+        self.assertIn('InstallDir "$LOCALAPPDATA\\Kassiber"', nsis)
+        self.assertIn("RequestExecutionLevel user", nsis)
+        self.assertIn('<ComponentRef Id="KassiberCliPath" />', msi)
+        # The Tauri MSI's upgrade code, so an installed Tauri build is replaced.
+        self.assertIn('UpgradeCode="f3c714a3-dc4a-53c3-ad68-fbede17c4009"', msi)
+        self.assertIn("-Action add", nsis)
+        self.assertIn("-Action remove", nsis)
+        for text in (nsis, msi):
+            self.assertNotIn("autorun", text.lower())
+            self.assertNotIn("startup", text.lower())
 
     def test_wix_owns_and_removes_only_its_path_entry(self):
-        fragment = ROOT / "ui-tauri/src-tauri/windows/fragments/cli-path.wxs"
+        fragment = ROOT / "crates/kassiber-desktop/packaging/windows/cli-path.wxs"
         tree = ET.parse(fragment)
         namespace = {"w": "http://schemas.microsoft.com/wix/2006/wi"}
         environment = tree.find(".//w:Environment", namespace)
@@ -57,6 +57,10 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertEqual(environment.attrib["Name"], "PATH")
         self.assertEqual(environment.attrib["Value"], "[INSTALLDIR]bin")
         self.assertEqual(environment.attrib["Permanent"], "no")
+        installers = (
+            ROOT / "crates/kassiber-desktop/packaging/windows/build-installers.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"$here/cli-path.wxs"', installers)
 
     def test_cli_release_and_desktop_sidecar_are_one_rust_binary(self):
         """The downloadable CLI and the desktop sidecar are the same file.
@@ -101,9 +105,13 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("target: windows-x64", workflow)
         self.assertIn('archive: zip', workflow)
         self.assertIn("os: ubuntu-22.04", workflow)
-        self.assertIn("bundles: deb,appimage", workflow)
+        self.assertIn("crates/kassiber-desktop/packaging/linux/build-packages.sh", workflow)
+        self.assertIn("crates/kassiber-desktop/packaging/macos/build-app.sh", workflow)
+        self.assertIn("crates/kassiber-desktop/packaging/windows/build-installers.sh", workflow)
+        # The shipped app never carries Rune's agent tooling.
+        self.assertIn("cargo build --release --locked --no-default-features", workflow)
+        self.assertNotIn("tauri", workflow.lower())
         self.assertIn("scripts/package-cli-deb.sh", workflow)
-        self.assertIn('"ui-tauri/src-tauri/icons/**"', workflow)
         self.assertIn('package_commit="$(git rev-parse HEAD)"', workflow)
         self.assertNotIn('--commit "$GITHUB_SHA"', workflow)
         self.assertIn("release_channel:", workflow)
@@ -111,7 +119,8 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("pull_request:", workflow)
         self.assertIn("BUILD_CHANNEL:", workflow)
         self.assertIn('--channel "$BUILD_CHANNEL"', workflow)
-        self.assertIn("Smoke desktop terminal forwarding", workflow)
+        self.assertIn('"$appimage" --cli --version | grep "$expected_commit"', workflow)
+        self.assertIn('"$launcher" --version | grep "$expected_commit"', workflow)
         self.assertIn("--operator-unlock", workflow)
 
         self.assertIn('kassiber --version', smoke)
@@ -123,43 +132,49 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("SQLite format 3", smoke)
         self.assertIn("KASSIBER_OFFLINE_PREFERENCE_FILE", smoke)
 
-    def test_appimage_uses_the_host_wayland_client(self):
+    def test_appimage_uses_host_display_libraries_and_a_pinned_runtime(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"
         ).read_text(encoding="utf-8")
+        packages = (
+            ROOT / "crates/kassiber-desktop/packaging/linux/build-packages.sh"
+        ).read_text(encoding="utf-8")
 
-        reseal = workflow.index("- name: Use the host Wayland client in the AppImage")
-        self.assertLess(
-            workflow.index("- name: Build unsigned desktop preview"), reseal
-        )
-        self.assertLess(
-            reseal, workflow.index("- name: Smoke desktop terminal forwarding")
-        )
-        self.assertIn('test -f "$wayland_client"', workflow)
-        self.assertIn('LDAI_OUTPUT="$appimage"', workflow)
-        self.assertIn("--appimage-extract 'usr/lib/libwayland-client.so*'", workflow)
+        # Nothing display- or GPU-related is bundled: the Wayland client, the
+        # Vulkan loader and xkbcommon come from the host.
+        appdir = packages[packages.index('appdir="$work/Kassiber.AppDir"'):]
+        for library in ("libwayland", "libvulkan", "libxkbcommon.so"):
+            self.assertNotIn(f"cp {library}", appdir)
+            self.assertNotIn(f"/{library}", appdir)
+        # appimagetool never fetches its own runtime.
+        self.assertIn('--runtime-file "$appimage_runtime"', packages)
+        self.assertIn("--appimage-runtime PATH is required", packages)
+        self.assertIn('--appimage-runtime "$APPIMAGE_RUNTIME"', workflow)
+        self.assertRegex(workflow, r"APPIMAGETOOL_SHA256: [0-9a-f]{64}")
+        self.assertRegex(workflow, r"APPIMAGE_RUNTIME_SHA256: [0-9a-f]{64}")
+        self.assertIn("| sha256sum -c -", workflow)
 
     def test_windows_bundle_stages_a_native_cli_executable(self):
-        workflow = (
-            ROOT / ".github/workflows/prerelease-binaries.yml"
+        windows = ROOT / "crates/kassiber-desktop/packaging/windows"
+        installers = (windows / "build-installers.sh").read_text(encoding="utf-8")
+        terminal = (
+            ROOT / "crates/kassiber-desktop/src/native/terminal.rs"
         ).read_text(encoding="utf-8")
-        rust = (ROOT / "ui-tauri/src-tauri/src/lib.rs").read_text(encoding="utf-8")
-        path_script = (
-            ROOT / "ui-tauri/src-tauri/windows/update-path.ps1"
-        ).read_text(encoding="utf-8")
+        path_script = (windows / "update-path.ps1").read_text(encoding="utf-8")
 
-        self.assertFalse((ROOT / "ui-tauri/src-tauri/bin/kassiber.cmd").exists())
-        self.assertIn("ui-tauri/src-tauri/bin/kassiber.exe", workflow)
-        self.assertIn("./ui-tauri/src-tauri/bin/kassiber.exe --version", workflow)
-        self.assertIn('"kassiber.exe"', rust)
-        self.assertNotIn("%*", rust)
+        # The PATH entry runs a native copy, so cmd.exe never reparses arguments.
+        self.assertIn('cp "$kassiber_bin" "$stage/bin/kassiber.exe"', installers)
+        self.assertIn('"$stage/bin/kassiber.exe" --version', installers)
+        self.assertNotIn("kassiber.cmd", installers)
+        self.assertIn('"kassiber.exe"', terminal)
+        self.assertNotIn("%*", terminal)
         self.assertIn('"kassiber.cmd"', path_script)
         self.assertIn("Remove-Item", path_script)
 
     def test_macos_bundle_launcher_executes_the_console_sidecar_without_appkit(self):
-        launcher = (ROOT / "ui-tauri/src-tauri/bin/kassiber").read_text(
-            encoding="utf-8"
-        )
+        launcher = (
+            ROOT / "crates/kassiber-desktop/packaging/macos/kassiber-launcher"
+        ).read_text(encoding="utf-8")
         self.assertIn("kassiber-cli-aarch64-apple-darwin", launcher)
         self.assertIn("kassiber-cli-x86_64-apple-darwin", launcher)
         self.assertIn(
@@ -186,7 +201,10 @@ class DesktopPackagingTest(unittest.TestCase):
             app_executable.parent.mkdir(parents=True)
             scratch.mkdir()
 
-            shutil.copy2(ROOT / "ui-tauri/src-tauri/bin/kassiber", launcher)
+            shutil.copy2(
+                ROOT / "crates/kassiber-desktop/packaging/macos/kassiber-launcher",
+                launcher,
+            )
             sidecar.write_text(
                 "#!/bin/sh\n"
                 "printf '%s\\n' \"$KASSIBER_NATIVE_AUTH_HELPER\" \"$PWD\" \"$#\"\n"
@@ -224,7 +242,9 @@ class DesktopPackagingTest(unittest.TestCase):
         installer = (ROOT / "scripts/install-macos-desktop-cli.sh").read_text(
             encoding="utf-8"
         )
-        rust = (ROOT / "ui-tauri/src-tauri/src/lib.rs").read_text(encoding="utf-8")
+        rust = (
+            ROOT / "crates/kassiber-desktop/src/native/terminal.rs"
+        ).read_text(encoding="utf-8")
         self.assertIn("--install-terminal-command", installer)
         self.assertIn("--install-terminal-command", rust)
         self.assertNotIn("PATH_MARKER_START", installer)

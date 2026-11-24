@@ -7,8 +7,8 @@
 //! - [`STREAMING_DAEMON_KINDS`]: kinds whose intermediate records are progress, not violations.
 //!
 //! These lists are the canonical desktop allowlist. `crates/daemon/tests/desktop_boundaries.rs`
-//! checks them against the daemon's supported kinds, and keeps the Tauri shell's copies in
-//! `ui-tauri/src-tauri/src/lib.rs` equal to them until that shell is removed.
+//! checks them against the daemon's supported kinds; `kinds/tests.rs` checks that every kind the
+//! app sends is on them.
 
 use crate::daemon::DaemonError;
 

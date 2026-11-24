@@ -416,7 +416,10 @@ pub fn resolve_command(
 }
 
 /// Where a packaged app keeps its resources (`resource_dir_before_tauri`, plus the directory of
-/// the app binary itself for a plain install).
+/// the app binary itself for a plain install on macOS and Windows). Never the app binary's own
+/// directory on Linux: an installed package puts the `kassiber` forwarder (`exec kassiber-ui
+/// --cli`) beside `kassiber-ui` in `/usr/bin`, and the daemon must start the sidecar itself, as
+/// `native::cli::resource_dirs` does for terminal forwarding.
 pub fn resource_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(app_dir) = std::env::var_os("APPDIR").filter(|v| !v.is_empty()) {
@@ -435,7 +438,9 @@ pub fn resource_dirs() -> Vec<PathBuf> {
         {
             out.push(contents.join("Resources"));
         }
-        out.push(parent.to_path_buf());
+        if !cfg!(target_os = "linux") {
+            out.push(parent.to_path_buf());
+        }
     }
     if cfg!(target_os = "linux") {
         out.push(PathBuf::from("/usr/lib/Kassiber"));

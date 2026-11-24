@@ -249,6 +249,20 @@ fn command_resolution_order() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_never_looks_beside_the_app_binary() {
+    // `/usr/bin/kassiber` there is the package's forwarder back into `kassiber-ui --cli`.
+    let exe_dir = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let dirs = resource_dirs();
+    assert!(!dirs.contains(&exe_dir), "{dirs:?}");
+    assert_eq!(dirs.last().unwrap(), Path::new("/usr/lib/Kassiber"));
+}
+
 // ---- A stub daemon --------------------------------------------------------------------------
 
 #[cfg_attr(not(unix), allow(dead_code))] // used by the unix-only stub-daemon tests

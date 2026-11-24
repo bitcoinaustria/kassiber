@@ -1236,3 +1236,25 @@ fn the_error_event_for_a_native_tool_stop_names_no_detail() {
         "GitHub Copilot attempted to use a provider-native tool; Kassiber stopped it."
     );
 }
+
+#[test]
+fn matches_the_desktops_mirror_of_copilots_effort_levels() {
+    // The desktop offers these levels when Copilot's models list none
+    // (`NATIVE_RUNTIME_EFFORTS` in the Rune app's model picker).
+    let source = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../kassiber-desktop/src/assistant/picker/data.rs"),
+    )
+    .unwrap();
+    let line = source
+        .lines()
+        .skip_while(|line| !line.contains("NATIVE_RUNTIME_EFFORTS: &["))
+        .find(|line| line.trim_start().starts_with("(\"copilot\","))
+        .unwrap();
+    let mirrored: String = COPILOT_EFFORTS
+        .iter()
+        .map(|effort| format!("\"{effort}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    assert_eq!(line.trim(), format!("(\"copilot\", &[{mirrored}]),"));
+}

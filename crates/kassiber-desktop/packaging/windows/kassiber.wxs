@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Kassiber MSI for the Rune desktop (WiX Toolset v3, as on GitHub's windows-latest image; the
-  same schema as ui-tauri/src-tauri/windows/fragments/cli-path.wxs). Per-machine install like
-  the Tauri MSI, same layout as the Tauri bundle so the sidecar lookup (src/bundle.rs), the PATH
+  Kassiber MSI for the Rune desktop (WiX Toolset v3, as on GitHub's Windows images; the
+  same schema as cli-path.wxs beside it). Per-machine install like
+  the Tauri MSI, same layout as the Tauri bundle so the sidecar lookup (`resource_dirs` in src/daemon.rs), the PATH
   copy and upgrades keep working:
 
     [INSTALLDIR]kassiber-ui.exe                                   the Rune app (no `tooling`)
@@ -11,10 +11,9 @@
     [INSTALLDIR]bin\kassiber.exe                                  PATH copy of the sidecar
     [INSTALLDIR]windows\update-path.ps1                           (NSIS hooks use it; kept for parity)
 
-  UpgradeCode: Tauri's default for productName "Kassiber" is uuid5(DNS, "Kassiber.exe.app.x64")
-  = f3c714a3-dc4a-53c3-ad68-fbede17c4009. VERIFY against an installed Tauri MSI
-  (`Get-CimInstance Win32_Product`/the MSI's Property table) before the first release, or
-  MajorUpgrade will install beside the Tauri app instead of replacing it.
+  UpgradeCode: the Tauri MSI's, so MajorUpgrade replaces an installed Tauri build. tauri-bundler
+  (msi/mod.rs) defaults it to uuid5(DNS, "<productName>.exe.app.x64"), and productName was
+  "Kassiber": f3c714a3-dc4a-53c3-ad68-fbede17c4009. Never change it.
 
   Build (CI, Git Bash): packaging/windows/build-installers.sh. NEEDS A WINDOWS RUNNER.
 -->
@@ -79,7 +78,7 @@
       <ComponentRef Id="CliCopy" />
       <ComponentRef Id="PathScript" />
       <ComponentRef Id="StartMenu" />
-      <!-- The unchanged PATH fragment: ui-tauri/src-tauri/windows/fragments/cli-path.wxs. -->
+      <!-- The PATH fragment (cli-path.wxs), unchanged from the Tauri MSI. -->
       <ComponentRef Id="KassiberCliPath" />
     </Feature>
   </Product>
