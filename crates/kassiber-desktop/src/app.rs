@@ -613,6 +613,13 @@ impl App {
         self.root_switch.is_some()
     }
 
+    /// The request whose answer `on_reply` is handling now. The add-wallet flow keeps several
+    /// requests with one tag in flight and tells their answers apart by it; new screens hold a
+    /// [`Ticket`] instead.
+    pub fn reply_id(&self) -> Option<&str> {
+        self.delivering.as_deref()
+    }
+
     pub fn dark(&self) -> bool {
         match self.prefs.theme {
             ThemeMode::Dark => true,
