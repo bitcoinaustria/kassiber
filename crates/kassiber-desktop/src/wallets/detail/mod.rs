@@ -1033,9 +1033,10 @@ mod transient_tests {
         };
         app.reads.insert("ui.overview.snapshot".into(), snapshot);
         app.wallets.detail.wallet = "x".into();
-        app.wallets.detail.wallets = Read::Ready(vec![
-            serde_json::json!({"id": "x", "label": "Kraken", "kind": "kraken"}),
-        ]);
+        // An exchange wallet is an API connection once its config names a backend.
+        app.wallets.detail.wallets = Read::Ready(vec![serde_json::json!({
+            "id": "x", "label": "Kraken", "kind": "kraken", "backend": {"name": "kraken"}
+        })]);
         sync_now(&mut app);
         let ex = &app.wallets.add.exchange;
         assert!(
