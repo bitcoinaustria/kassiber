@@ -322,13 +322,7 @@ fn readme(
     };
     let country = text(profile, "tax_country");
     let at = crate::country::austrian(&country.to_lowercase());
-    let version = include_str!("../../kassiber/Cargo.toml")
-        .lines()
-        .find_map(|line| {
-            line.strip_prefix("version = \"")
-                .and_then(|v| v.strip_suffix('"'))
-        })
-        .unwrap();
+    let version = kassiber_store::version::current();
     let meta = [
         ("Generated at", s(generated)),
         ("Kassiber version", s(version)),

@@ -266,6 +266,11 @@ Recording and storage rules:
   `PATH` is kept, so a test that hides a tool still hides it; a replay uses
   the recorded entries this host has. Secret-named variables are kept only
   with synthetic values.
+- **The recorded version.** A replay hands the binary the version the
+  session was recorded at (`KASSIBER_RUST_TEST_VERSION`, read by test builds
+  only; `0.22.78` for the recordings that predate 1.0.0 and name none), so a
+  version bump changes no session
+  ([test builds](../reference/testing.md#test-builds)).
 - **Every module with a comparison is recorded,** the porters' modules too.
   The porters hand-port only the cases that hold kills; the replay keeps the
   other cases covered.
