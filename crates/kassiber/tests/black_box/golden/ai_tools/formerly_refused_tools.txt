@@ -154,12 +154,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:34
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 fc6dc2cd07900c94490b7b655f416e22]
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_clock: id=i:1 | revision=i:36
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:36
 + profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"… [531 bytes fnv128 b40751319ae66ada11caf1089733f927]
 + transaction_pair_dismissals: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | out_transaction_id=t:"g" | in_transaction_id=t:"a" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture desktop
 $ daemon
 > #0
@@ -192,12 +192,12 @@ $ daemon
 - chain_index_clock: id=i:1 | revision=i:27
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:29
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:29
 + profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [538 bytes fnv128 612d8e9317bf4f1f7decdb0e99bf6470]
 + transaction_pair_dismissals: id=t:"<uuid#1>" | workspace_id=t:"ws" | profile_id=t:"p" | out_transaction_id=t:"out" | in_transaction_id=t:"in" | reason=NULL | created_at=t:"2026-03-04T05:06:07Z" | expires_at=t:"<later>"
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)
 # fixture reports
 $ daemon
 > #0

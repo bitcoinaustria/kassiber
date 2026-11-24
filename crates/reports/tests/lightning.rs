@@ -94,35 +94,54 @@ fn report(case: &Value) -> Result<lightning::Report, AppError> {
     )
 }
 
+/// `balance_checkpoints` is newer than these frozen dumps
+/// (docs/reference/balance-checkpoints.md): left out only while it holds no
+/// row, so a step that writes one still shows.
+fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+    table == "balance_checkpoints"
+        && conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+}
+
 /// Compare every typed value, including empty tables and SQL NULLs, without
 /// rerunning compatibility code or normalizing identities after a read/write.
 fn tables(conn: &Connection) -> Value {
     let names: Vec<String> = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
         .unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
     assert_eq!(names, kassiber_store::table_names());
-    dict(names.iter().map(|name| {
-        let mut statement = conn.prepare(&format!("SELECT * FROM \"{name}\"")).unwrap();
-        let width = statement.column_count();
-        let mut records: Vec<_> = statement
-            .query_map([], |r| {
-                Ok(Value::List(
-                    (0..width)
-                        .map(|i| match r.get_ref(i).unwrap() {
-                            ValueRef::Null => Value::Null,
-                            ValueRef::Integer(n) => Value::Int(n.into()),
-                            ValueRef::Real(n) => Value::Float(n),
-                            ValueRef::Text(t) => s(std::str::from_utf8(t).unwrap()),
-                            ValueRef::Blob(_) => panic!("unexpected fixture blob"),
-                        })
-                        .collect(),
-                ))
-            })
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        records.sort_by_key(wire);
-        (name.as_str(), Value::List(records))
-    }))
+    dict(
+        names
+            .iter()
+            .filter(|name| !newer_and_empty(conn, name))
+            .map(|name| {
+                let mut statement = conn.prepare(&format!("SELECT * FROM \"{name}\"")).unwrap();
+                let width = statement.column_count();
+                let mut records: Vec<_> = statement
+                    .query_map([], |r| {
+                        Ok(Value::List(
+                            (0..width)
+                                .map(|i| match r.get_ref(i).unwrap() {
+                                    ValueRef::Null => Value::Null,
+                                    ValueRef::Integer(n) => Value::Int(n.into()),
+                                    ValueRef::Real(n) => Value::Float(n),
+                                    ValueRef::Text(t) => s(std::str::from_utf8(t).unwrap()),
+                                    ValueRef::Blob(_) => panic!("unexpected fixture blob"),
+                                })
+                                .collect(),
+                        ))
+                    })
+                    .unwrap()
+                    .collect::<Result<_, _>>()
+                    .unwrap();
+                records.sort_by_key(wire);
+                (name.as_str(), Value::List(records))
+            }),
+    )
 }
 
 #[test]

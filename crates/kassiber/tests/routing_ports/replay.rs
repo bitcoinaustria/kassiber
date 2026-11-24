@@ -301,11 +301,38 @@ fn dump(path: &Path) -> Book {
         };
         tables.insert(name, table);
     }
-    Book {
+    without_added(Book {
         schema,
         pragmas,
         tables,
+    })
+}
+
+/// Storage added after these sessions were recorded
+/// (docs/reference/balance-checkpoints.md). A book carries the empty
+/// table; it does not change what a recorded session did, so it is left
+/// out of the comparison (the new daemon kinds are in
+/// `kassiber_daemon::RUST_ONLY_KINDS`). A row in the table still shows,
+/// so a session that writes one fails visibly.
+const ADDED_TABLES: &[&str] = &["balance_checkpoints"];
+const ADDED_OBJECTS: &[&str] = &["balance_checkpoints", "idx_balance_checkpoints_wallet"];
+
+fn without_added(mut book: Book) -> Book {
+    let empty = ADDED_TABLES
+        .iter()
+        .all(|name| match book.tables.get(*name) {
+            None => true,
+            Some(Table::Rows(rows)) => rows.is_empty(),
+            Some(Table::WithoutRowid(rows)) => rows.is_empty(),
+        });
+    if empty {
+        for name in ADDED_TABLES {
+            book.tables.remove(*name);
+        }
+        book.schema
+            .retain(|object| !ADDED_OBJECTS.iter().any(|name| object[1] == *name));
     }
+    book
 }
 
 fn empty_book() -> Book {

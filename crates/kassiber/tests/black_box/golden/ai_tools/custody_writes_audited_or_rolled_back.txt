@@ -49,10 +49,10 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + custody_ai_assistance_audits: id=t:"<uuid#1>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [830 bytes fnv128 09cae15fbb785bcfd0708bb6de106d77]
 + custody_ai_assistance_audits: id=t:"<uuid#2>" | workspace_id=t:"w" | profile_id=t:"p" | tool_name=… [918 bytes fnv128 ae9fdb97ed07450c6cf822528c4f9575]
-+ (116 tables, 104 empty)
++ (117 tables, 105 empty)
 # fixture reports
 $ daemon
 > #0
@@ -78,7 +78,7 @@ $ daemon
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === book changes after the writes
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + custody_ai_assistance_audits: id=t:"<uuid#1>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [831 bytes fnv128 ac1ad44b54965c4215f84d85f46211ac]
 + custody_ai_assistance_audits: id=t:"<uuid#2>" | workspace_id=t:"ws" | profile_id=t:"p" | tool_name… [919 bytes fnv128 49814648c5933dd4dc5a55f8cb5a395c]
-+ (116 tables, 98 empty)
++ (117 tables, 99 empty)

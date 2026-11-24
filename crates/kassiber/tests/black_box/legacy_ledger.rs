@@ -88,7 +88,61 @@ fn ledger_book(cipher: bool) -> Sandbox {
     } else {
         std::fs::write(&database, input).unwrap();
     }
+    // Storage added after the frozen book was written: an open would create
+    // it (a write), so the book starts with it, as every current book does.
+    let conn = connect(&sandbox);
+    for statement in added_statements() {
+        conn.execute_batch(&statement).unwrap();
+    }
+    drop(conn);
     sandbox
+}
+
+/// Schema objects added after this frozen book and its Python expectation
+/// were recorded (docs/reference/database-compatibility.md): created empty
+/// in the input, left out of the comparison with Python's dump.
+const ADDED: &[&str] = &["balance_checkpoints", "idx_balance_checkpoints_wallet"];
+
+fn added_statements() -> Vec<String> {
+    let creation: Value =
+        serde_json::from_str(include_str!("../../../store/fixtures/creation.json")).unwrap();
+    creation["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap().to_owned())
+        .filter(|s| {
+            ADDED
+                .iter()
+                .any(|name| s.contains(&format!("EXISTS {name}")))
+        })
+        .collect()
+}
+
+/// A dump without the objects and tables in `ADDED`, while the tables hold
+/// no row: a purge that wrote one would still show.
+fn without_added(mut dump: Value) -> Value {
+    let empty = ADDED.iter().all(|name| {
+        dump["tables"][*name]["rows"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    });
+    if !empty {
+        return dump;
+    }
+    if let Some(objects) = dump["objects"].as_array_mut() {
+        objects.retain(|o| {
+            !ADDED
+                .iter()
+                .any(|name| o.to_string().contains(&format!("\"{name}\"")))
+        });
+    }
+    if let Some(tables) = dump["tables"].as_object_mut() {
+        for name in ADDED {
+            tables.remove(*name);
+        }
+    }
+    dump
 }
 
 fn connect(sandbox: &Sandbox) -> Connection {
@@ -254,7 +308,7 @@ fn purge_matches_python(cipher: bool) {
         .unwrap()
         .exists([])
         .unwrap());
-    let actual = dump(&conn);
+    let actual = without_added(dump(&conn));
     drop(conn);
     if let Some(found) = difference(&expected["dump"], &actual) {
         panic!("the purged book differs from Python's: {found}");

@@ -647,7 +647,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -659,7 +659,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38433 bytes, 73 lines fnv128 df4f8210921fdec0960154f70e26055d]
+… [38433 bytes, 73 lines fnv128 c3ad37f50d32ec41ca87056d43af7e93]
 # grant operator, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1343 bytes fnv128 3ac550bcd7a82dcb42ad8af71ecb4620]
@@ -901,7 +901,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -913,7 +913,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38433 bytes, 73 lines fnv128 3e419ce96a0986759f9c6936c5593c8d]
+… [38433 bytes, 73 lines fnv128 c9f28a7df81d597d4f88a5be784fbd4b]
 # grant accounting_decisions, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1385 bytes fnv128 759e551a01a4c3b0b33e4ab84890c0bc]
@@ -1226,7 +1226,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1238,7 +1238,7 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [39433 bytes, 75 lines fnv128 7d5d37e5e8bbbd4190ae1713c755cb6a]
+… [39433 bytes, 75 lines fnv128 1fa73a41aecbe67f18bc6199d500e4e8]
 # grant accounting_decisions, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1385 bytes fnv128 759e551a01a4c3b0b33e4ab84890c0bc]
@@ -1525,7 +1525,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1537,4 +1537,4 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38656 bytes, 74 lines fnv128 ab60a43fccbaff0d0308b8ce6ead8b66]
+… [38656 bytes, 74 lines fnv128 f1137edf4a061244849042a101b7cf36]

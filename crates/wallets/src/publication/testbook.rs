@@ -84,6 +84,20 @@ fn column(value: ValueRef<'_>) -> Value {
     }
 }
 
+/// `balance_checkpoints` is newer than these frozen dumps
+/// (docs/reference/balance-checkpoints.md): left out only while it holds no
+/// row, so a step that writes one still shows.
+fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+    table == "balance_checkpoints"
+        && conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+}
+
 /// Every table's rows, sorted like Python's `json.dumps(row, sort_keys=True)`.
 pub(crate) fn snapshot(conn: &Connection) -> Value {
     let tables: Vec<String> = conn
@@ -94,7 +108,7 @@ pub(crate) fn snapshot(conn: &Connection) -> Value {
         .collect::<Result<_, _>>()
         .unwrap();
     let mut result = Vec::new();
-    for table in tables {
+    for table in tables.into_iter().filter(|t| !newer_and_empty(conn, t)) {
         let mut statement = conn.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
         let count = statement.column_count();
         let mut rows: Vec<Value> = statement
@@ -189,5 +203,28 @@ impl Clock {
     pub(crate) fn now(&mut self) -> String {
         self.now += 1;
         kassiber_chain::format_unix_time(1_893_456_000 + i64::from(self.now)).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod newer_table_tests {
+    use super::*;
+
+    /// The newer checkpoint table drops out of a snapshot only while empty.
+    #[test]
+    fn a_written_checkpoint_stays_in_the_snapshot() {
+        let conn = load(&Value::Dict(vec![]));
+        let has = |conn: &Connection| {
+            matches!(&snapshot(conn), Value::Dict(tables)
+                if tables.iter().any(|(k, _)| *k == Key::from("balance_checkpoints")))
+        };
+        assert!(!has(&conn));
+        conn.execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             INSERT INTO balance_checkpoints(id,workspace_id,profile_id,wallet_id,asset,as_of,amount_msat,origin,created_at)
+             VALUES('c','ws','p','w','BTC','2025-01-01T00:00:00Z',1,'manual','x')",
+        )
+        .unwrap();
+        assert!(has(&conn));
     }
 }

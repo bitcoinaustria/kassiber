@@ -33,6 +33,20 @@ fn quote(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
+/// `balance_checkpoints` is newer than these frozen dumps
+/// (docs/reference/balance-checkpoints.md): left out only while it holds no
+/// row, so a step that writes one still shows.
+fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+    table == "balance_checkpoints"
+        && conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+}
+
 /// The generator's `dump`: objects by (type, name); rows by primary key,
 /// then every column; values as [storage class, value], REAL as its bits.
 fn dump(conn: &Connection) -> Value {
@@ -48,15 +62,21 @@ fn dump(conn: &Connection) -> Value {
             ]))
         })
         .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
+        .collect::<Result<Vec<Value>, _>>()
+        .unwrap()
+        .into_iter()
+        .filter(|object| !newer_and_empty(conn, object[2].as_str().unwrap_or("")))
+        .collect();
     let tables: Vec<String> = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         .unwrap()
         .query_map([], |r| r.get(0))
         .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
+        .collect::<Result<Vec<String>, _>>()
+        .unwrap()
+        .into_iter()
+        .filter(|table| !newer_and_empty(conn, table))
+        .collect();
     let mut out = serde_json::Map::new();
     for table in tables {
         let columns: Vec<(String, i64)> = conn

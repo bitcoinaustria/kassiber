@@ -44,7 +44,7 @@ POST /v1/responses {"input":[{"content":[{"text":"Extract a draft Kassiber trans
 - chain_index_clock: id=i:1 | revision=i:35
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:34
 - profiles: id=t:"p" | workspace_id=t:"w" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:"at" | tax_long_term_days=i:365 | gains_algorithm=t:"FIFO" | require_coarse_review=i:0 | bitcoin_rail_carrying_value=i:1 | cost_basis_pool_scope=t:"global" | journal_input_version=i:1 | last_processed_input_version=i:0 | required_journal_semantics_version=i:1 | journal_semantics_version=i:0 | last_processed_at=NULL | last_processed_tx_count=i:0 | ownership_review_counts_json=NULL | created_at=t:"2025" | swap_candidate_count=NULL
-- (116 tables, 104 empty)
+- (117 tables, 105 empty)
 + ai_providers: name=t:"claude" | display_name=t:"Claude" | base_url=t:"claude-cli://default" | api_key=NULL | default_model=t:"default" | kind=t:"remote" | notes=t:"Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not." | acknowledged_at=NULL | enabled=i:1 | default_reasoning_effort=NULL | api_format=t:"auto" | detected_api_format=NULL | omit_store_field=i:0 | agent_access=t:"full" | created_at=t:"<now>" | updated_at=t:"<now>"
 + ai_providers: name=t:"codex" | display_name=t:"Codex" | base_url=t:"codex-cli://default" | api_key=NULL | default_model=t:"default" | kind=t:"remote" | notes=t:"Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not." | acknowledged_at=NULL | enabled=i:1 | default_reasoning_effort=NULL | api_format=t:"auto" | detected_api_format=NULL | omit_store_field=i:0 | agent_access=t:"full" | created_at=t:"<now>" | updated_at=t:"<now>"
 + ai_providers: name=t:"copilot" | display_name=t:"GitHub Copilot" | base_url=t:"copilot-cli://default" | api_key=NULL | default_model=t:"default" | kind=t:"remote" | notes=t:"Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not." | acknowledged_at=NULL | enabled=i:1 | default_reasoning_effort=NULL | api_format=t:"auto" | detected_api_format=NULL | omit_store_field=i:0 | agent_access=t:"full" | created_at=t:"<now>" | updated_at=t:"<now>"
@@ -53,4 +53,4 @@ POST /v1/responses {"input":[{"content":[{"text":"Extract a draft Kassiber trans
 + chain_index_clock: id=i:1 | revision=i:38
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:38
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:9 | revision=i:36
-… [6396 bytes, 19 lines fnv128 75d2620b021cc589f1bde92c9478fe66]
+… [6396 bytes, 19 lines fnv128 30383cf11f6fcf5d0dbb10124e453540]

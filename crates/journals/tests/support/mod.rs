@@ -97,6 +97,9 @@ pub fn insert_dump(c: &Connection, dump: &Value) {
         }
     }
 }
+/// Tables the current schema has and these frozen dumps predate.
+const ADDED_TABLES: &[&str] = &["balance_checkpoints"];
+
 pub fn snapshot(c: &Connection) -> Value {
     let tables: Vec<(String, String)> = c
         .prepare("SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -136,6 +139,11 @@ pub fn snapshot(c: &Connection) -> Value {
             kassiber_custody::codec::dumps(&kassiber_custody::codec::from_json(v).unwrap(), true)
                 .unwrap()
         });
+        // Storage added after these frozen dumps were recorded
+        // (docs/reference/balance-checkpoints.md): left out while empty.
+        if ADDED_TABLES.contains(&table.as_str()) && rows.is_empty() {
+            continue;
+        }
         out.insert(table, json!({"columns":columns,"rows":rows}));
     }
     Value::Object(out)
