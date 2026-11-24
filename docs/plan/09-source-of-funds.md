@@ -540,7 +540,7 @@ The first implementation adds the conservative, testable core path:
   on-disk files).
 - a desktop target picker rendered as the transaction table (parity with the
   Transactions screen) and the shared, editable transaction detail panel
-  ([TransactionDetailController](../../ui-tauri/src/components/transactions/dashboard/TransactionDetailController.tsx))
+  ([TransactionDetailController](https://github.com/bitcoinaustria/kassiber/blob/1c8065d4b676675076a8ca593963e2d4a121b43b/ui-tauri/src/components/transactions/dashboard/TransactionDetailController.tsx))
   wired into the workflow: the picker's details affordance, review-step gate
   findings, and flow-path transaction nodes all open it. Because daemon
   mutations invalidate the source-of-funds queries, fixing pricing / exclusion /

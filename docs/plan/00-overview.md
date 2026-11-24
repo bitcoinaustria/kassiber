@@ -9,10 +9,12 @@ the docs in the same change.
 
 Kassiber is local-first Bitcoin accounting with a desktop app and a first-class
 CLI. The backend is a Rust workspace whose `kassiber` binary serves the CLI,
-the desktop daemon, the MCP server, and the operator broker. The desktop uses
-Tauri and React and runs that binary as a sidecar daemon;
-see [01-stack-decision.md](01-stack-decision.md) for the stack
-and [04-desktop-ui.md](04-desktop-ui.md) for the historical implementation roadmap.
+the desktop daemon, the MCP server, and the operator broker. The desktop is a
+native Rust app built with Rune (`crates/kassiber-desktop`) and runs that
+binary as a sidecar daemon. The Tauri 2 + React shell of
+[01-stack-decision.md](01-stack-decision.md) and the historical roadmap in
+[04-desktop-ui.md](04-desktop-ui.md) was removed in its favour; the last
+commit with `ui-tauri/` is `1c8065d4b`.
 
 It owns wallet sync/import, local storage, provenance, metadata, attachments,
 transfer pairing, review/quarantine workflows, CLI/desktop UX, and
@@ -52,7 +54,8 @@ Out of scope unless a future design says otherwise:
 - shared core: the other crates under `crates/` (storage, wallets, custody,
   journals, reports, AI, network routes and the rest); see
   [crate guidance](../../crates/AGENTS.md)
-- desktop shell: `ui-tauri/`, sharing the daemon contract with the browser bridge
+- desktop app: `crates/kassiber-desktop` (its own Cargo workspace), over the
+  daemon contract
 - storage: SQLite under the OS-native per-user app-data root, with meaningful
   `~/.kassiber` state moved there once when the native target does not exist
 - storage shape: one DB per project under `<state-root>/projects/`
@@ -72,8 +75,8 @@ and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
 
 - local-first by default
 - CLI stays first-class
-- no bundled browser runtime; no separately-installed user runtime (Tauri uses
-  the OS webview; the `kassiber` sidecar binary ships inside the app)
+- no bundled browser runtime; no separately-installed user runtime (the
+  desktop is a native binary; the `kassiber` sidecar binary ships inside the app)
 - Bitcoin-first; L-BTC is in scope
 - BTC amounts are integer msat
 - reports are trusted only after journal processing
@@ -103,7 +106,7 @@ checklists and test counts are not current delivery evidence.
 | Kassiber tax engine | Active | phases 0-4 implemented: the pure Rust engine is the only engine, with RP2-identical results pinned by frozen RP2 fixtures; phase 4 moved the boundary to the finalized projection, froze the phase-3 adapter as a test oracle (removed with Python; its results stay as frozen fixtures), and retired its RP2-shaped mirror (authoritative Austrian fixtures and version provenance still open), per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
 | Rust backend | Implemented | the Rust `kassiber` binary is the whole backend per [21-rust-backend.md](21-rust-backend.md); Python was removed under [22-python-removal.md](22-python-removal.md), and the last Python commit is tagged `archive/python-backend` |
 | Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
-| Desktop UI | In progress | Tauri 2 + React + TypeScript with the `kassiber` binary as sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
+| Desktop UI | In progress | native Rust app on Rune with the `kassiber` binary as sidecar daemon, see [desktop](../reference/desktop.md); the Tauri 2 + React shell of [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) was removed |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
@@ -117,16 +120,18 @@ checklists and test counts are not current delivery evidence.
 Backend: a Rust Cargo workspace (`crates/`, `tax-engine/core`) built into one
 `kassiber` binary.
 
-Desktop: Tauri 2 + React + TypeScript + shadcn/ui, with the `kassiber` binary
-running as a long-lived sidecar daemon over stdin/stdout JSONL.
-
-See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
-[04-desktop-ui.md](04-desktop-ui.md) for the implementation plan.
+Desktop: a native Rust UI built with [Rune](https://github.com/anomalyco/rune)
+(`crates/kassiber-desktop`), with the `kassiber` binary running as a
+long-lived sidecar daemon over stdin/stdout JSONL. It replaced the Tauri 2 +
+React + TypeScript shell that [01-stack-decision.md](01-stack-decision.md)
+chose and [04-desktop-ui.md](04-desktop-ui.md) planned; see
+[desktop](../reference/desktop.md) for the current app.
 
 ## Doc Index
 
-- `01-stack-decision.md`: desktop stack ADR (Tauri + React + sidecar daemon;
-  the sidecar is the Rust binary since plans 21 and 22)
+- `01-stack-decision.md`: original desktop stack ADR (Tauri + React + sidecar
+  daemon; the sidecar is the Rust binary since plans 21 and 22, and the Rune
+  app replaced the Tauri shell)
 - `02-core-extraction.md`: archived Phase 0 extraction reference
 - `03-storage-conventions.md`: project-bundle storage target
 - `04-desktop-ui.md`: historical desktop implementation roadmap

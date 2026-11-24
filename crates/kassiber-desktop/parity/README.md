@@ -1,13 +1,22 @@
 # Tauri vs Rune parity harness
 
-This harness measures how far the Rune app is from the React/Tauri desktop. It drives both apps
-into the same state on identical copies of the regtest demo book, captures each scene, and
-diffs them.
+This harness measured how far the Rune app was from the React/Tauri desktop it replaced. It
+drives both apps into the same state on identical copies of the regtest demo book, captures each
+scene, and diffs them.
+
+The Tauri desktop (`ui-tauri/`) was removed from the tree; the last commit that contains it is
+`1c8065d4b676675076a8ca593963e2d4a121b43b`. The Tauri side therefore runs from a separate
+checkout of that commit, for example
+`git worktree add --detach ../kassiber-tauri 1c8065d4b676675076a8ca593963e2d4a121b43b`, named by
+`PARITY_TAURI_CHECKOUT`. Install its frontend dependencies there
+(`pnpm --dir ui-tauri install --frozen-lockfile`, with the pnpm version its `package.json` pins).
+The Tauri side expects the daemon protocol of that commit: if a scene fails on a newer
+`kassiber`, build the binary from the same checkout for `env-tauri.sh`.
 
 ## Run
 
 ```bash
-parity/run.sh [out-dir]                           # every scene; ONLY=a,b limits it
+PARITY_TAURI_CHECKOUT=../kassiber-tauri parity/run.sh [out-dir]   # every scene; ONLY=a,b limits it
 SKIP_TAURI=1 parity/run.sh <out-dir>              # reuse Tauri captures (re-capture Rune only)
 RUNE_ARGS="--font-smoothing off" parity/run.sh    # extra Rune flags for every scene
 ```
@@ -26,7 +35,7 @@ The run writes:
 | --- | --- |
 | `book-tauri/`, `book-rune/` | Two copies of the same pristine demo book, with `config/settings.json` paths rewritten. Each app writes only to its own copy. |
 | `env-tauri.sh`, `env-rune.sh` | `KASSIBER_BIN`, `KASSIBER_DEMO_DATA_ROOT` and isolated `KASSIBER_*_FILE` preference paths. The owner's real books are never read. |
-| `dist/` | The production web bundle. Build it with `VITE_DAEMON=bridge pnpm exec vite build --outDir $PARITY_HOME/dist` from `ui-tauri/`. |
+| `dist/` | The production web bundle. Build it with `VITE_DAEMON=bridge pnpm exec vite build --outDir $PARITY_HOME/dist` from `$PARITY_TAURI_CHECKOUT/ui-tauri/`. |
 
 ## Pieces
 

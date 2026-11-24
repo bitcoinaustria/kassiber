@@ -24,24 +24,21 @@ The guiding principle:
 
 | Buffer | Lives in | Bound | Survives |
 | --- | --- | --- | --- |
-| Daemon ring ([`crates/daemon/src/diagnostics.rs`](../../crates/daemon/src/diagnostics.rs)) | `kassiber daemon` process | 5,000 records / 4 MiB | webview reloads, UI restarts |
+| Daemon ring ([`crates/daemon/src/diagnostics.rs`](../../crates/daemon/src/diagnostics.rs)) | `kassiber daemon` process | 5,000 records / 4 MiB | the app's screens coming and going |
 | Operator ring ([`crates/operator/src/telemetry.rs`](../../crates/operator/src/telemetry.rs)) | Per-login-user broker process | 1,000 records | individual CLI/agent exits only |
-| Supervisor stderr tail + lifecycle ring ([`ui-tauri/src-tauri/src/supervisor.rs`](../../ui-tauri/src-tauri/src/supervisor.rs)) | Tauri (Rust) process | 16 KiB tail, 64 lifecycle records | daemon crashes and restarts |
-| Webview ring ([`ui-tauri/src/lib/appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts)) | Browser/Webview JS heap | 10,000 records / 4 MiB | nothing (it is the view) |
-| Desktop app stderr tail, lifecycle ring and log store ([`crates/kassiber-desktop/src/daemon.rs`](../../crates/kassiber-desktop/src/daemon.rs), [`reports/diag/logstore.rs`](../../crates/kassiber-desktop/src/reports/diag/logstore.rs)) | Rune desktop process | 16 KiB tail, 64 lifecycle records; 10,000 records / 4 MiB | daemon crashes and restarts |
+| Desktop supervisor stderr tail + lifecycle ring ([`crates/kassiber-desktop/src/daemon.rs`](../../crates/kassiber-desktop/src/daemon.rs)) and log store ([`reports/diag/logstore.rs`](../../crates/kassiber-desktop/src/reports/diag/logstore.rs)) | desktop app process | 16 KiB tail, 64 lifecycle records; 10,000 records / 4 MiB | daemon crashes and restarts |
 
-The desktop webview ring is the merge point for desktop-owned buffers. The desktop app polls
+The desktop's log store is the merge point for desktop-owned buffers. While
+the Logs screen is open (catching up on entry), the app polls
 `ui.logs.snapshot` (a pre-unlock daemon kind — it works while the database
-is locked, which is exactly when you need it) and the
-`daemon_lifecycle_snapshot` Tauri command, and folds both into the webview
-ring with `daemon-*` / `super-*` record ids. The Logs page, exports, and
-support bundles therefore see one merged stream: daemon request logs,
-sanitized panic messages, supervisor lifecycle
-events (spawn/exit/kill with the dying daemon's redacted stderr tail),
-webview transport records, console output, React errors, and unhandled
-promise rejections.
+is locked, which is exactly when you need it), and it folds new supervisor
+lifecycle records in as they arrive, with `daemon-*` / `super-*` record ids.
+The Logs page, exports, and support bundles therefore see one merged stream:
+daemon request logs, sanitized panic messages, supervisor lifecycle
+events (spawn/exit/kill with the dying daemon's redacted stderr tail), and
+the app's own daemon transport records.
 
-The operator ring is intentionally not merged into the desktop webview. It is
+The operator ring is intentionally not merged into the desktop's log store. It is
 process-local security telemetry for the terminal broker, disappears with that
 broker, and has no durable or desktop export path.
 
@@ -81,14 +78,14 @@ itself, so it must not become a health checker or background probe.
 extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
 `spspend` material, BDK/LWK observer blobs or opaque store values, API keys,
 bearer tokens, and passphrase assignments. These are scrubbed by
-`kassiber_envelope::redaction` (the backend, the Tauri supervisor, and the
-Rune desktop app, which compiles the same source through
+`kassiber_envelope::redaction` (the backend, and the desktop app, which
+compiles the same source through
 [`secret_floor.rs`](../../crates/kassiber-desktop/src/secret_floor.rs) and adds
-the webview's extra patterns after it) and `redactSecretFloorText` (TypeScript)
-before a record is stored, so this material never exists in any buffer and
+its own extra patterns after it in `reports/diag/redact.rs`) before a record
+is stored, so this material never exists in any buffer and
 cannot leak through later code paths, exports, or memory dumps.
 
-The backend and webview floors also scrub `rpcpassword`, `rpcauth`, `password`,
+The backend and desktop floors also scrub `rpcpassword`, `rpcauth`, `password`,
 `macaroon`, `cookie`, `secret_key` and `private_key` assignments. Their shared
 scanners handle key-based secrets before URL userinfo, including escaped and
 truncated diagnostics. Exact examples live in
@@ -128,16 +125,16 @@ watermarked, confirm-gated raw export (`redacted: false`). Market *rates*
 (`BTC/EUR 64000.12`) are public data, not the user's amount, and stay readable
 in `high_signal`.
 
-The pseudonymizers live in `redactSecretFloorText`'s sibling helpers in
-[`appLogs.ts`](../../ui-tauri/src/lib/appLogs.ts) (`pseudoTxid` /
-`pseudoAmount`) and in `redact_operational_text` /
+The pseudonymizers live in the desktop's
+[`reports/diag/redact.rs`](../../crates/kassiber-desktop/src/reports/diag/redact.rs)
+(`pseudo_txid` / `pseudo_amount`) and in `redact_operational_text` /
 `redact_operational_value`
 ([`kassiber_envelope::redaction`](../../crates/envelope/src/redaction.rs)). The backend copy runs
 inside `sanitize_traceback_text` (so ring tracebacks, `error.debug` and the CLI
 `--debug` envelope are covered), over structured `error.details` at the daemon
 error-envelope boundary (`redact_operational_value`, symmetric with the
 secret-*key* scrub), and on the freshness disk write / UI snapshot — the
-egresses that do not pass through the webview renderer (a backend exception's
+egresses that do not pass through the desktop's log views (a backend exception's
 `details` can carry a node `stderr` blob or `response_preview` with txids).
 
 Complete UUID-shaped tokens (8-4-4-4-12 hex digits) and 32-hex IDs are
@@ -147,8 +144,7 @@ boundaries (no adjacent ASCII letters, digits, underscores or hyphens). Partial
 UUID lookalikes are not exempt. The txid pass still runs first and is unchanged.
 Only the ID's own characters are shielded: a comma or decimal point followed
 by a separate amount is still redacted even when the ID ends entirely in
-digits. Backend and webview regression tests share exact output vectors and a
-fixed test salt; runtime amount salts remain private and random.
+digits. Runtime amount salts remain private and random.
 
 Prefer typed fields over free text when adding log producers: a field
 typed `address`/`txid`/`path` is masked by type at render time, while free
@@ -189,10 +185,8 @@ message.
   capability/command codes, and categorical auth methods; they omit raw argv,
   paths, endpoints, credentials, and secret frames. The ring dies with the
   broker and has no generic export or durable activity table.
-- **Webview** — daemon transport round-trips (including `error.details`
-  and `error.debug` excerpts), `window.onerror`, `unhandledrejection`,
-  `console.error`/`console.warn` (with re-entrancy and duplicate-burst
-  guards), and a root React error boundary.
+- **Desktop app** — daemon transport round-trips ("Daemon invoke finished",
+  derived from the app's request timings) and supervisor lifecycle events.
 
 ## Tracebacks in error envelopes
 
@@ -237,8 +231,8 @@ is acceptable; exposing part of a credential is not. Ordinary prose words are
 the exception, so help text remains readable. Producers must use typed secret
 fields rather than rely on inference from arbitrary text.
 
-The backend and the shipped webview run mirrored forward scanners before the remaining
-key/descriptor backstops. Each scanner (URL userinfo, schemeless userinfo, XML,
+The backend (and the desktop, which compiles the same source) runs forward
+scanners before the remaining key/descriptor backstops. Each scanner (URL userinfo, schemeless userinfo, XML,
 name/value pairs, command flags and key assignments) reports spans in the
 original text, over both the raw text and the decoded view. Their union is
 masked; overlapping spans merge into one `[redacted]`. One detector therefore
@@ -475,8 +469,10 @@ each produced 100,000 compositions. Their cases are frozen as locked test data
 (`tests/fixtures/secret_redaction/`, fetched by `scripts/fetch-test-data.sh`),
 generated by the reviewers' original Python generators with their
 independently authored distributions and RNG; the fourth to sixth also cover
-further seeds. The webview insert path runs them; see
-[the Rust floor](#rust-mirror) for the backend. The sixth checks every
+further seeds. `crates/envelope/tests/reviewer_corpora.rs` runs them through
+the backend floor (`redact_secret_text`), and `generated_corpus.rs` the first,
+LCG-generated corpus (also run through the desktop's log store); see
+[the Rust floor](#rust-mirror). The sixth checks every
 planted name, flag, URL, provider and chat-service secret, including the
 concatenated names, split flags and chat paths it was written to find. The fifth checks
 planted secrets and numeric PIN/OTP codes inside the contract; zero-width noise
@@ -484,8 +480,7 @@ inside a key, prose-only provider errors, bare `twofa` and count-shaped numeric
 names are outside it. All six assert
 that no four-character planted secret fragment survives and that complete output
 streams have the same SHA-256 digest in both runtimes; the first four also assert
-that planted identifiers, hostnames, prose and help remain readable. The webview bare-mnemonic heuristic retains its three
-known corpus differences from the backend floor.
+that planted identifiers, hostnames, prose and help remain readable.
 
 ### Rust mirror
 
@@ -498,10 +493,13 @@ function by function from the Python reference (`redaction_scanner.py` and
 expressions are written out as matchers that accept exactly what Python's `re`
 accepted, over code points, with no regex engine; a surrogate stands in as a
 private-use character, as elsewhere in the envelope. Both files use only the
-standard library, so the desktop supervisor
-([`secret_floor.rs`](../../ui-tauri/src-tauri/src/secret_floor.rs)) compiles
-the same source for its stderr tail, lifecycle records and error details,
-including the eight-level `[truncated]` depth of `redact_secret_value`.
+standard library, so the desktop app
+([`secret_floor.rs`](../../crates/kassiber-desktop/src/secret_floor.rs)) compiles
+the same source for its supervisor's stderr tail, lifecycle records and error
+details (with the eight-level `[truncated]` depth of `redact_secret_value`)
+and its log store. Its `floor_covers_the_backend_scanner_corpus` test checks
+that the desktop floor never redacts less than the backend over the scanner
+family corpus.
 Every Rust caller (daemon errors and log ring, chain and wallet diagnostics,
 metadata history, provider previews) goes through these functions.
 
@@ -511,7 +509,10 @@ against the frozen Python output for every case of the shared fixture corpora
 `generator_corpora_match_python`, is ignored by default: it reads a corpus
 directory named by `KASSIBER_REDACTION_CORPUS` that the removed Python
 generator wrote, and checks all six generators at their pinned seeds
-(reproducing the pinned digests). `scanner_scaling.rs` times every scaling
+(reproducing the pinned digests). The desktop's log store runs the operational, secret,
+review-regression (5e–5i), generated, oversized, stress and scaling fixtures
+through its own floor in `crates/kassiber-desktop/src/reports/diag/redact/corpus_tests.rs`
+(the timing tests in release builds only). `scanner_scaling.rs` times every scaling
 and stress shape at 40,000 and 400,000 characters in thread CPU time (release
 build); `scanner_families.rs` names one test per rule family, which the entries
 of the envelope crate's mutation catalog must make fail.

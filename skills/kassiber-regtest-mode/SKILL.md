@@ -30,6 +30,12 @@ Use `demo-full` for test proof. Use `demo-up` for interactive development; it
 must leave reports immediately readable. Use `demo-tick` when the app refresh
 path needs new chain activity to import.
 
+Open the desktop app on the demo book with
+`crates/kassiber-desktop/scripts/run.sh --data-root <demo data root>` (default
+`~/.kassiber/regtest-demo/data`); it keeps the app's preference files in a
+scratch directory. For snapshots, scenes and scripted input without a window,
+use the headless tooling in `crates/kassiber-desktop/README.md`.
+
 ## Workflow
 
 1. Start in the Kassiber repo root.
@@ -52,8 +58,8 @@ path needs new chain activity to import.
 
 The desired default is one persistent demo backend per worktree, not one
 machine-global demo singleton. Multiple Codex/Claude agents should be able to
-run `demo-up`, `demo-tick`, `demo-down`, and `pnpm dev:demo` concurrently from
-different worktrees without port, Compose project, data-root, or manifest
+run `demo-up`, `demo-tick`, `demo-down`, and the desktop app on the demo book
+concurrently from different worktrees without port, Compose project, data-root, or manifest
 collisions.
 
 When implementing this, prefer a deterministic namespace derived from the
@@ -73,16 +79,14 @@ default; it causes agents to stop, purge, tick, or mutate each other's books.
 
 The manifest should remain the source of truth after first startup. Persist the
 namespace, Compose project, data root, all loopback URLs, and generated RPC
-credentials there, then have `demo-tick`, `demo-down`, `dev:demo`, and helper
-scripts read the manifest before inventing defaults. If the manifest exists,
+credentials there, then have `demo-tick`, `demo-down`, and helper scripts read
+the manifest before inventing defaults. If the manifest exists,
 reuse it even if the current default hash algorithm later changes.
 
 When reviewing or patching this area, check all of these together:
 
 - `scripts/integration-harness.sh`: namespace, port block, manifest read/write,
   `demo-up`, `demo-tick`, `demo-down`.
-- `ui-tauri/package.json` and `ui-tauri/vite.config.ts`: `dev:demo` must point
-  at the same worktree-scoped demo home unless explicitly overridden.
 - `dev/regtest/bitcoin-cli.sh`: should pick the current worktree manifest or
   accept the same namespace override before falling back to defaults.
 - `docs/reference/testing.md`: document shared mode as opt-in and name the
@@ -121,8 +125,8 @@ cheap status lane before doing expensive work:
 ```
 
 `demo-status` should be read-only: print whether the manifest exists, whether
-the Compose project is running, whether RPC is reachable, the data root for
-`pnpm dev:demo`, and the exact next command (`demo-up`, `demo-tick`, or
+the Compose project is running, whether RPC is reachable, the data root to pass
+to the desktop's `scripts/run.sh`, and the exact next command (`demo-up`, `demo-tick`, or
 `demo-down`). It must not start Docker or mutate the book.
 
 ## Guardrails

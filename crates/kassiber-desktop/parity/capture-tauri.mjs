@@ -3,7 +3,7 @@
 //
 //   node parity/capture-tauri.mjs <out-dir>        (ONLY=a,b to limit scenes)
 //
-// Env (see parity/run.sh): PARITY_TAURI_CHECKOUT (a checkout of commit 33fbc2b5a, the last with
+// Env (see parity/run.sh): PARITY_TAURI_CHECKOUT (a checkout of commit 1c8065d4b, the last with
 // ui-tauri/, its dependencies installed), PARITY_DIST (built bundle), KASSIBER_BIN,
 // KASSIBER_DEMO_DATA_ROOT and the isolated KASSIBER_*_FILE preference paths. The preview server and the browser are started
 // here and stopped on exit.
@@ -16,7 +16,7 @@ import { launch, sleep } from "./cdp.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const tauriCheckout = process.env.PARITY_TAURI_CHECKOUT;
 if (!tauriCheckout || !existsSync(join(tauriCheckout, "ui-tauri", "package.json")))
-  throw new Error("PARITY_TAURI_CHECKOUT must name a checkout of commit 33fbc2b5a (it has ui-tauri/)");
+  throw new Error("PARITY_TAURI_CHECKOUT must name a checkout of commit 1c8065d4b (it has ui-tauri/)");
 const out = process.argv[2];
 if (!out) throw new Error("usage: capture-tauri.mjs <out-dir>");
 mkdirSync(out, { recursive: true });

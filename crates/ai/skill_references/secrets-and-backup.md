@@ -115,7 +115,7 @@ Without the marker the desktop owns migration. Desktop Settings can forget only
 Touch ID or remove all saved unlock methods, including both current entries and
 any legacy shared item. Passphrase rotation arms the non-secret
 `desktop_biometric_stale` managed-settings guard before rekey and clears it only
-after Tauri successfully refreshes/removes the desktop copy. The opaque guard
+after the desktop app successfully refreshes/removes the desktop copy. The opaque guard
 generation is compare-and-cleared by refresh so an older callback cannot erase a
 newer rotation. It deliberately stays armed after any ambiguous rotation error,
 so an interrupted or post-verification failure cannot keep offering a known-stale

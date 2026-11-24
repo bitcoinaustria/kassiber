@@ -7,7 +7,7 @@
 # The pristine book is a directory with config/settings.json and data/kassiber.sqlite3 whose
 # settings.json holds absolute paths; they are rewritten to point at each copy. The web bundle
 # (dist/) is built once and shared: pass its path to symlink it, or build it from a checkout of
-# commit 33fbc2b5a, the last one with ui-tauri/ (the same PARITY_TAURI_CHECKOUT run.sh needs):
+# commit 1c8065d4b, the last one with ui-tauri/ (the same PARITY_TAURI_CHECKOUT run.sh needs):
 #   (cd "$PARITY_TAURI_CHECKOUT/ui-tauri" && pnpm install --frozen-lockfile &&
 #    VITE_DAEMON=bridge pnpm exec vite build --outDir <home>/dist)
 set -euo pipefail

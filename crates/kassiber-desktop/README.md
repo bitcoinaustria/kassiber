@@ -10,7 +10,7 @@ so Rune and its graphics stack never enter the backend's dependency tree. Rune i
 revision (`Cargo.toml`), with the `[patch.crates-io]` entries Rune asks apps to copy. It builds
 with the repository's toolchain (`rust-toolchain.toml` at the root).
 
-Shared with the Tauri desktop (`ui-tauri/`), at the repository root:
+Read from the repository root:
 
 | Path | What |
 | --- | --- |
@@ -87,10 +87,11 @@ $bin --data-root … --lang de --snap de.png --scene transactions
 
 ## Parity harness
 
-`parity/` drives this app and the Tauri app into the same state on identical copies of the
-regtest demo book, captures each scene and diffs pixels, text layout, controls and containers.
-Setup and usage are in [parity/README.md](parity/README.md); the last measured results are in
-[docs/parity.md](docs/parity.md).
+`parity/` drove this app and the removed Tauri app into the same state on identical copies of
+the regtest demo book, captured each scene and diffed pixels, text layout, controls and
+containers. It still runs against a separate checkout of the last commit with `ui-tauri/`
+(`PARITY_TAURI_CHECKOUT`); setup and usage are in [parity/README.md](parity/README.md), the
+last measured results in [docs/parity.md](docs/parity.md).
 
 ## Packaging
 

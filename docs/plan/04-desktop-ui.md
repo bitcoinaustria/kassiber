@@ -10,6 +10,9 @@ for current procedures. Security invariants and unresolved release gates remain
 binding; the token-WebSocket design and disk logging were not shipped. The Python
 sidecar it describes was replaced by the Rust `kassiber` binary under
 [plan 21](21-rust-backend.md) and removed under [plan 22](22-python-removal.md).
+The Tauri 2 + React shell itself was later replaced by the native Rune app in
+`crates/kassiber-desktop` and removed; `ui-tauri/` paths below refer to commit
+`1c8065d4b676675076a8ca593963e2d4a121b43b`, the last one that contains it.
 
 ## Scope and preconditions
 
@@ -83,7 +86,7 @@ do not block the main thread. The conventions that follow from this:
   properties (`width`, `top`, `background-color` on large surfaces) drops
   the animation back onto the main thread and forfeits the high refresh
   rate. The existing `route-progress` keyframe in
-  [ui-tauri/src/styles/globals.css](../../ui-tauri/src/styles/globals.css)
+  [ui-tauri/src/styles/globals.css](https://github.com/bitcoinaustria/kassiber/blob/1c8065d4b676675076a8ca593963e2d4a121b43b/ui-tauri/src/styles/globals.css)
   is the canonical pattern.
 - **Use `requestAnimationFrame`, never `setInterval(16ms)`.** A fixed
   16ms timer hard-caps the loop at 60fps and drifts against vsync.
@@ -93,7 +96,7 @@ do not block the main thread. The conventions that follow from this:
   compositor layer.
 - **Honor `prefers-reduced-motion`.** Prefer Tailwind's `motion-safe:` /
   `motion-reduce:` variants on individual elements; a global safety net
-  in [ui-tauri/src/styles/globals.css](../../ui-tauri/src/styles/globals.css)
+  in [ui-tauri/src/styles/globals.css](https://github.com/bitcoinaustria/kassiber/blob/1c8065d4b676675076a8ca593963e2d4a121b43b/ui-tauri/src/styles/globals.css)
   collapses any remaining animations and transitions when the OS-level
   "Reduce motion" accessibility preference is on.
 
@@ -743,7 +746,7 @@ These should be tracked at the project level, not silently accepted.
 - [06-austrian-tax-engine.md](06-austrian-tax-engine.md) — RP2 boundary
 - [Privacy & security](../reference/privacy-and-security.md) — local-first / network policy / secrets
 - [AGENTS.md](../../AGENTS.md) — architecture and verification
-- [Cargo.toml](../../Cargo.toml) and [ui-tauri/package.json](../../ui-tauri/package.json) — current dependency sets
+- [Cargo.toml](../../Cargo.toml) and [ui-tauri/package.json](https://github.com/bitcoinaustria/kassiber/blob/1c8065d4b676675076a8ca593963e2d4a121b43b/ui-tauri/package.json) — current dependency sets
 - [crates/envelope](../../crates/envelope/src/lib.rs) — envelope contract (ported from Python's `kassiber/envelope.py`)
 - Tauri 2: https://v2.tauri.app/
 - Tauri capabilities: https://v2.tauri.app/security/capabilities/

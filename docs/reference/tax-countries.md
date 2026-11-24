@@ -151,9 +151,11 @@ and their frozen goldens and recorded sessions still do.
   layer, and the preview notice.
 - The CLI's `--tax-country` help (`Help::TaxCountries`), which lists the
   registry's countries, preview ones marked; `commands describe` shows it.
-- The desktop (`ui-tauri/src/lib/taxCountries.ts`) through a generated copy,
-  `ui-tauri/src/lib/taxCountries.generated.ts`. A test in the crate fails
-  when the copy is stale; `KASSIBER_UPDATE_TAX_COUNTRIES_TS=1 cargo test -p
+- The desktop's country list (`COUNTRIES` in
+  `crates/kassiber-desktop/src/reports/books/model.rs`), which a desktop unit
+  test compares with a generated snapshot of the registry,
+  `assets/tax-countries.generated.json`. A test in the crate fails when the
+  snapshot is stale; `KASSIBER_UPDATE_TAX_COUNTRIES=1 cargo test -p
   kassiber-tax-countries` rewrites it.
 
 ## Preview countries
@@ -169,7 +171,8 @@ notice (`Document::preview_notice`): the PDF under the title and above the
 footer of every page, the XLSX summary sheet's third row, the CSV bundle's
 `summary.csv` (section `preview`, key `notice`) and its manifest
 (`preview_notice`). A report of a reviewed country is byte for byte what it
-was. The desktop bundles' strings equal the registry's (a vitest checks).
+was. The desktop bundles' strings equal the registry's (the same desktop
+unit test checks).
 
 A country leaves preview when a tax professional for it has reviewed its
 specification, its vectors and a sample book's reports; the review is
@@ -185,8 +188,9 @@ commit.
    them reviewed; the file is a hand-checked golden. The Python reference
    models that wrote the first countries' files were removed with Python
    ([plan 22](../plan/22-python-removal.md), D6).
-2. Add the registry entry with `preview: true`, regenerate the desktop copy,
-   and add its names to the desktop where a screen needs its own wording.
+2. Add the registry entry with `preview: true`, regenerate the snapshot, add
+   the country to the desktop's `COUNTRIES`, and add its names to the desktop
+   where a screen needs its own wording.
 3. Implement whatever the engine lacks (a method, a holding-period rule, a
    pool scope) behind the registry's answers; an unsupported combination
    must fail closed.

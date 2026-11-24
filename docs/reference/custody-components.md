@@ -438,7 +438,7 @@ fingerprint deduplication retains the existing signed wire identity for rows and
 references, preventing a device-local id alias from creating a false tombstone
 or leaking into a component anchor. Arbitrary local evidence and leg
 `location_ref` values stay behind the daemon boundary; renderer-safe edits retain
-those hidden values by immutable leg id without returning them to the webview.
+those hidden values by immutable leg id without returning them to the desktop.
 
 ## Saved and filed report impact
 

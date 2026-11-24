@@ -79,24 +79,30 @@ which [plan 23](../plan/23-rust-provider-broker.md) removed.
 | `kassiber-windows-x64.msi`, `.exe` | `binaries/kassiber-cli-x86_64-pc-windows-msvc.exe` + `bin/kassiber.exe` (PATH copy) | same, Rust | 82,616,320 / 79,044,700 | needs native run |
 | `kassiber-<version>-manifest.txt` (+ `.sig`) | SHA-256 of every asset; OpenSSH signature | unchanged | — | generated locally, unsigned |
 
+The desktop rows describe the Tauri bundles of that comparison. Releases now
+package the Rune app (`crates/kassiber-desktop`) under the same file names and
+sidecar paths; see [prerelease binaries](prerelease-binaries.md).
+
 No release artifact carries an SBOM today; the Rust build does not add one.
 Channel renderers consume these assets: AUR (`kassiber-release render-aur`) and Nix
 (`kassiber-release render-nix`) install the binary as `/usr/bin/kassiber`
 (`$out/bin/kassiber` in Nix) and depend on `gcc-libs` / `stdenv.cc.cc.lib`
 instead of zlib; Homebrew is unchanged.
 
-Bundled sidecar names keep the Rust target triples, so the supervisor
-(`bundled_sidecar` in `ui-tauri/src-tauri/src/supervisor.rs`), the macOS bundle
-launcher (`ui-tauri/src-tauri/bin/kassiber`), the Linux `/usr/bin/kassiber`
-forwarder and the Windows PATH copy find the Rust binary unchanged.
+Bundled sidecar names keep the Rust target triples, so the desktop app's
+supervisor (`bundled_sidecar` in `crates/kassiber-desktop/src/daemon.rs`), the
+macOS bundle launcher (`crates/kassiber-desktop/packaging/macos/kassiber-launcher`),
+the Linux `/usr/bin/kassiber` forwarder and the Windows PATH copy find the Rust
+binary unchanged.
 
 ## Linux x86_64
 
 `scripts/build-linux-x64-rust-artifacts.sh` runs the CI Linux legs locally and
-writes `dist/linux-x64/`. It preflights `dpkg-deb`, `rpmbuild`/`rpm2cpio`/`cpio`
-and Tauri's cached `linuxdeploy` tools and stops unless `--allow-partial` is
-given. It never downloads anything itself; Tauri would download `linuxdeploy`
-on its first AppImage build.
+writes `dist/linux-x64/`. It preflights `dpkg-deb`, `rpmbuild`/`rpm2cpio`/`cpio`,
+`appimagetool` and an AppImage runtime file (`--appimage-runtime`) and stops
+unless `--allow-partial` is given. It never downloads anything itself, and the
+desktop packaging script hands appimagetool the runtime file so it does not
+either.
 
 ### glibc floor and crypto linkage
 
@@ -107,7 +113,7 @@ the loader) and prints the `objdump -T` maximum for the record. A build on a
 newer host fails it; on this machine (glibc 2.44) the binary needs
 `__isoc23_strtol@GLIBC_2.38` (C code compiled against glibc 2.38+ headers) and
 `atan2f`/`log10f`/`acosf@GLIBC_2.43`. The desktop job runs the same check on
-`kassiber-ui` and on the sidecar inside the deb and the AppImage.
+`kassiber-ui` and on the sidecar before packaging the deb and the AppImage.
 
 SQLCipher links vendored OpenSSL statically on Linux and Windows
 (`bundled-sqlcipher-vendored-openssl`) and CommonCrypto on macOS
@@ -172,8 +178,8 @@ Run on 2026-11-07, commit `dc9b62a48`, glibc floor overridden to the host's
 | --- | --- | --- |
 | `dpkg-deb` (`dpkg`) | CLI `.deb`; desktop `.rpm` (repacked from the deb) | Arch `dpkg` package / Ubuntu base |
 | `rpmbuild`, `rpm2cpio` (`rpm-tools`) | CLI and desktop `.rpm` | Arch `rpm-tools` |
-| `linuxdeploy-x86_64.AppImage`, `linuxdeploy-plugin-appimage.AppImage`, `linuxdeploy-plugin-gtk.sh` in `~/.cache/tauri` | AppImage | Tauri downloads them from GitHub on first use |
-| Ubuntu 22.04 build environment (docker group membership or an `ubuntu:22.04` image with Rust 1.99.1, Node 22, pnpm 10.33.0 and the Tauri apt packages) | a floor-compliant local build | CI's `ubuntu-22.04` runner already provides it |
+| `appimagetool` and the AppImage type-2 runtime | AppImage | the GitHub releases the prerelease workflow pins by SHA-256 (`APPIMAGETOOL_*`, `APPIMAGE_RUNTIME_*`) |
+| Ubuntu 22.04 build environment (docker group membership or an `ubuntu:22.04` image with Rust 1.99.1 and `pkg-config libfontconfig1-dev libwayland-dev libxkbcommon-dev`) | a floor-compliant local build | CI's `ubuntu-22.04` runner already provides it |
 
 ## Signing
 
@@ -204,8 +210,8 @@ only for the same pair. `kassiber-release macos sign` already signs every
 Mach-O under its file name; `verify` now also refuses an app whose sidecar is
 missing from that location or signed under another identifier.
 `build-rust-cli.sh` ad-hoc signs the binary under that identifier after
-stripping, and the local app script re-signs it (and re-seals the bundle) if
-Tauri's ad-hoc signing changed it.
+stripping, and the desktop packaging (`crates/kassiber-desktop/packaging/macos/build-app.sh`)
+re-signs it under the same identifier after its own `strip -x`, then seals the bundle.
 
 Rust's own Mach-O stripping goes through rustup's `rust-objcopy`, which in a
 minimal toolchain cannot load `libLLVM.dylib` and only warns. The build
@@ -223,22 +229,24 @@ codesign -d --verbose=2 "dist/macos-arm64/Kassiber Dev.app/Contents/Resources/bi
 The release path is the CI macOS leg plus the [macOS release runbook](macos-release.md)
 (`kassiber-release macos prepare`, `macos sign`, `notarize`, `verify
 --smoke`). Still to prove natively: the strip/re-sign step, the bundled
-sidecar's identifier after Tauri, Touch ID unlock against a Developer ID
+sidecar's identifier after packaging, Touch ID unlock against a Developer ID
 signed Rust sidecar, and Keychain continuity for items the Python sidecar wrote.
 
 ## Windows x86_64 (needs a native run)
 
 `scripts/build-windows-x64-rust-app.sh` mirrors the CI Windows legs in Git
-Bash (MSVC build tools, rustup, Node 22, pnpm 10.33.0, a `python3` for the
-smoke's JSON assertions, 7-Zip):
+Bash (MSVC build tools, rustup, `jq` for the smoke's JSON assertions, 7-Zip,
+WiX Toolset v3 and NSIS):
 
 ```bash
 ./scripts/build-windows-x64-rust-app.sh
 ```
 
 It builds and smokes `kassiber.exe` (operator unlock included), writes the CLI
-zip, stages the sidecar and the PATH copy `bin/kassiber.exe`, and builds the
-MSI and NSIS setup into `dist/windows-x64/`.
+zip, builds the Rune app and runs
+`crates/kassiber-desktop/packaging/windows/build-installers.sh`, which stages
+the sidecar and the PATH copy `bin/kassiber.exe` and builds the MSI and NSIS
+setup into `dist/windows-x64/`.
 Nothing on Windows has been run for this change: the build, the SQLCipher
 open, the keyring formats and the installers all need that run. The
 OS-level no-egress check is Linux-only.
@@ -246,14 +254,15 @@ OS-level no-egress check is Linux-only.
 ## CI changes
 
 - `build-cli` writes `BUILD_INFO.json` with the release tool
-  (`kassiber-release build-info`), checks every version copy against the
+  (`kassiber-release build-info`), takes the product version from the
   backend crate, and builds, smokes and packages the Rust binary. Linux runs
   the no-egress check. The smoke's JSON assertions use `jq`, and the no-egress
   check is shell plus a compiled seccomp watcher and resolver shim; nothing in
   the job needs Python.
 - `build-desktop` refuses a staged `_internal/` payload, requires
-  `BUILD_INFO.json` beside the sidecar, stages the Windows PATH copy, and on
-  Linux runs the glibc floor check on the shell and on the sidecar inside both
-  the deb and the AppImage.
+  `BUILD_INFO.json` beside the sidecar, builds the Rune app without agent
+  tooling and runs the packaging scripts under
+  `crates/kassiber-desktop/packaging/`; on Linux they run the glibc floor check
+  on the app and on the sidecar.
 - Path filters follow the Rust inputs (`crates/**`, embedded data, skill
   references and the build scripts).

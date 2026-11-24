@@ -498,7 +498,8 @@ the wallets, pair moves between own wallets (`transfers pair`; a BTC/LBTC
 rail change needs `--policy carrying-value` or `--policy taxable`),
 `journals process`, then the report exports. The desktop's country picker
 lists Germany with the Preview badge from the registry
-(`ui-tauri/src/lib/taxCountries.generated.ts`).
+(`COUNTRIES` in `crates/kassiber-desktop/src/reports/books/model.rs`, checked
+against the registry).
 
 ### Differences from the specification
 
