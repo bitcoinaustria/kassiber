@@ -1013,6 +1013,14 @@ fn csv_records(text: &str) -> Result<Vec<Vec<String>>> {
     Ok(records)
 }
 
+/// The identity an import row exported by this book carries: its
+/// `checkpoint_id`, `origin` and `note` columns as written.
+struct Exported {
+    id: String,
+    origin: String,
+    note: Option<String>,
+}
+
 /// `checkpoints import`: CSV rows (`date,wallet,btc_amount[,asset][,origin][,note]`)
 /// become manual checkpoints. Every row is checked before any is stored;
 /// one bad row refuses the file. An `origin` column is kept only as a note:
@@ -1078,22 +1086,14 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
             .map_err(fail)?;
         let asset = asset(at(asset_at)).map_err(fail)?;
         // A row this book exported names its checkpoint: when that row is
-        // still stored exactly as exported, the import leaves it alone.
+        // still stored exactly as exported, the import leaves it alone. The
+        // comparison waits for the write lock, so a concurrent removal is seen.
         let origin = note(at(origin_at)).unwrap_or_else(|| "manual".into());
-        let known = match note(at(id_at)) {
-            Some(id) => exported_known(
-                conn,
-                profile_id,
-                &id,
-                &wallet.id,
-                &asset,
-                &as_of,
-                amount_msat,
-                &origin,
-                note(at(note_at)).as_deref(),
-            )?,
-            None => false,
-        };
+        let exported = note(at(id_at)).map(|id| Exported {
+            id,
+            origin: origin.clone(),
+            note: note(at(note_at)),
+        });
         let mut note_text = note(at(note_at)).unwrap_or_default();
         if let Some(origin) = Some(origin.clone()).filter(|o| o != "manual") {
             if !ORIGINS.contains(&origin.as_str()) {
@@ -1110,7 +1110,7 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
             };
         }
         prepared.push((
-            known,
+            exported,
             New {
                 wallet_id: wallet.id,
                 asset,
@@ -1127,9 +1127,13 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
     let (mut created, mut unchanged) = (0i64, 0i64);
     let lock =
         kassiber_store::WriteLock::begin(conn, "checkpoint_import").map_err(database_error)?;
-    let result = prepared.iter().try_for_each(|(known, new)| {
+    let result = prepared.iter().try_for_each(|(exported, new)| {
         // An exported row coming back adds nothing; any other row is the
         // user's own statement, never gaining another origin's authority.
+        let known = match exported {
+            Some(exported) => exported_known(&lock, profile_id, exported, new)?,
+            None => false,
+        };
         let written = !known && record(conn, profile_id, new)?.1;
         if written {
             created += 1;
@@ -1192,23 +1196,28 @@ fn import_wallet(
 /// exactly: the same id, wallet, asset, time, amount, origin and note. The
 /// note is compared with its exported form too (a formula-like note is
 /// exported behind a `'`), so an edited note is new evidence, never a replay.
-#[allow(clippy::too_many_arguments)]
+/// It reads under the import's write lock: a checkpoint another process
+/// removed meanwhile is gone, and the row is stored again.
 fn exported_known(
-    conn: &Connection,
+    lock: &kassiber_store::WriteLock<'_>,
     profile_id: &str,
-    id: &str,
-    wallet_id: &str,
-    asset: &str,
-    as_of: &str,
-    amount_msat: i64,
-    origin: &str,
-    imported_note: Option<&str>,
+    exported: &Exported,
+    row: &New,
 ) -> Result<bool> {
-    let stored: Option<Option<String>> = conn
+    let imported_note = exported.note.as_deref();
+    let stored: Option<Option<String>> = lock
         .query_row(
             "SELECT note FROM balance_checkpoints WHERE profile_id=? AND id=? AND wallet_id=? \
              AND asset=? AND as_of=? AND amount_msat=? AND origin=?",
-            params![profile_id, id, wallet_id, asset, as_of, amount_msat, origin],
+            params![
+                profile_id,
+                exported.id,
+                row.wallet_id,
+                row.asset,
+                row.as_of,
+                row.amount_msat,
+                exported.origin
+            ],
             |r| r.get(0),
         )
         .optional()
