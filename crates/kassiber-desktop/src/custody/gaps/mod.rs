@@ -67,7 +67,7 @@ pub struct Detail {
 }
 
 impl Detail {
-    fn new(gap_id: &str) -> Detail {
+    pub(crate) fn new(gap_id: &str) -> Detail {
         Detail {
             gap_id: gap_id.to_owned(),
             ctx: None,
@@ -177,6 +177,26 @@ fn load_more(app: &mut App) {
 
 /// The review details follow the gap the URL focuses (a fresh review per gap, as the web's
 /// `key={gapId}` remount).
+/// The gap under review on the page, once its review packet named it in the open book: its id
+/// and the day it started (the assistant tray's open item).
+pub fn open_gap(app: &App) -> Option<(String, Option<String>)> {
+    if !crate::custody::owns(app.route.path()) {
+        return None;
+    }
+    let id = focus(app)?;
+    let d = app
+        .custody
+        .gaps
+        .detail
+        .as_ref()
+        .filter(|d| d.gap_id == id)?;
+    let Some(Ok(ctx)) = &d.ctx else {
+        return None;
+    };
+    let g = ctx["gaps"].as_array()?.first()?;
+    (g["gap_id"] == id.as_str()).then(|| (id, g["started_at"].as_str().map(str::to_owned)))
+}
+
 fn sync_detail(app: &mut App) {
     let f = focus(app);
     let current = st(app).detail.as_ref().map(|d| d.gap_id.clone());

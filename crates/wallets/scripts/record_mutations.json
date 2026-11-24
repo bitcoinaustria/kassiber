@@ -182,12 +182,22 @@
   {
     "id": "record-electrum-confirmed",
     "file": "crates/wallets/src/bitcoin_records.rs",
-    "find": "(occurred_at != UNKNOWN).then_some(occurred_at)",
-    "replace": "Some(occurred_at)",
+    "find": "(in_block && occurred_at != UNKNOWN).then_some(occurred_at)",
+    "replace": "(in_block).then_some(occurred_at)",
     "expect_failing": [
       "bitcoin_records_match_python_vectors"
     ],
     "rule": "Unknown Electrum occurrence time does not prove confirmation."
+  },
+  {
+    "id": "record-electrum-confirmed-needs-height",
+    "file": "crates/wallets/src/bitcoin_records.rs",
+    "find": "(in_block && occurred_at != UNKNOWN).then_some(occurred_at)",
+    "replace": "(occurred_at != UNKNOWN).then_some(occurred_at)",
+    "expect_failing": [
+      "an_electrum_mempool_row_with_a_server_time_stays_unconfirmed"
+    ],
+    "rule": "Only a positive Electrum history height confirms a row; a server's own time does not."
   },
   {
     "id": "record-received",

@@ -977,6 +977,9 @@ pub fn replay(
     if !session.env.contains_key("TMPDIR") {
         command.env("TMPDIR", &tmp);
     }
+    if let Some(version) = unrecorded_version(session) {
+        command.env(crate::VERSION_OVERRIDE, version);
+    }
     // A coverage-instrumented binary writes its counters here.
     if let Some(profile) = profile {
         command.env("LLVM_PROFILE_FILE", profile.join("%p-%m.profraw"));
@@ -1453,6 +1456,13 @@ fn first_difference(label: &str, a: &str, b: &str) -> String {
     )
 }
 
+/// The version a replay reports for a session whose environment names none
+/// (a recording that predates 1.0.0); a session that names its version
+/// replays with it like with any recorded variable.
+fn unrecorded_version(session: &Session) -> Option<&'static str> {
+    (!session.env.contains_key(crate::VERSION_OVERRIDE)).then_some(crate::UNRECORDED_VERSION)
+}
+
 #[cfg(test)]
 mod relocation_tests {
     use super::Paths;
@@ -1494,6 +1504,21 @@ mod held_fetch_tests {
             "repo": "/",
         }))
         .unwrap()
+    }
+
+    /// Recordings without a version replay at the pre-1.0 version they were
+    /// made at; one that names its version keeps it.
+    #[test]
+    fn a_session_replays_at_the_version_it_was_recorded_at() {
+        let old = session("t", "esplora");
+        assert_eq!(super::unrecorded_version(&old), Some("0.22.78"));
+        let mut pinned = old;
+        pinned
+            .env
+            .insert(crate::VERSION_OVERRIDE.into(), "1.0.0".into());
+        assert_eq!(super::unrecorded_version(&pinned), None);
+        let version = crate::package_version();
+        assert!(version.starts_with(|c: char| c.is_ascii_digit()) && version.contains('.'));
     }
 
     /// The EOF test held its history request while it closed stdin and

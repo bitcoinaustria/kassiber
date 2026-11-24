@@ -122,6 +122,7 @@ fn compose_impl(
         let derived = &prepared.candidates;
         // Unchanged snapshot rows are read from their records, which hold the
         // same fields and read faster.
+        let excluded_txids = snapshot.excluded_txids.as_deref().unwrap_or_default();
         let privacy = if let Some(records) = rows.records() {
             privacy::compute(
                 records,
@@ -131,6 +132,7 @@ fn compose_impl(
                 &wallets,
                 &ids(&samourai["candidate_ids"]),
                 &native_ids,
+                excluded_txids,
             )?
         } else {
             privacy::compute(
@@ -141,6 +143,7 @@ fn compose_impl(
                 &wallets,
                 &ids(&samourai["candidate_ids"]),
                 &native_ids,
+                excluded_txids,
             )?
         };
         let derivation_blocked = blocked(&prepared.derivation_quarantines);

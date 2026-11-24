@@ -317,9 +317,10 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
     // No break inside an item: no-break spaces, and word joiners around hyphens (UAX #14
     // breaks after a hyphen, which split "2025-11-09").
     let nb = |s: &str| s.replace(' ', "\u{a0}").replace('-', "\u{2060}-\u{2060}");
+    let date = format::tx_date(&r.date, r.confirmed);
     let mut content = match &route {
-        Some(_) => nb(&r.date),
-        None => format!("{}\u{a0}·\u{2002}{}", nb(&wallet), nb(&r.date)),
+        Some(_) => nb(&date),
+        None => format!("{}\u{a0}·\u{2002}{}", nb(&wallet), nb(&date)),
     };
     let mut spans = Vec::new();
     if !row_title.is_empty() {
@@ -338,7 +339,7 @@ fn build_row(app: &App, tk: &Tk, r: &Row, c: Cols) -> El {
             .center_y()
             .mt(tk.r(0.25) - tk.r(0.0625))
             .child(
-                text(r.date.clone())
+                text(date.clone())
                     .font(line2_style.features("'tnum' 1"))
                     .color(tk.muted_fg)
                     .single_line(),

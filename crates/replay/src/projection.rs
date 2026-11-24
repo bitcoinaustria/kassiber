@@ -580,7 +580,7 @@ const SAMOURAI: Schema = &[
 
 /// The on-chain and Lightning payload fields the graph, confirmation,
 /// network and channel interpreters read from `raw_json`.
-static RAW_FIELDS: [(&str, F); 85] = [
+static RAW_FIELDS: [(&str, F); 87] = [
     ("txid", F::External),
     ("hash", F::External),
     ("tx_hash", F::External),
@@ -671,6 +671,11 @@ static RAW_FIELDS: [(&str, F); 85] = [
     ("close_balance_msat", F::Amount),
     ("confirmed", F::Bool),
     ("_kassiber_verified_chain_observation", F::Bool),
+    // The Electrum observers' confirmation proof: the history height and
+    // the graph marker the replaced-spend rule reads
+    // (custody/src/interpretation/holds.rs `height_proof`).
+    ("history", F::Obj(ELECTRUM_HISTORY)),
+    ("_kassiber_electrum_graph", F::Obj(ELECTRUM_GRAPH)),
     ("custody_native_fee_normalized", F::Bool),
     ("chain", F::Enum(CHAINS)),
     ("network", F::Enum(NETWORKS)),
@@ -679,6 +684,11 @@ static RAW_FIELDS: [(&str, F); 85] = [
     ("tag", F::Enum(CHANNEL_TAGS)),
 ];
 const RAW: Schema = &RAW_FIELDS;
+const ELECTRUM_HISTORY: Schema = &[("height", F::Int)];
+const ELECTRUM_GRAPH: Schema = &[
+    ("kind", F::Enum(&["bitcoin_electrum"])),
+    ("version", F::Int),
+];
 
 /// The importers that stamp `_kassiber_provenance.import_source`
 /// (`chain/src/lightning/lnd_wallet.rs`, `wallets/src/file_import/generic_json.rs`).
@@ -1300,6 +1310,9 @@ pub fn field_names() -> BTreeSet<&'static str> {
 /// it generated (so recomputed outputs can be checked against them).
 pub struct Projection<'a> {
     p: &'a Pseudonymizer,
+    /// `id-` pseudonyms reassigned so they sort like the identifiers they
+    /// replace (see [`Projection::ordered`]).
+    order: BTreeMap<String, String>,
     replaced: RefCell<BTreeMap<String, String>>,
     generated: RefCell<BTreeSet<String>>,
 }
@@ -1308,9 +1321,40 @@ impl<'a> Projection<'a> {
     pub fn new(p: &'a Pseudonymizer) -> Self {
         Self {
             p,
+            order: BTreeMap::new(),
             replaced: RefCell::new(BTreeMap::new()),
             generated: RefCell::new(BTreeSet::new()),
         }
+    }
+
+    /// A projection of `snapshot` whose `id-` pseudonyms keep the original
+    /// identifiers' relative order. The engine breaks ties by id (equal-time
+    /// rows in the Austrian regime tracker, candidate and cluster order), so
+    /// a random key must not reorder them: the same keyed pseudonyms are
+    /// handed out again in the originals' sort order. Only the order of
+    /// identifiers carries over, never their text.
+    pub fn ordered(p: &'a Pseudonymizer, snapshot: &Value) -> Result<Self, String> {
+        let probe = Self::new(p);
+        probe.snapshot(snapshot)?;
+        let tagged: Vec<(String, String)> = probe
+            .replaced
+            .into_inner()
+            .into_iter()
+            .filter(|(_, id)| id.starts_with("id-"))
+            .collect();
+        let mut pseudonyms: Vec<String> = tagged.iter().map(|(_, id)| id.clone()).collect();
+        pseudonyms.sort();
+        // `tagged` is sorted by original identifier (a `BTreeMap`'s order,
+        // the byte order the engine compares ids in).
+        let order = tagged
+            .into_iter()
+            .map(|(original, _)| original)
+            .zip(pseudonyms)
+            .collect();
+        Ok(Self {
+            order,
+            ..Self::new(p)
+        })
     }
 
     /// Every identifier and enum value the projection replaced, with its
@@ -1326,7 +1370,10 @@ impl<'a> Projection<'a> {
 
     /// The keyed mapping of an identifier, local or outside.
     pub fn id(&self, text: &str) -> String {
-        let id = self.p.id(text);
+        let id = match self.order.get(text) {
+            Some(id) => id.clone(),
+            None => self.p.id(text),
+        };
         self.replaced
             .borrow_mut()
             .insert(text.to_owned(), id.clone());

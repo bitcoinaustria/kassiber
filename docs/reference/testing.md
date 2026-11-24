@@ -145,6 +145,16 @@ readings (`crates/session-replay/tests/figures.rs` enforces this). Sessions
 that could not replay identically are listed with their reason in
 `tests/data/sessions/dropped.tsv`.
 
+A session replays at the Kassiber version it was recorded at, so a version
+bump changes no recording. Test builds report `KASSIBER_RUST_TEST_VERSION`
+instead of the package version wherever the version appears (`--version`,
+status and daemon/MCP handshakes, HTTP User-Agents, stored settings, record
+fingerprint labels, export metadata such as the XLSX Verify sheet). A
+replay hands over the version the session's environment names, and
+`0.22.78` for a session that names none: every recording predates 1.0.0
+and was made at 0.22.78. A recording started through `session-shim` keeps
+the checkout's package version in its environment.
+
 Stdin replays after the recorded number of stdout lines and the network tape
 answers at once, so a recording whose test held a request in flight would
 race on replay. Those sessions get the hold back from the tape
@@ -188,11 +198,11 @@ changed session before archiving; see
 ### Test builds
 
 Test-only behaviour is compiled in only behind features: `kassiber`'s
-`test-harness`, and the `test-hooks`, `test-harness`, `test-observer` and
-`test-kinds` features of the crates it enables. A release build reads none
+`test-harness`, and the `test-hooks`, `test-harness`, `test-observer`,
+`test-kinds` and `test-version` features of the crates it enables. A release build reads none
 of the switches below except `KASSIBER_TEST_NO_EGRESS`, which it refuses. `scripts/check-no-test-tape.sh`
 checks that a product build of the binary carries none of the tape, SQLite
-seed and test clock hooks.
+seed, test clock and reported-version hooks.
 
 - `KASSIBER_TEST_NO_EGRESS` arms the egress observer, which refuses
   non-loopback connections (`strict` also refuses loopback). A build without
@@ -205,6 +215,14 @@ seed and test clock hooks.
   `<file>.misses`.
 - `KASSIBER_TEST_SQLITE_SEED` seeds SQLite's id generator, so random row ids
   replay identically.
+- `KASSIBER_RUST_TEST_VERSION` (a release version such as `0.22.78`) is the
+  version the binary reports in place of its package version, so recorded
+  sessions replay unchanged across version bumps
+  ([replaying the recorded sessions](#replaying-the-recorded-sessions)); a
+  malformed value exits 78 before any work. It is `kassiber-store`'s
+  `test-version` feature (`crates/store/src/version.rs`, the one accessor
+  for the version), which `kassiber`'s and `kassiber-reports`' `test-harness`
+  enable; a release build reports its package version only.
 - `KASSIBER_RUST_TEST_OWNER_ROOT` gives book ownership an isolated namespace
   in an existing disposable directory, for tests that migrate or encrypt
   books. Production ownership uses the stable account-home namespace,

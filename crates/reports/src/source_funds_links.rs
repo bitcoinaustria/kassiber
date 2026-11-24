@@ -107,7 +107,7 @@ fn after(left: &Value, right: &Value) -> bool {
         }
         kassiber_wallets::time::timestamp(&py_str(v))
             .ok()
-            .filter(|v| v != "1970-01-01T00:00:00Z")
+            .filter(|v| v != kassiber_envelope::occurred_at::UNKNOWN)
     };
     match (canonical(left), canonical(right)) {
         (Some(left), Some(right)) => left > right,

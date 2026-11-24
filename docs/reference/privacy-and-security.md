@@ -988,7 +988,8 @@ from explicit lists, tax settings from the tax-country registry. Every
 identifier, local row ids included, and every digest is replaced whole by a
 keyed pseudonym (a random per-bundle key that is discarded), keeping only
 strictly parsed public structure such as an allowlisted address or invoice
-prefix with a valid checksum; every label, note and description by a label
+prefix with a valid checksum, and the relative order of whole-value
+identifier pseudonyms (the engine breaks ties by id); every label, note and description by a label
 pseudonym; only the residual markers the engine interprets stay. Stored and
 recomputed outputs pass the same closed schema; a stored cell that does not
 parse refuses the export without naming its value. The manifest is generated

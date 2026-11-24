@@ -245,6 +245,7 @@ pub struct State {
     pub hist_hover: Option<usize>,
     pub menu: bool,
     pub select: Option<Select>,
+    pub date_picker: Option<crate::ui::date_picker::PickerState>,
     pub edit: Option<EditForm>,
     pub delete: Option<DeleteForm>,
     pub reveal: Option<RevealForm>,
@@ -603,7 +604,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
-pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
+pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if current(app).is_none() {
         return false;
     }
@@ -614,14 +615,16 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
     }
     let d = &mut app.wallets.detail;
     if matches!(ev.key, Key::Escape) {
-        if d.select.is_some() {
+        if let Some(p) = d.date_picker.take() {
+            tx.focus(p.key, true);
+        } else if d.select.is_some() {
             d.select = None;
         } else if d.menu {
             d.menu = false;
         } else if d.rollback.is_some() {
             d.rollback = None;
         } else if d.edit.is_some() {
-            d.edit = None;
+            dialogs::close_edit(app);
         } else if d.delete.is_some() {
             d.delete = None;
         } else if d.reveal.is_some() {

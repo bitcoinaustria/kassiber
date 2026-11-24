@@ -1276,8 +1276,8 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
             updates.insert("external_id".into(), incoming["external_id"].clone());
         }
     }
-    if string(existing, "occurred_at") == "1970-01-01T00:00:00Z"
-        && string(incoming, "occurred_at") != "1970-01-01T00:00:00Z"
+    if string(existing, "occurred_at") == kassiber_envelope::occurred_at::UNKNOWN
+        && string(incoming, "occurred_at") != kassiber_envelope::occurred_at::UNKNOWN
     {
         updates.insert("occurred_at".into(), incoming["occurred_at"].clone());
     }

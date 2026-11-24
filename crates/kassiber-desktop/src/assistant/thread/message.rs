@@ -254,6 +254,7 @@ fn needs_attention(c: &ToolCall) -> bool {
         ]
         .contains(&c.name.as_str())
             && c.status == ToolStatus::Done)
+        || super::action::shows_applied(c)
 }
 
 /// `chatMessageRounds` + `workLogItems`.
@@ -750,10 +751,12 @@ pub fn assistant(app: &App, tk: &Tk, m: &Msg, _page: bool, layer: &mut Vec<El>) 
                         .w_full()
                         .min_w(0.0)
                         .mb(tk.r(0.5))
-                        .child(tool::card(app, tk, call)),
+                        .child(tool::card(app, tk, &m.id, call)),
                 }
             }
-            Item::Tools(id, calls) => tool::group(app, tk, &format!("asst-group-{id}"), calls),
+            Item::Tools(id, calls) => {
+                tool::group(app, tk, &format!("asst-group-{id}"), &m.id, calls)
+            }
         });
     }
     // Review plans and receipts, once each.

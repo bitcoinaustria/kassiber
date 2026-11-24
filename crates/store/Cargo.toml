@@ -11,6 +11,9 @@ description = "Kassiber SQLite/SQLCipher storage and durable book creation"
 [features]
 # Explicitly enabled only for the development probe and parity tests.
 test-hooks = ["rusqlite/hooks"]
+# Test builds only: KASSIBER_RUST_TEST_VERSION sets the version the product
+# reports (src/version.rs), so recorded sessions replay across version bumps.
+test-version = []
 
 [dependencies]
 kassiber-paths = { path = "../paths" }

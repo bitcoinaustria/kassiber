@@ -659,7 +659,7 @@ pub fn results(app: &App) -> Vec<Item> {
                 };
                 let detail = format!(
                     "{} · {} · {}",
-                    tx.date,
+                    crate::format::tx_date(&tx.date, tx.conf > 0.0),
                     tx.tx_type,
                     crate::format::btc(tx.amount_sat / 1e8, 8, true)
                 );
@@ -685,11 +685,15 @@ pub fn results(app: &App) -> Vec<Item> {
     {
         // appSearch.ts `resolvedTransactionResults`: these two strings are hard-coded
         // English in the web, not in the bundles.
+        let date = crate::format::tx_date(
+            tx["date"].as_str().unwrap_or(""),
+            tx["conf"].as_f64().unwrap_or(0.0) > 0.0,
+        );
         let detail = [
             "Exact txid match",
             tx["account"].as_str().unwrap_or(""),
             tx["type"].as_str().unwrap_or(""),
-            tx["date"].as_str().unwrap_or(""),
+            &date,
         ]
         .iter()
         .filter(|p| !p.is_empty())
@@ -750,7 +754,8 @@ pub fn run(app: &mut App, action: Action) {
         Action::Nav(href) => go(app, &href),
         Action::Refresh => app.refresh_book(false),
         Action::FullRescan => app.refresh_book(true),
-        Action::AddWallet => go(app, "/connections"),
+        // As from the app menu: the connection dialog opens once Connections shows.
+        Action::AddWallet => crate::native::intent::add_wallet(app),
         Action::ProcessJournals => app.process_journals(),
         Action::Lock => super::overlays::lock(app),
         Action::Settings => app.shell.settings_open = true,
@@ -1077,6 +1082,21 @@ mod tests {
 
     use super::*;
     use crate::i18n::{Lang, set_lang};
+
+    /// "Add wallet" opens the connection dialog ("Open the wallet connection dialog"), not only
+    /// the Connections page.
+    #[test]
+    fn add_wallet_opens_the_connection_dialog() {
+        let mut app = crate::app::tests::quiet_app();
+        // A book is open (tests restore no preferences, so the identity gate would send to `/`).
+        app.onboarding.identity = Some(crate::onboarding::model::Identity {
+            name: "Test".into(),
+            ..Default::default()
+        });
+        run(&mut app, Action::AddWallet);
+        assert_eq!(app.route.path(), "/connections");
+        assert_eq!(app.wallets.add.deferred, Some("descriptor"));
+    }
 
     fn terms(q: &str) -> Vec<String> {
         q.to_lowercase()

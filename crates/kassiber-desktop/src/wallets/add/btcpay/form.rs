@@ -154,6 +154,8 @@ pub fn input(
     let mut field = text_input(edit, tk.tsm(400.0))
         .key(key.to_owned())
         .single_line()
+        .px(tk.r(0.75))
+        .py(tk.r(0.4))
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(name.to_owned())
         .on_edit(access)
@@ -174,12 +176,12 @@ pub fn input(
     row()
         .w_full()
         .h(tk.r(2.25))
-        .px(tk.r(0.75))
         .center_y()
         .radius(tk.r(0.375))
         .fill(fill)
         .border(1.0, if edit.focused { tk.ring } else { tk.input })
         .border_layout()
+        .clip_rounded(tk.r(0.375))
         .box_shadow(Shadow {
             y: 1.0,
             blur: 2.0,

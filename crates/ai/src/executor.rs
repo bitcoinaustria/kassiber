@@ -881,6 +881,19 @@ pub fn run_auto_reads(
     emit: &mut dyn FnMut(Value),
     cancelled: &dyn Fn() -> bool,
 ) -> Option<String> {
+    run_auto_reads_pinned(planned, false, runtime, host, emit, cancelled)
+}
+
+/// [`run_auto_reads`] where `pinned_first` says `planned[0]` is the pinned
+/// item's review read: when it ran, its entry gets the pinned budget.
+pub fn run_auto_reads_pinned(
+    planned: &[crate::planner::AutoRead],
+    pinned_first: bool,
+    runtime: &mut Runtime<'_>,
+    host: &mut dyn ReadHost,
+    emit: &mut dyn FnMut(Value),
+    cancelled: &dyn Fn() -> bool,
+) -> Option<String> {
     if planned.is_empty() {
         return None;
     }
@@ -902,6 +915,7 @@ pub fn run_auto_reads(
         _ => Vec::new(),
     };
     let mut context = Vec::new();
+    let mut pinned_ran = false;
     for (index, read) in planned.iter().enumerate() {
         if cancelled() {
             return None;
@@ -938,6 +952,7 @@ pub fn run_auto_reads(
             &result,
         );
         emit(tool_result_record(&call.call_id, &result));
+        pinned_ran |= pinned_first && index == 0;
         context.push(crate::planner::context_record(
             &entry.name,
             &read.arguments,
@@ -947,7 +962,11 @@ pub fn run_auto_reads(
     if context.is_empty() || cancelled() {
         return None;
     }
-    Some(crate::planner::auto_tool_context_for_model(&context))
+    Some(if pinned_ran {
+        crate::planner::pinned_auto_tool_context_for_model(&context)
+    } else {
+        crate::planner::auto_tool_context_for_model(&context)
+    })
 }
 
 /// The `ai.chat.tool_result` record: `{"call_id", **redacted_result}`.

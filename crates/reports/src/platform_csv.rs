@@ -175,7 +175,7 @@ fn contains(range: &Value, raw: &str, possible: bool) -> Result<bool> {
     )
 }
 fn undated(raw: &str) -> bool {
-    raw.is_empty() || raw == "1970-01-01T00:00:00Z"
+    raw.is_empty() || raw == kassiber_envelope::occurred_at::UNKNOWN
 }
 fn scope(wallets: &[kassiber_wallets::Wallet]) -> String {
     if wallets.len() > 3 {

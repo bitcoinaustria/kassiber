@@ -934,6 +934,7 @@
       "errorMaterial": "Füge watch-only Silent-Payments-Material ein.",
       "errorStartPoint": "Setze eine Start-Height/ein Startdatum oder wähle und bestätige Full-History-Scanning.",
       "errorStartHeight": "Start-Height muss eine ganze Zahl sein.",
+      "errorStartDate": "Wähle ein gültiges Startdatum.",
       "errorFullHistoryAck": "Bestätige die Warnung zum Full-History-Scan.",
       "errorServerAck": "Bestätige die Datenschutzwarnung zum serverunterstützten Scan."
     },
@@ -1412,7 +1413,8 @@
     },
     "setupFailed": {
       "fallback": "Verbindungs-Setup fehlgeschlagen.",
-      "notFullySynced": "Die Verbindung wurde gespeichert, aber ihre Historie wurde nicht vollständig synchronisiert."
+      "notFullySynced": "Die Verbindung wurde gespeichert, aber ihre Historie wurde nicht vollständig synchronisiert.",
+      "notFullySyncedDetail": "Die Verbindung wurde gespeichert, aber ihre Historie wurde nicht vollständig synchronisiert: {{detail}}"
     },
     "summary": {
       "title": "Import-Zusammenfassung",
@@ -1458,7 +1460,21 @@
     },
     "progress": {
       "importing": "{{wallet}} wird importiert…",
-      "rows": "{{processed}} / {{total}} Zeilen"
+      "scanning": "{{wallet}} wird gescannt…",
+      "cancelling": "Scan für {{wallet}} wird gestoppt…",
+      "rows": "{{processed}} / {{total}} Zeilen",
+      "cancelScan": "Scan stoppen",
+      "cancellingButton": "Wird gestoppt…"
+    },
+    "dismissed": {
+      "scanStoppedTitle": "Verbindung gespeichert; Scan gestoppt",
+      "savedScanStopped": "{{label}} wurde gespeichert. Der Scan wurde gestoppt – du kannst die Verbindung später unter Verbindungen synchronisieren.",
+      "savedScanSkippedTitle": "Verbindung gespeichert; Scan übersprungen",
+      "savedScanSkippedBody": "{{label}} wurde im Hintergrund gespeichert. Der erste Scan wurde übersprungen, weil der Dialog geschlossen wurde – du kannst die Verbindung unter Verbindungen synchronisieren.",
+      "failedTitle": "Verbindungseinrichtung fehlgeschlagen",
+      "failedBody": "Einrichtung von {{label}} konnte nicht abgeschlossen werden: {{error}}",
+      "bisqHeldTitle": "Mit zurückgehaltenen Bisq-Trades importiert",
+      "bisqHeldBody": "{{label}} wurde im Hintergrund importiert, aber einige Bisq-Trades wurden zur Prüfung zurückgehalten."
     }
   },
   "journalStep": {

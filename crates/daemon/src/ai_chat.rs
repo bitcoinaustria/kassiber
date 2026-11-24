@@ -834,6 +834,8 @@ fn start_chat(
             screen_context: &context,
             workspace_id: &scope.workspace_id,
             profile_id: &scope.profile_id,
+            pinned: validated.read_pinned_entity
+                && validated.system_prompt_kind == Some(kassiber_ai::prompt::PromptKind::Kassiber),
         })?;
         validated.screen_context = Some(bound);
     }

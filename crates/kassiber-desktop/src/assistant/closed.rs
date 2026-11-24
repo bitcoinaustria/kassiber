@@ -174,15 +174,16 @@ fn bar(app: &App, cx: &mut rune::Cx<App>, tk: &Tk, mode: &'static str, layer: &m
             },
             layer,
         );
-        r = r.child(
-            col()
-                .grow(1.0)
-                .min_w(0.0)
-                .on_hover_change(|s: &mut App, inside: bool, _tx: &mut Tx| {
-                    s.assistant.bar_hover = inside
-                })
-                .child(comp),
+        let mut column = col().grow(1.0).min_w(0.0).on_hover_change(
+            |s: &mut App, inside: bool, _tx: &mut Tx| s.assistant.bar_hover = inside,
         );
+        // A question sent from the dock shares the same context as the panel's: show the tray
+        // (and its remove buttons) whenever it shares more than the page, so nothing is shared
+        // that the user cannot see before Send.
+        if bar_shares_more_than_the_page(app) {
+            column = column.child(composer::context_tray(app, tk, false).mb(tk.r(0.375)));
+        }
+        r = r.child(column.child(comp));
         place(r)
     };
     col()
@@ -195,6 +196,14 @@ fn bar(app: &App, cx: &mut rune::Cx<App>, tk: &Tk, mode: &'static str, layer: &m
         .role("region")
         .label(t("assistant:dock.label"))
         .child(inner)
+}
+
+/// Whether the next question shares an item or a chart selection, not only the page.
+fn bar_shares_more_than_the_page(app: &App) -> bool {
+    super::tray::build(app)
+        .chips
+        .iter()
+        .any(|c| c.part != super::tray::Part::Page)
 }
 
 /// The "N messages" / "Working" button that opens the conversation (only with messages).
@@ -324,4 +333,21 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         );
     }
     changed
+}
+
+#[cfg(test)]
+mod dock_tray_tests {
+    use super::*;
+
+    /// The dock's composer shows the tray as soon as the next question shares more than the page.
+    #[test]
+    fn the_dock_shows_the_tray_when_it_shares_an_item() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/reports".into());
+        assert!(!bar_shares_more_than_the_page(&app));
+        let book = ("w".to_owned(), "p".to_owned());
+        app.assistant.focus =
+            super::super::transaction_focus("tx-1", Some("2025-03-05"), false, book);
+        assert!(bar_shares_more_than_the_page(&app));
+    }
 }

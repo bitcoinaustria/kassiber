@@ -66,7 +66,8 @@ pub struct Turn {
     pub new_files: Vec<String>,
 }
 
-/// `QueuedPrompt`.
+/// `QueuedPrompt`: `pin` is the item the tray showed when it was submitted (pinned or open)
+/// and `context` the whole screen context it showed (`tray::build`), or a handoff's page.
 #[derive(Clone)]
 pub struct Queued {
     pub prompt: String,
@@ -334,17 +335,23 @@ pub fn send_prompt(app: &mut App, prompt: &str, explicit: Option<Parked>) -> boo
         },
     };
     app.assistant.prompt_revision += 1;
+    // What the tray shows now is what this question shares, however long it waits in the queue.
+    let (pin, context) = match &handoff {
+        Some(h) => (
+            None,
+            h.context
+                .clone()
+                .unwrap_or_else(|| super::screen::current(app)),
+        ),
+        None => {
+            let shared = super::tray::build(app);
+            (shared.item, shared.screen)
+        }
+    };
     let item = Queued {
         prompt: trimmed,
-        pin: if handoff.is_some() {
-            None
-        } else {
-            app.assistant.focus.clone()
-        },
-        context: handoff
-            .as_ref()
-            .and_then(|h| h.context.clone())
-            .unwrap_or_else(|| super::screen::current(app)),
+        pin,
+        context,
         handoff: handoff.is_some(),
         book,
     };
@@ -380,6 +387,28 @@ fn dispatch(app: &mut App, item: Queued) -> bool {
 fn live_pin(app: &App, pin: Option<&Focus>) -> Option<Focus> {
     let now = book_now(app);
     pin.filter(|p| same_book(&p.book, now.as_ref())).cloned()
+}
+
+/// A turn's screen context: a page request's or evidence continuation's own (`page`), else what
+/// the tray showed when the question was asked (`asked`: the page with the item's entity).
+/// `item` says whether that item is still of the open book (`None`: no item). The flag says the
+/// item is this turn's context; the daemon reads it for the model (`read_pinned_entity`) only
+/// then, and only for an item the user asked about (`Focus::read`). An item of another book is
+/// dropped, never sent.
+pub(super) fn turn_context(page: Option<Value>, asked: Value, item: Option<bool>) -> (Value, bool) {
+    match (page, item) {
+        (Some(page), _) => (page, false),
+        (None, Some(true)) => (asked, true),
+        (None, Some(false)) => {
+            let mut c = asked;
+            if let Some(m) = c.as_object_mut() {
+                m.remove("entity_type");
+                m.remove("entity_id");
+            }
+            (c, false)
+        }
+        (None, None) => (asked, false),
+    }
 }
 
 /// `runTurn`: one chat turn against an explicit conversation base and saved chat.
@@ -499,14 +528,19 @@ pub fn run_turn(
         .get(&provider)
         .cloned()
         .unwrap_or_else(|| "full".into());
-    let pin_ctx = live_pin(
-        app,
-        asked
-            .as_ref()
-            .map_or(app.assistant.focus.as_ref(), |a| a.pin.as_ref()),
-    )
-    .map(|p| p.context);
-    let screen = evidence
+    // A turn without a submitted question (an evidence continuation, an edited message) shares
+    // what the tray shows now.
+    let (asked_ctx, asked_item) = match &asked {
+        Some(a) => (a.context.clone(), a.pin.clone()),
+        None => {
+            let shared = super::tray::build(app);
+            (shared.screen, shared.item)
+        }
+    };
+    let item_live = asked_item
+        .as_ref()
+        .map(|p| live_pin(app, Some(p)).is_some());
+    let page_ctx = evidence
         .as_ref()
         .and_then(|e| e.context.clone())
         .or_else(|| {
@@ -514,10 +548,10 @@ pub fn run_turn(
                 .as_ref()
                 .filter(|a| a.handoff)
                 .map(|a| a.context.clone())
-        })
-        .or(pin_ctx)
-        .or_else(|| asked.as_ref().map(|a| a.context.clone()))
-        .unwrap_or_else(|| super::screen::current(app));
+        });
+    let asked_read = asked_item.as_ref().is_some_and(|p| p.read);
+    let (screen, is_context) = turn_context(page_ctx, asked_ctx, item_live);
+    let read_pin = is_context && asked_read;
     let no_persist = app.assistant.incognito && session.is_none();
     let mut args = json!({
         "provider": provider,
@@ -531,6 +565,9 @@ pub fn run_turn(
         "persist": if no_persist { json!(false) } else { json!("auto") },
         "screen_context": screen,
     });
+    if read_pin {
+        args["read_pinned_entity"] = json!(true);
+    }
     if !options.is_null() {
         args["options"] = options;
     }
@@ -665,6 +702,8 @@ pub fn on_progress(app: &mut App, tag: &str, envelope: &Value) {
 
 /// `invalidateDaemonQueriesForMutation`: a change the assistant made shows on every screen.
 fn on_mutation(app: &mut App, _kind: &str) {
+    // The change cards' "current" values are reads of the book as it was: read them again.
+    super::thread::action::invalidate_legs(app);
     app.refresh_reads();
 }
 
@@ -1072,10 +1111,11 @@ pub fn edit(app: &mut App, id: &str, next: &str) {
             refuse_book_loading(app, Some(&trimmed));
             return;
         };
+        let shared = super::tray::build(app);
         let item = Queued {
             prompt: trimmed,
-            pin: app.assistant.focus.clone(),
-            context: super::screen::current(app),
+            pin: shared.item,
+            context: shared.screen,
             handoff: false,
             book,
         };
@@ -1186,6 +1226,7 @@ pub fn poll(app: &mut App) -> bool {
         }
     }
     changed |= seed_effort(app);
+    changed |= super::tray::poll(app);
     let now = book_now(app);
     // A conversation belongs to the book it started in.
     if let (Some(bound), Some(n)) = (app.assistant.book.clone(), now.as_ref())
@@ -1267,6 +1308,28 @@ mod tests {
             entries("one\n \n\ntwo\n"),
             vec!["one".to_owned(), "two".to_owned()]
         );
+    }
+
+    #[test]
+    fn only_an_item_that_is_the_turns_context_is_read() {
+        let page = json!({"route": "/review"});
+        let asked = json!({"route": "/overview", "entity_type": "transaction", "entity_id": "t"});
+        assert_eq!(
+            turn_context(None, asked.clone(), Some(true)),
+            (asked.clone(), true)
+        );
+        // A page request or evidence continuation brings its own context: no pinned read.
+        assert_eq!(
+            turn_context(Some(page.clone()), asked.clone(), Some(true)),
+            (page, false)
+        );
+        // An item of another book is not sent.
+        assert_eq!(
+            turn_context(None, asked.clone(), Some(false)),
+            (json!({"route": "/overview"}), false)
+        );
+        let plain = json!({"route": "/overview"});
+        assert_eq!(turn_context(None, plain.clone(), None), (plain, false));
     }
 
     #[test]

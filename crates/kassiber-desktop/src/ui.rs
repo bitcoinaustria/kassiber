@@ -5,6 +5,7 @@ use rune::{Color, El, Icon, Shadow, TextStyle, col, el, icon, row, text};
 use crate::theme::{Tk, Tone};
 
 pub mod button;
+pub mod date_picker;
 pub mod kit_menu;
 pub mod popup;
 pub mod table;

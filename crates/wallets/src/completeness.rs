@@ -9,7 +9,7 @@ use kassiber_pyjson::{Key, Value};
 use kassiber_store::rusqlite::Connection;
 use std::collections::BTreeMap;
 
-const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 const DESCRIPTOR_KINDS: [&str; 4] = ["descriptor", "xpub", "silent-payment", "samourai"];
 const LIGHTNING_NODE_KINDS: [&str; 2] = ["coreln", "lnd"];
 const EXCHANGE_API_KINDS: [&str; 8] = [

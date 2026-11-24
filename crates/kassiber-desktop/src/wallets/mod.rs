@@ -132,6 +132,13 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     assets::on_reply(app, tag, r);
 }
 
+/// Streaming progress records for wallet actions (`ui.wallets.sync` in Add connection).
+pub fn on_progress(app: &mut App, tag: &str, request_id: &str, env: &serde_json::Value) {
+    if tag.starts_with("wallets.add.") {
+        add::on_progress(app, tag, request_id, env);
+    }
+}
+
 /// Key presses before the shell sees them; true when handled.
 pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     // The dialog is the innermost overlay wherever it is open (the Overview routes its own

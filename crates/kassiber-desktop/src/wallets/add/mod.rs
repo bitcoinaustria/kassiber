@@ -298,30 +298,42 @@ pub struct State {
     pub preview_addresses: Option<Vec<(String, u64, String)>>,
     pub preview_error: Option<String>,
     pub preview_pending: bool,
+    /// Bumped whenever wallet material / script type / form resets, dropping stale preview replies.
+    pub preview_gen: u64,
+    pub preview_req: Option<(u64, Option<String>)>,
     /// Key material removed from the address list: (private, public).
     pub purged: Option<(usize, usize)>,
     pub core_detection: Option<Vec<Value>>,
     pub core_detect_pending: bool,
+    pub core_detect_req: Option<(u64, Option<String>)>,
     pub core_test: Option<CoreTest>,
     pub core_test_pending: bool,
+    pub core_test_req: Option<(u64, Option<String>)>,
     pub coverage: Coverage,
     /// Bumped whenever the coverage inputs change, so a stale probe reply is dropped.
     pub coverage_gen: u64,
+    pub coverage_req: Option<(u64, Option<String>)>,
+    /// Bumped on open/reset so stale Core detect/test replies are dropped.
+    pub form_gen: u64,
     pub copied_address: Option<String>,
     pub template_pending: bool,
     pub bip329_export_pending: bool,
     /// The open native select (its trigger key).
     pub select: Option<String>,
-    /// The running submit (`isSubmitting`).
+    /// The open date + year picker popover.
+    pub date_picker: Option<crate::ui::date_picker::PickerState>,
+    /// The running submit (`isSubmitting`) shown in the open dialog.
     pub job: Option<submit::Job>,
+    /// Dismissed submits still finishing required writes or awaiting cancellation exit.
+    pub background_jobs: Vec<submit::Job>,
     /// A daemon export to copy to a path the user picks next poll.
     pub pending_save: Option<PendingSave>,
     /// `deferredConnectionSetup`: the source to reopen when Wallets is shown again.
     pub deferred: Option<&'static str>,
     /// Focus the search field on the next poll (`onOpenAutoFocus`).
     pub focus_search: bool,
-    /// `syncProgress` (wallet, processed, total).
-    pub progress: Option<(String, u64, u64)>,
+    /// Live scan/sync progress during `Stage::Sync`.
+    pub progress: Option<SyncProgress>,
     /// A review history import (`initialTargetWalletId` defined): the file formats only, into
     /// an existing wallet or a new one.
     pub history: Option<History>,
@@ -334,6 +346,17 @@ pub struct State {
     pub opened: bool,
 }
 
+/// Live progress for a wallet scan/sync started by Add connection.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SyncProgress {
+    pub wallet: String,
+    pub job_id: Option<String>,
+    pub phase: Option<String>,
+    pub processed: u64,
+    pub total: u64,
+    pub percent: f64,
+}
+
 /// Review's "Import history" (`initialTargetWalletId`): the wallet the rows go into (`""`: none
 /// chosen yet, `"__new__"`: a new wallet), and whether the format was seeded or chosen.
 #[derive(Clone, Debug, Default)]
@@ -344,11 +367,18 @@ pub struct History {
 }
 
 /// The setup fields drawn as a multi-line box (`setup::textarea`).
-const TEXTAREAS: [&str; 4] = [
+const TEXTAREAS: [&str; 11] = [
     "connection-wallet-material",
     "connection-address-list",
     "connection-sp-descriptor",
+    "connection-wasabi-history",
+    "connection-wasabi-coins",
+    "connection-wasabi-info",
     "connection-wasabi-additional",
+    "connection-samourai-deposit",
+    "connection-samourai-badbank",
+    "connection-samourai-premix",
+    "connection-samourai-postmix",
 ];
 
 /// How long the validation bubble stays up (WebKit hides it after a few seconds).
@@ -490,11 +520,19 @@ pub fn open(app: &mut App, initial_source: Option<&str>) {
     let btcpay = std::mem::take(&mut app.wallets.add.btcpay);
     let exchange = std::mem::take(&mut app.wallets.add.exchange);
     let ledger = ledger_preview::restart(std::mem::take(&mut app.wallets.add.ledger));
+    let background_jobs = std::mem::take(&mut app.wallets.add.background_jobs);
+    let form_gen = app.wallets.add.form_gen + 1;
+    let preview_gen = app.wallets.add.preview_gen + 1;
+    let coverage_gen = app.wallets.add.coverage_gen + 1;
     let deferred = app.wallets.add.deferred;
     app.wallets.add = State {
         btcpay,
         exchange,
         ledger,
+        background_jobs,
+        form_gen,
+        preview_gen,
+        coverage_gen,
         focus_search: true,
         opened: true,
         deferred,
@@ -541,13 +579,27 @@ pub fn reset_form(app: &mut App, src: &'static Source) {
     s.bip329_preview = None;
     s.preview_addresses = None;
     s.preview_error = None;
+    s.preview_pending = false;
+    s.preview_gen += 1;
+    s.preview_req = None;
     s.core_detection = None;
+    s.core_detect_pending = false;
+    s.core_detect_req = None;
     s.core_test = None;
+    s.core_test_pending = false;
+    s.core_test_req = None;
     s.coverage = Coverage::Idle;
     s.coverage_gen += 1;
+    s.coverage_req = None;
+    s.form_gen += 1;
+    s.template_pending = false;
+    s.bip329_export_pending = false;
     s.progress = None;
     s.purged = None;
     s.select = None;
+    s.date_picker = None;
+    s.required_hint = None;
+    s.focus_required = None;
     ledger_preview::set_source(app, None);
     btcpay::reset(app);
     if let Some(ex) = meta(src.id).exchange {
@@ -567,10 +619,14 @@ pub fn inputs_changed(app: &mut App) {
 
 pub fn close(app: &mut App) {
     if submitting(app) {
-        return;
+        submit::dismiss_job(app);
     }
     app.ov.add_open = false;
-    app.wallets.add.select = None;
+    let s = stm(app);
+    s.select = None;
+    s.date_picker = None;
+    s.required_hint = None;
+    s.focus_required = None;
 }
 
 /// `selectSourceForSetup`.
@@ -598,6 +654,9 @@ pub fn on_material_scanned(app: &mut App, material: String) {
     s.form.script_type.clear();
     s.preview_addresses = None;
     s.preview_error = None;
+    s.preview_pending = false;
+    s.preview_gen += 1;
+    s.preview_req = None;
     s.errors.remove("walletMaterial");
 }
 
@@ -609,9 +668,8 @@ fn can_continue(app: &App, src: &Source) -> bool {
         && (!history_import(app) || is_history_source(src))
 }
 
-/// Continue: to the setup step (the forward target's for brand sources). The web's Continue
-/// button becomes the form's submit button during its own click, so the browser then submits
-/// the freshly shown form: validation runs at once and shows its errors. Reproduced here.
+/// Continue: advance to the setup step (the forward target's for brand sources) without
+/// submitting or showing validation errors on an untouched form.
 fn continue_to_setup(app: &mut App) {
     let src = selected(app);
     if !can_continue(app, src) {
@@ -622,8 +680,10 @@ fn continue_to_setup(app: &mut App) {
     if st(app).form_for != target.id {
         reset_form(app, target);
     }
-    stm(app).step = Step::Setup;
-    submit::submit(app);
+    let s = stm(app);
+    s.step = Step::Setup;
+    s.required_hint = None;
+    s.focus_required = None;
 }
 
 pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
@@ -711,8 +771,8 @@ pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
     } else {
         footer.child(el())
     };
-    let cancel = picker::button(tk, "add-cancel", &t("common:actions.cancel"), false, !busy);
-    let cancel = if busy { cancel } else { cancel.on_press(close) };
+    let cancel =
+        picker::button(tk, "add-cancel", &t("common:actions.cancel"), false, true).on_press(close);
     let primary = if setup_step {
         let m = meta(src.id);
         let enabled = !busy
@@ -748,7 +808,7 @@ pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
     footer = footer.child(row().gap(tk.r(0.5)).child(cancel).child(primary));
 
     // Close: `absolute top-3 right-3`, a 25.2 pt ghost square at 70 % with an X.
-    let mut close_btn = row()
+    let close_btn = row()
         .key("add-close")
         .absolute(width - 2.0 - tk.r(0.75) - 25.2, tk.r(0.75))
         .size(25.2, 25.2)
@@ -758,10 +818,8 @@ pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
         .role("button")
         .label(t("common:actions.close"))
         .focusable(true)
+        .on_press(close)
         .child(ic(&I::X, tk.r(1.0), tk.fg));
-    if !busy {
-        close_btn = close_btn.on_press(close);
-    }
 
     // `.kb-glass-dialog`: the background at 80 % over a 12–16 pt backdrop blur, a hairline
     // and a long soft shadow; 1 rem corners.
@@ -853,6 +911,7 @@ fn required_bubble(tk: &Tk, h: &RequiredHint) -> El {
         })
         .role("alert")
         .label(h.message)
+        .on_press(|a: &mut App| stm(a).required_hint = None)
         .child(ic(&I::TRIANGLE_ALERT, tk.r(1.0), tk.warn.solid).a11y_hidden())
         .child(text(h.message).font(tk.tsm(400.0)).color(tk.fg))
 }
@@ -949,6 +1008,10 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     }
 }
 
+pub fn on_progress(app: &mut App, tag: &str, request_id: &str, env: &Value) {
+    submit::on_progress(app, tag, request_id, env);
+}
+
 pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if !app.ov.add_open {
         return false;
@@ -959,7 +1022,9 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     // Any key dismisses the validation bubble (and still does what it does).
     stm(app).required_hint = None;
     if matches!(ev.key, Key::Escape) {
-        if st(app).select.is_some() {
+        if let Some(p) = stm(app).date_picker.take() {
+            tx.focus(p.key, true);
+        } else if st(app).select.is_some() {
             stm(app).select = None;
         } else {
             close(app);
@@ -1120,6 +1185,26 @@ pub const SCENES: &[crate::app::Scene] = &[
     ("wallets-add-descriptor-clean", |a| {
         scene_setup(a, "descriptor")
     }),
+    ("wallets-add-descriptor-birthday-picker", |a| {
+        scene_setup(a, "descriptor");
+        stm(a).date_picker = Some(crate::ui::date_picker::PickerState {
+            key: "connection-birthday".into(),
+            year: 2024,
+            month: 2,
+            year_page_start: 2015,
+            view: crate::ui::date_picker::View::Days,
+        });
+    }),
+    ("wallets-add-descriptor-birthday-years", |a| {
+        scene_setup(a, "descriptor");
+        stm(a).date_picker = Some(crate::ui::date_picker::PickerState {
+            key: "connection-birthday".into(),
+            year: 2024,
+            month: 2,
+            year_page_start: 2015,
+            view: crate::ui::date_picker::View::Years,
+        });
+    }),
     // "Create connection" pressed with the label empty: the validation bubble on that field.
     ("wallets-add-descriptor-required", |a| {
         scene_setup(a, "descriptor");
@@ -1191,7 +1276,7 @@ pub fn scoped(app: &App, mut args: Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{zone_from_link, zone_name};
+    use super::*;
 
     #[test]
     fn the_local_zone_comes_from_a_zoneinfo_link_or_name() {
@@ -1210,5 +1295,626 @@ mod tests {
         assert_eq!(zone_name("CET-1CEST,M3.5.0,M10.5.0/3"), "");
         assert_eq!(zone_name("/usr/share/zoneinfo/Europe/Vienna"), "");
         assert_eq!(zone_name(""), "");
+    }
+
+    #[test]
+    fn continue_to_setup_does_not_submit_or_raise_validation_notice() {
+        for id in ["descriptor", "address-list", "electrum"] {
+            let mut app = crate::app::tests::quiet_app();
+            open(&mut app, None);
+            let src = source(id).expect("source");
+            app.ov.add_category = Some(src.category);
+            app.ov.add_selected = Some(src.id);
+            reset_form(&mut app, src);
+            continue_to_setup(&mut app);
+            assert!(app.ov.add_open, "{id}: dialog should remain open");
+            assert_eq!(st(&app).step, Step::Setup, "{id}: should enter setup step");
+            assert!(
+                st(&app).required_hint.is_none(),
+                "{id}: must not show required notice on untouched form"
+            );
+            assert!(
+                st(&app).errors.is_empty(),
+                "{id}: must not show validation errors on untouched form"
+            );
+            assert!(
+                !submitting(&app),
+                "{id}: must not start submit job on Continue"
+            );
+        }
+    }
+
+    #[cfg(feature = "tooling")]
+    fn headless_descriptor_runtime() -> rune::Runtime<App> {
+        let spec = rune::App::new(rune::AppSpec::<App> {
+            fonts: crate::FONTS,
+            families: (crate::sans_stack(), crate::MONO),
+            setup: Some(crate::setup),
+            poll: Some(crate::poll),
+            on_key: Some(crate::on_key),
+            ..rune::AppSpec::new(
+                "Kassiber",
+                (1440.0, 900.0),
+                crate::app::tests::quiet_app,
+                crate::view,
+            )
+        });
+        let mut rt = spec.headless_runtime((1440.0, 900.0), rune::Env::new(true, 1.0));
+        rt.state.route = crate::app::Route("/connections".into());
+        open(&mut rt.state, Some("descriptor"));
+        for _ in 0..4 {
+            rt.frame(1.0 / 60.0);
+        }
+        rt
+    }
+
+    #[cfg(feature = "tooling")]
+    fn click_point(rt: &mut rune::Runtime<App>, x: f32, y: f32) {
+        rt.pointer_move(x, y);
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        for _ in 0..3 {
+            rt.frame(1.0 / 60.0);
+        }
+    }
+
+    #[cfg(feature = "tooling")]
+    fn el_rect(rt: &rune::Runtime<App>, key: &str) -> [f32; 4] {
+        let els = rt.elements();
+        els.iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| {
+                let keys: Vec<_> = els.iter().filter_map(|e| e.key.as_deref()).collect();
+                panic!("missing element {key:?}; present keys: {keys:?}")
+            })
+            .rect
+    }
+
+    /// Clicking near the bottom of an empty Wallet export textarea focuses it, long spaceless
+    /// descriptors wrap within the box without horizontal overflow, tall pastes clamp height
+    /// and scroll vertically, and pressing Enter inserts a newline.
+    #[cfg(feature = "tooling")]
+    #[test]
+    fn textarea_focuses_on_bottom_click_wraps_long_descriptors_and_clamps_tall_pastes() {
+        let mut rt = headless_descriptor_runtime();
+        let box_rect = el_rect(&rt, "connection-wallet-material-box");
+        assert!(box_rect[3] >= 100.0, "empty textarea box should keep min_h");
+        // Click near the bottom of the empty box (well below line 1).
+        click_point(
+            &mut rt,
+            box_rect[0] + 40.0,
+            box_rect[1] + box_rect[3] - 12.0,
+        );
+        assert!(
+            st(&rt.state).form.wallet_material.focused,
+            "clicking lower half of empty textarea must focus it"
+        );
+
+        // Enter inserts a newline.
+        rt.key(KeyEvent {
+            key: Key::Enter,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert_eq!(st(&rt.state).form.wallet_material.text, "\n");
+
+        // Long spaceless descriptor must hard-wrap inside the box width (no horizontal overflow).
+        let long_desc = format!(
+            "wsh(sortedmulti(2,[d34db33f/48h/0h/0h/2h]xpub6{a}/<0;1>/*,[cafebabe/48h/0h/0h/2h]xpub6{b}/<0;1>/*,[deadbeef/48h/0h/0h/2h]xpub6{c}/<0;1>/*))#checksum",
+            a = "A".repeat(100),
+            b = "B".repeat(100),
+            c = "C".repeat(100),
+        );
+        stm(&mut rt.state).form.wallet_material = TextEdit::new(&long_desc);
+        for _ in 0..3 {
+            rt.frame(1.0 / 60.0);
+        }
+        let box_rect = el_rect(&rt, "connection-wallet-material-box");
+        let text_rect = el_rect(&rt, "connection-wallet-material");
+        assert!(
+            text_rect[0] >= box_rect[0] - 1.0
+                && text_rect[0] + text_rect[2] <= box_rect[0] + box_rect[2] + 1.0,
+            "long descriptor must wrap inside box: box={box_rect:?} text={text_rect:?}"
+        );
+
+        // Tall 40-line paste clamps the visible box height and scrolls inside the viewport.
+        let tall = (0..40)
+            .map(|i| format!("bc1qexampleaddressline{i:02}xxxxxxxxxxxxxxxxxxxxxxxxxx"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        stm(&mut rt.state).form.wallet_material = TextEdit::new(&tall);
+        for _ in 0..3 {
+            rt.frame(1.0 / 60.0);
+        }
+        let box_rect = el_rect(&rt, "connection-wallet-material-box");
+        let text_rect = el_rect(&rt, "connection-wallet-material");
+        assert!(
+            box_rect[3] <= 265.0,
+            "tall paste must stay vertically clamped: box={box_rect:?}"
+        );
+        assert!(
+            text_rect[3] > box_rect[3] + 20.0,
+            "inner text height must exceed scroll viewport so it scrolls: box={box_rect:?} text={text_rect:?}"
+        );
+    }
+
+    /// Selecting a wallet birthday via Year -> Month -> Day writes canonical ISO `YYYY-MM-DD`,
+    /// closes the popover, and Clear resets it back to empty.
+    #[cfg(feature = "tooling")]
+    #[test]
+    fn date_picker_selects_year_month_day_and_clears() {
+        let mut rt = headless_descriptor_runtime();
+        let trig = el_rect(&rt, "connection-birthday");
+        click_point(&mut rt, trig[0] + 40.0, trig[1] + trig[3] / 2.0);
+        assert!(st(&rt.state).date_picker.is_some(), "picker should open");
+
+        let yr_btn = el_rect(&rt, "connection-birthday-pick-year");
+        click_point(
+            &mut rt,
+            yr_btn[0] + yr_btn[2] / 2.0,
+            yr_btn[1] + yr_btn[3] / 2.0,
+        );
+        assert_eq!(
+            st(&rt.state).date_picker.as_ref().map(|p| p.view),
+            Some(crate::ui::date_picker::View::Years)
+        );
+
+        let y2021 = el_rect(&rt, "connection-birthday-year-2021");
+        click_point(
+            &mut rt,
+            y2021[0] + y2021[2] / 2.0,
+            y2021[1] + y2021[3] / 2.0,
+        );
+        assert_eq!(
+            st(&rt.state).date_picker.as_ref().map(|p| p.view),
+            Some(crate::ui::date_picker::View::Months)
+        );
+
+        // Month 4 = May (0-indexed).
+        let may = el_rect(&rt, "connection-birthday-month-4");
+        click_point(&mut rt, may[0] + may[2] / 2.0, may[1] + may[3] / 2.0);
+        assert_eq!(
+            st(&rt.state).date_picker.as_ref().map(|p| p.view),
+            Some(crate::ui::date_picker::View::Days)
+        );
+
+        let day15 = el_rect(&rt, "connection-birthday-day-15");
+        click_point(
+            &mut rt,
+            day15[0] + day15[2] / 2.0,
+            day15[1] + day15[3] / 2.0,
+        );
+        assert!(
+            st(&rt.state).date_picker.is_none(),
+            "picker should close on pick"
+        );
+        assert_eq!(st(&rt.state).form.birthday.text, "2021-05-15");
+
+        let clear = el_rect(&rt, "connection-birthday-clear");
+        click_point(
+            &mut rt,
+            clear[0] + clear[2] / 2.0,
+            clear[1] + clear[3] / 2.0,
+        );
+        assert_eq!(st(&rt.state).form.birthday.text, "");
+    }
+
+    /// Every Add connection state touched here (setup form, date picker Days/Months/Years,
+    /// live sync progress + Stop scan, required bubble, scanner) renders with zero a11y
+    /// findings, zero missing translations in English and German, and visible scanner controls.
+    #[cfg(feature = "tooling")]
+    #[test]
+    fn add_connection_states_have_no_a11y_findings_or_missing_translations() {
+        for lang in [crate::i18n::Lang::En, crate::i18n::Lang::De] {
+            let check = |rt: &mut rune::Runtime<App>, label: &str| {
+                for _ in 0..3 {
+                    rt.frame(1.0 / 60.0);
+                }
+                let (tree, elements) = (rt.accessibility_json(), rt.elements());
+                let findings = crate::checks::a11y_findings(&tree, &elements);
+                assert!(
+                    findings.is_empty(),
+                    "{label} ({}): a11y findings: {findings:#?}",
+                    lang.code()
+                );
+            };
+            // 1. Clean Descriptor setup form (with birthday set so Clear button renders too).
+            let mut rt = headless_descriptor_runtime();
+            rt.state.prefs.lang = lang;
+            rt.state.reads.insert(
+                "ui.backends.options".into(),
+                Reply {
+                    kind: "ui.backends.options".into(),
+                    data: json!({
+                        "backends": [
+                            {"name": "esplora-btc", "kind": "esplora", "chain": "bitcoin", "is_default": true}
+                        ]
+                    }),
+                    error: None,
+                    error_detail: Value::Null,
+                    elapsed: std::time::Duration::ZERO,
+                },
+            );
+            stm(&mut rt.state).form.backend = "esplora-btc".into();
+            stm(&mut rt.state).form.birthday = TextEdit::new("2021-05-15");
+            // Open date picker via real click (forces render) and verify Days -> Years -> Months.
+            let trig = el_rect(&rt, "connection-birthday");
+            click_point(&mut rt, trig[0] + 40.0, trig[1] + trig[3] / 2.0);
+            check(&mut rt, "date-picker-days");
+            let yr_btn = el_rect(&rt, "connection-birthday-pick-year");
+            click_point(
+                &mut rt,
+                yr_btn[0] + yr_btn[2] / 2.0,
+                yr_btn[1] + yr_btn[3] / 2.0,
+            );
+            check(&mut rt, "date-picker-years");
+            let y2021 = el_rect(&rt, "connection-birthday-year-2021");
+            click_point(
+                &mut rt,
+                y2021[0] + y2021[2] / 2.0,
+                y2021[1] + y2021[3] / 2.0,
+            );
+            check(&mut rt, "date-picker-months");
+            // Close picker via Escape.
+            rt.key(KeyEvent {
+                key: Key::Escape,
+                mods: rune::Mods::default(),
+            });
+            check(&mut rt, "descriptor-setup");
+            // 2. Required validation bubble via real Submit click.
+            let sub = el_rect(&rt, "add-submit");
+            click_point(&mut rt, sub[0] + sub[2] / 2.0, sub[1] + sub[3] / 2.0);
+            assert!(st(&rt.state).required_hint.is_some());
+            check(&mut rt, "required-bubble");
+            // 3. Live sync progress card + Stop scan button (cancelling state + terminal exit).
+            let spec = rune::App::new(rune::AppSpec::<App> {
+                fonts: crate::FONTS,
+                families: (crate::sans_stack(), crate::MONO),
+                setup: Some(crate::setup),
+                poll: Some(crate::poll),
+                on_key: Some(crate::on_key),
+                ..rune::AppSpec::new(
+                    "Kassiber",
+                    (1440.0, 900.0),
+                    crate::app::tests::quiet_app,
+                    crate::view,
+                )
+            });
+            let mut rt_sync = spec.headless_runtime((1440.0, 900.0), rune::Env::new(true, 1.0));
+            rt_sync.state.prefs.lang = lang;
+            rt_sync.state.route = crate::app::Route("/connections".into());
+            open(&mut rt_sync.state, Some("descriptor"));
+            stm(&mut rt_sync.state).job = Some(submit::Job {
+                stage: submit::Stage::Sync,
+                source_id: "descriptor",
+                label: "Cold".into(),
+                request_id: Some("req-sync-ui".into()),
+                sync_wallet: Some("Cold".into()),
+                syncs: std::collections::VecDeque::new(),
+                done: None,
+                stay_open: false,
+                dismissed: false,
+                cancelling: false,
+                form: st(&rt_sync.state).form.clone(),
+                replay: None,
+                sent: None,
+                import_after: None,
+            });
+            stm(&mut rt_sync.state).progress = Some(SyncProgress {
+                wallet: "Cold".into(),
+                job_id: Some("job-1".into()),
+                phase: Some("backend_fetch".into()),
+                processed: 10,
+                total: 40,
+                percent: 25.0,
+            });
+            check(&mut rt_sync, "sync-progress");
+            let stop = el_rect(&rt_sync, "add-cancel-scan");
+            click_point(
+                &mut rt_sync,
+                stop[0] + stop[2] / 2.0,
+                stop[1] + stop[3] / 2.0,
+            );
+            assert!(
+                st(&rt_sync.state)
+                    .job
+                    .as_ref()
+                    .is_some_and(|j| j.cancelling),
+                "Stop scan must transition to cancelling until the worker exits"
+            );
+            check(&mut rt_sync, "sync-progress-cancelling");
+            rt_sync.state.deliver_as(
+                "wallets.add.job",
+                "req-sync-ui",
+                Reply {
+                    kind: "ui.wallets.sync".into(),
+                    data: Value::Null,
+                    error: Some("cancelled".into()),
+                    error_detail: Value::Null,
+                    elapsed: std::time::Duration::ZERO,
+                },
+            );
+            assert!(st(&rt_sync.state).progress.is_none());
+            // 4. QR scanner overlay opened via real Scan button click: zero a11y findings and
+            // Cancel button stays visible without scrolling.
+            let scan_btn = el_rect(&rt, "add-scan");
+            click_point(
+                &mut rt,
+                scan_btn[0] + scan_btn[2] / 2.0,
+                scan_btn[1] + scan_btn[3] / 2.0,
+            );
+            assert!(scanner::is_open(&rt.state));
+            assert!(
+                st(&rt.state).required_hint.is_none(),
+                "opening scanner clears any lingering validation bubble"
+            );
+            check(&mut rt, "scanner");
+            let cancel_rect = el_rect(&rt, "scanner-cancel");
+            assert!(
+                cancel_rect[1] + cancel_rect[3] <= 900.0,
+                "scanner Cancel button must stay visible without scrolling: {cancel_rect:?}"
+            );
+        }
+        let missing = crate::i18n::missing();
+        assert!(missing.is_empty(), "missing i18n keys: {missing:?}");
+    }
+
+    #[cfg(feature = "tooling")]
+    #[test]
+    fn scanner_completed_multipart_keeps_cancel_and_use_visible_at_laptop_height() {
+        let size = (1280.0, 768.0);
+        let spec = rune::App::new(rune::AppSpec::<App> {
+            fonts: crate::FONTS,
+            families: (crate::sans_stack(), crate::MONO),
+            setup: Some(crate::setup),
+            poll: Some(crate::poll),
+            on_key: Some(crate::on_key),
+            ..rune::AppSpec::new("Kassiber", size, crate::app::tests::quiet_app, crate::view)
+        });
+        let mut rt = spec.headless_runtime(size, rune::Env::new(true, 1.0));
+        rt.state.shell.window_w = size.0;
+        rt.state.shell.window_h = size.1;
+        rt.state.route = crate::app::Route("/connections".into());
+        open(&mut rt.state, Some("descriptor"));
+        scanner::open(&mut rt.state, "Scan descriptor".into());
+        {
+            let sc = &mut rt.state.wallets.add.scanner;
+            sc.progress = Some(bbqr::Progress {
+                received: 2,
+                total: 2,
+                file_type: "U".into(),
+            });
+            sc.scanned = Some("wpkh(xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)".into());
+            sc.error = Some("Camera preview paused after capture.".into());
+        }
+        for _ in 0..3 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (tree, elements) = (rt.accessibility_json(), rt.elements());
+        let findings = crate::checks::a11y_findings(&tree, &elements);
+        assert!(findings.is_empty(), "scanner a11y findings: {findings:#?}");
+
+        let cancel_rect = el_rect(&rt, "scanner-cancel");
+        let use_rect = el_rect(&rt, "scanner-use");
+        assert!(
+            cancel_rect[1] >= 0.0 && cancel_rect[1] + cancel_rect[3] <= size.1,
+            "scanner-cancel must stay inside laptop viewport 768px: {cancel_rect:?}"
+        );
+        assert!(
+            use_rect[1] >= 0.0 && use_rect[1] + use_rect[3] <= size.1,
+            "scanner-use must stay inside laptop viewport 768px: {use_rect:?}"
+        );
+
+        // Clicking Use scanned text applies the descriptor and closes the scanner.
+        click_point(
+            &mut rt,
+            use_rect[0] + use_rect[2] / 2.0,
+            use_rect[1] + use_rect[3] / 2.0,
+        );
+        assert!(!scanner::is_open(&rt.state));
+        assert!(
+            st(&rt.state).form.wallet_material.text.starts_with("wpkh("),
+            "clicking pinned scanner-use must apply scanned material"
+        );
+    }
+
+    #[cfg(feature = "tooling")]
+    #[test]
+    fn date_picker_keyboard_week_navigation_and_focus_return_in_add_and_edit_dialogs() {
+        fn focused_key(rt: &rune::Runtime<App>) -> Option<String> {
+            rt.elements()
+                .into_iter()
+                .find(|e| e.focused)
+                .map(|e| e.path.rsplit('/').next().unwrap_or(&e.path).to_owned())
+        }
+        fn press(rt: &mut rune::Runtime<App>, key: Key) {
+            rt.key(KeyEvent {
+                key,
+                mods: rune::Mods::default(),
+            });
+            for _ in 0..3 {
+                rt.frame(1.0 / 60.0);
+            }
+        }
+
+        // 1. Add Connection dialog (`connection-birthday`).
+        let mut rt = headless_descriptor_runtime();
+        stm(&mut rt.state).form.birthday = TextEdit::new("2024-05-15");
+        for _ in 0..3 {
+            rt.frame(1.0 / 60.0);
+        }
+        let trig = el_rect(&rt, "connection-birthday");
+        click_point(&mut rt, trig[0] + 40.0, trig[1] + trig[3] / 2.0);
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-15"),
+            "opening picker should autofocus selected day"
+        );
+        // Down moves a full week (+7 days), including crossing into June.
+        press(&mut rt, Key::Down);
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-22")
+        );
+        press(&mut rt, Key::Down);
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-29")
+        );
+        press(&mut rt, Key::Down);
+        assert_eq!(
+            st(&rt.state)
+                .date_picker
+                .as_ref()
+                .map(|p| (p.year, p.month)),
+            Some((2024, 5)),
+            "Down past month end must advance to June"
+        );
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-5")
+        );
+        // Up moves back a full week (-7 days) across the month boundary to May 29.
+        press(&mut rt, Key::Up);
+        assert_eq!(
+            st(&rt.state)
+                .date_picker
+                .as_ref()
+                .map(|p| (p.year, p.month)),
+            Some((2024, 4))
+        );
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-29")
+        );
+        press(&mut rt, Key::Right);
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday-day-30")
+        );
+        // Enter picks the day, closes the popover, and returns focus to the trigger.
+        press(&mut rt, Key::Enter);
+        assert!(st(&rt.state).date_picker.is_none());
+        assert_eq!(st(&rt.state).form.birthday.text, "2024-05-30");
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday"),
+            "Enter selection must return focus to trigger"
+        );
+        // Reopen with Enter on the trigger, then dismiss with Escape and check focus return.
+        press(&mut rt, Key::Enter);
+        assert!(st(&rt.state).date_picker.is_some());
+        press(&mut rt, Key::Escape);
+        assert!(st(&rt.state).date_picker.is_none());
+        assert_eq!(
+            focused_key(&rt).as_deref(),
+            Some("connection-birthday"),
+            "Escape must return focus to trigger"
+        );
+
+        // 2. Edit Connection dialog (`wd-edit-birthday`).
+        let spec = rune::App::new(rune::AppSpec::<App> {
+            fonts: crate::FONTS,
+            families: (crate::sans_stack(), crate::MONO),
+            setup: Some(crate::setup),
+            poll: Some(crate::poll),
+            on_key: Some(crate::on_key),
+            ..rune::AppSpec::new(
+                "Kassiber",
+                (1440.0, 900.0),
+                crate::app::tests::quiet_app,
+                crate::view,
+            )
+        });
+        let mut rt_edit = spec.headless_runtime((1440.0, 900.0), rune::Env::new(true, 1.0));
+        rt_edit.state.route = crate::app::Route("/connections/w1".into());
+        rt_edit.state.reads.insert(
+            "ui.overview.snapshot".into(),
+            Reply {
+                kind: "ui.overview.snapshot".into(),
+                data: json!({"connections": [{"id": "w1", "label": "Cold", "kind": "descriptor"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        rt_edit.state.wallets.detail.wallet = "w1".into();
+        rt_edit.state.wallets.detail.wallets = crate::wallets::detail::Read::Ready(vec![json!({
+            "id": "w1",
+            "label": "Cold",
+            "kind": "descriptor",
+            "birthday": "2024-05-15"
+        })]);
+        rt_edit.state.wallets.detail.edit = Some(crate::wallets::detail::EditForm {
+            serial: 1,
+            label: TextEdit::new("Cold"),
+            ack: TextEdit::new(crate::wallets::detail::CHANGE_ACK),
+            birthday: TextEdit::new("2024-05-15"),
+            ..Default::default()
+        });
+        for _ in 0..3 {
+            rt_edit.frame(1.0 / 60.0);
+        }
+        let edit_trig = el_rect(&rt_edit, "wd-edit-birthday");
+        click_point(
+            &mut rt_edit,
+            edit_trig[0] + 40.0,
+            edit_trig[1] + edit_trig[3] / 2.0,
+        );
+        assert_eq!(
+            focused_key(&rt_edit).as_deref(),
+            Some("wd-edit-birthday-day-15")
+        );
+        press(&mut rt_edit, Key::Down);
+        assert_eq!(
+            focused_key(&rt_edit).as_deref(),
+            Some("wd-edit-birthday-day-22")
+        );
+        press(&mut rt_edit, Key::Enter);
+        assert!(rt_edit.state.wallets.detail.date_picker.is_none());
+        assert_eq!(
+            rt_edit
+                .state
+                .wallets
+                .detail
+                .edit
+                .as_ref()
+                .unwrap()
+                .birthday
+                .text,
+            "2024-05-22"
+        );
+        assert_eq!(
+            focused_key(&rt_edit).as_deref(),
+            Some("wd-edit-birthday"),
+            "Edit Connection picker must return focus to trigger on Enter"
+        );
+        press(&mut rt_edit, Key::Enter);
+        assert!(rt_edit.state.wallets.detail.date_picker.is_some());
+        press(&mut rt_edit, Key::Escape);
+        assert!(rt_edit.state.wallets.detail.date_picker.is_none());
+        assert_eq!(
+            focused_key(&rt_edit).as_deref(),
+            Some("wd-edit-birthday"),
+            "Edit Connection picker must return focus to trigger on Escape"
+        );
+
+        // While Save is pending, the birthday picker trigger is disabled and clicking it does
+        // not open the popover.
+        rt_edit.state.wallets.detail.edit.as_mut().unwrap().pending = true;
+        rt_edit.invalidate();
+        for _ in 0..2 {
+            rt_edit.frame(1.0 / 60.0);
+        }
+        let edit_trig = el_rect(&rt_edit, "wd-edit-birthday");
+        click_point(
+            &mut rt_edit,
+            edit_trig[0] + 40.0,
+            edit_trig[1] + edit_trig[3] / 2.0,
+        );
+        assert!(
+            rt_edit.state.wallets.detail.date_picker.is_none(),
+            "Edit Connection date picker must stay disabled while Save is pending"
+        );
     }
 }

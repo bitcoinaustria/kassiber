@@ -373,6 +373,32 @@ pub(crate) fn handle(
         args(kind, raw_args, &empty)?
     };
     if CONTROL_KINDS.contains(&kind) {
+        if kind == "ui.freshness.cancel"
+            && get(args, "target_request_id").is_some_and(|v| !matches!(v, Value::Null))
+        {
+            daemon.reap_freshness(false)?;
+            let mut value = daemon.freshness_requests.control(args, false)?;
+            let has_job_id = get(args, "job_id").is_some_and(|v| match v {
+                Value::Str(text) => text
+                    .as_str()
+                    .is_some_and(|s| !kassiber_pytext::strip(s).is_empty()),
+                _ => false,
+            });
+            if has_job_id {
+                if let Ok(job_value) = daemon.book_mut()?.freshness_control("cancel", args) {
+                    if let Value::Dict(pairs) = &mut value {
+                        pairs.push((Key::from("job"), job_value));
+                    }
+                }
+            }
+            return Ok((
+                Some(crate::output::with_request_id(
+                    kassiber_envelope::success(kind, value),
+                    id,
+                )),
+                false,
+            ));
+        }
         let value = daemon
             .book_mut()?
             .freshness_control(kind.rsplit('.').next().unwrap_or(""), args)?;

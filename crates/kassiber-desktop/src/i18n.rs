@@ -127,8 +127,7 @@ fn raw(key: &str, lang: Lang) -> Option<&'static str> {
     table(lang).get(key).map(String::as_str)
 }
 
-fn lookup(key: &str) -> Option<&'static str> {
-    let lang = lang();
+fn lookup_in(key: &str, lang: Lang) -> Option<&'static str> {
     if let Some(s) = raw(key, lang) {
         return Some(s);
     }
@@ -141,16 +140,24 @@ fn lookup(key: &str) -> Option<&'static str> {
     None
 }
 
+fn lookup(key: &str) -> Option<&'static str> {
+    lookup_in(key, lang())
+}
+
 /// Plural key for `count` (i18next v4 suffixes; English and German: 1 → one, else other;
 /// `_zero` wins for 0 when the bundle has it).
-fn plural_key(key: &str, count: f64) -> Option<&'static str> {
+fn plural_key_in(key: &str, count: f64, lang: Lang) -> Option<&'static str> {
     if count == 0.0
-        && let Some(s) = lookup(&format!("{key}_zero"))
+        && let Some(s) = lookup_in(&format!("{key}_zero"), lang)
     {
         return Some(s);
     }
     let suffix = if count == 1.0 { "_one" } else { "_other" };
-    lookup(&format!("{key}{suffix}"))
+    lookup_in(&format!("{key}{suffix}"), lang)
+}
+
+fn plural_key(key: &str, count: f64) -> Option<&'static str> {
+    plural_key_in(key, count, lang())
 }
 
 fn interpolate(template: &str, args: &[(&str, &str)]) -> String {
@@ -179,6 +186,30 @@ fn interpolate(template: &str, args: &[(&str, &str)]) -> String {
     out
 }
 
+/// Translates `key` in a specific language (`"ns:path"`, or `"path"` in `common`).
+pub fn t_in(key: &str, lang: Lang) -> String {
+    tr_in(key, lang, &[])
+}
+
+/// Translates with interpolation arguments in a specific language.
+pub fn tr_in(key: &str, lang: Lang, args: &[(&str, &str)]) -> String {
+    let key = qualify(key);
+    let count = args
+        .iter()
+        .find(|(k, _)| *k == "count")
+        .and_then(|(_, v)| v.replace([',', '.', '\u{a0}', ' '], "").parse::<f64>().ok());
+    let found = count
+        .and_then(|n| plural_key_in(&key, n, lang))
+        .or_else(|| lookup_in(&key, lang));
+    match found {
+        Some(s) => interpolate(s, args),
+        None => {
+            MISSING.with(|m| m.borrow_mut().insert(format!("*:{key}")));
+            key
+        }
+    }
+}
+
 /// Translates `key` (`"ns:path"`, or `"path"` in `common`).
 pub fn t(key: &str) -> String {
     tr(key, &[])
@@ -187,21 +218,7 @@ pub fn t(key: &str) -> String {
 /// Translates with interpolation arguments. A `count` argument that parses as a number picks
 /// the plural form.
 pub fn tr(key: &str, args: &[(&str, &str)]) -> String {
-    let key = qualify(key);
-    let count = args
-        .iter()
-        .find(|(k, _)| *k == "count")
-        .and_then(|(_, v)| v.replace([',', '.', '\u{a0}', ' '], "").parse::<f64>().ok());
-    let found = count
-        .and_then(|n| plural_key(&key, n))
-        .or_else(|| lookup(&key));
-    match found {
-        Some(s) => interpolate(s, args),
-        None => {
-            MISSING.with(|m| m.borrow_mut().insert(format!("*:{key}")));
-            key
-        }
-    }
+    tr_in(key, lang(), args)
 }
 
 /// Translates with a count (formatted with the language's grouping) and other arguments.

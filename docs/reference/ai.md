@@ -1386,6 +1386,31 @@ Matching read-only tool results are streamed to the UI and inserted into the
 model context as exact local data, so answers use program-derived facts. That auto-read context is sent as
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
+
+An item the user asked about (a transaction or custody gap pinned with "Ask
+about this", or the transaction panel's Assistant surface) is read too. An item
+that is only open (the transaction in the detail panel, the custody gap under
+review) is shared as its typed entity and not read: in a check with four models
+through a CLI proxy, every model read the shown transaction itself when the
+question was about it, while reading it up front made unrelated questions
+slower and larger. When the desktop sends
+`read_pinned_entity: true` with a `screen_context` whose entity the daemon kept
+(a `transaction` of the open book, or a `custody_gap` the open book's gap
+search finds; a gap is checked only for such a request, because the check is a
+gap search, so a gap named without the flag stays in the context as before), the router runs that
+item's own review read first: `ui.transactions.review_context` or
+`ui.custody.gaps.review_context`, both local, read-only and non-egressing,
+through the same advertised-tool gate as every other auto-read, and streamed to
+the UI as an ordinary tool card. Its entry gets most of the message budget
+(`PINNED_CONTEXT_ENTRY_MAX_CHARS`, 16,000 of 24,000 characters); an oversized
+packet drops its largest review sections first (never the row, next actions,
+local reference or safety note) and names them in `omitted_sections`, so the
+model can read one with the tool's own flags. The flag is opt-in: a request
+without it, a request that is not for Kassiber's own system prompt, or a pin the
+daemon unbound because the item is not in the open book reads exactly as before.
+The desktop sends it only when that item is the turn's context, not when a page
+request or evidence continuation brings its own, and not after the user removed
+the item from the tray.
 When one of those reads needs current reports or journal-derived state,
 Kassiber refreshes stale local journals first and includes the
 `ui.journals.process` result in the tool result metadata. This refresh is local
@@ -1473,6 +1498,56 @@ assistant panel once; if the panel is closed again, a notice under the page
 keeps it one click away. A call that ran without a prompt carries a badge
 naming the mode or chat allowance that approved it, and a result that names an
 `undo` says the change can be undone by asking the assistant.
+
+Three common changes show as the app's own card instead of raw arguments:
+linking two transactions as a transfer (`ui.transfers.pair`), no longer
+suggesting a link (`ui.transfers.dismiss`) and editing a transaction
+(`ui.transactions.metadata.update`). The card names the transactions as the
+open book has them (read with `ui.transactions.resolve`, a local read), the
+kind and tax treatment of a link or each field an edit sets with its current
+value, and the assistant's reason; **Apply** and **Decline** are the same
+consent answer as **Approve** and **Decline**. App-defined values (review
+status, the Austrian tax classification, the recorded kind) read in the
+interface's language; `at_regime` and `at_category` are one tax-classification
+row. Arguments outside the tool's schema keep the generic row, and so does any
+edit the card cannot state field by field: one that sets a pricing field (the
+core replaces the whole pricing group and clears the fields omitted), half a tax
+classification, or a value the app has no label for. None of the three is
+plan-bound: the daemon validates and computes when the approved call runs. Once
+applied, the card says **Applied with the assistant**, keeps the permission-mode
+badge when the change ran without asking, and every completed change makes the
+cards read their transactions again, so a later card shows current values. When a result's `undo` names a book mutation
+the desktop may send itself (its `ALLOWED_DAEMON_KINDS`, such as
+`ui.transfers.unpair`, `ui.transfers.dismissals.delete` or
+`ui.transactions.history.revert`), that card, or the generic tool card, offers
+**Undo**: the desktop sends the hinted kind with the hint's arguments and the
+open book's `expected_scope`, as the user's own action, shows the outcome and
+re-reads the screen. Undo state belongs to the card (its message and call id, as
+providers may reuse a call id across turns), and nothing is undone into another
+book than the conversation's. A hint that names a plan tool (component, custody gap and
+import rollback inverses), carries its own `expected_scope`, or names a kind
+outside the allowlist gets no button; the assistant can still take it back.
+
+Two review decisions get the same treatment. Resolving a held transaction
+(`ui.journals.quarantine.resolve`) names the transaction (the group's root when
+the call names a `root:` group), why it is held when the review page knows the
+reason, the decision (leave it out of the books, or the reviewed price or value
+in the book's currency) and what that means for reports; a call that skips
+reprocessing says reports stay out of date. Applied, it adds what the result
+measured: whether the transaction cleared, how many waiting rows were released,
+and any newly held. Its Undo is `ui.transactions.history.revert`. A custody-gap
+decision (`ui.custody.review.apply`) names the gap as the custody page reads it
+(`ui.custody.gaps.review_context`, a local read: wallets, dates, the amount that
+left and the unexplained rest), the decision in the custody page's words and
+its effect on the books. When the conversation holds the
+`ui.custody.review.plan` result for the same gap, action, classification and
+input version, the card shows that plan's exact amounts and filed-report
+warning; the apply still runs only that plan and fails closed when the book
+moved on. `ui.custody.review.plan` itself is a read and asks nothing. Its
+inverse is a reopen plan, so the applied card has no Undo button. A resolution
+the core would refuse (both or neither target, a price with an exclusion, rate
+and value together, a non-decimal price) and a classification outside the
+custody page's options keep the generic row.
 
 Each desktop chat sends its permission mode as `permission_mode` with every
 `ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
@@ -1607,12 +1682,28 @@ it.
 The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
-read tool. An "Ask about this" action pins a typed entity for the following
-turns until the user removes it; the item's identity travels only as that
-typed entity, never interpolated into the prompt text. A question queued
+read tool. The desktop composer shows what the next question shares in a
+"The assistant sees:" tray, built from the app's typed state by one function
+(`tray::build` in `crates/kassiber-desktop/src/assistant/tray.rs`) that also
+produces the `screen_context`, so the chips and the request cannot disagree.
+In order it lists the item (a transaction, or a custody gap from its review on
+the Transfers page, pinned with "Ask about this" for the following turns until
+the user removes it; with nothing pinned, the transaction open in the detail
+panel on any page, else the custody gap under review once its review packet
+has named it in the open book; the user can remove that open item until another
+one opens, and removing it also stops the page's address from naming it), the Transactions chart selection (as the
+bounded filters `chart_flows`, `chart_segment` and `chart_bucket`, removable
+until the selection changes), and the page (not removable). The item adds its
+typed entity and capability pack to the page's route and filters; a pinned
+item is also read for the model each turn (see the pre-read router above). Chip
+labels name the item by date and kind and stay on the device; the item's
+identity travels only as that typed entity, never interpolated into the prompt
+text, and nothing is sent before the user presses Send. The
+transaction panel's Assistant surface pins the transaction on screen the same
+way as "Ask about this" without replacing the user's draft. A question queued
 while an answer streams, or held until the open book's provider settings have
-seeded the reasoning effort, keeps the pin that was active when it was
-submitted and the page it was asked on (route, capability hints, and counts
+seeded the reasoning effort, keeps the item and chart selection the tray showed
+when it was submitted and the page it was asked on (route, capability hints, and counts
 with the book state they were counted on, which the daemon still checks);
 navigating, or pinning or clearing another item, before it runs does not
 retarget it.
@@ -1621,7 +1712,8 @@ Everything the assistant sends belongs to a book, and one rule binds it
 (`BookStamp` in `ui-tauri/src/components/ai/bookStamp.ts`). A stamp is the
 daemon session plus the book's workspace and profile ids. It is captured
 synchronously at the user's action that creates the content, before any
-await: the submit for a typed question or held edit, the click for a pin, a
+await: the submit for a typed question or held edit (and for the open
+transaction the tray shows with it), the click for a pin, a
 page's handoff or a reopened chat, the click before the picker for an
 attached file. A page's handoff takes the book of the page's scope boundary
 (the book its data came from) when it has one, otherwise the open book. The

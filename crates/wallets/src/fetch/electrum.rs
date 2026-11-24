@@ -81,6 +81,7 @@ pub(super) fn records(
     for (index, (txid, history)) in ordered.into_iter().enumerate() {
         control.check(deadline)?;
         // `_history_occurred_at`.
+        let in_block = positive_height(&history["height"]).is_some();
         let occurred = match positive_height(&history["height"]) {
             Some(height) => {
                 header_time(&headers[height.to_string()])?.unwrap_or_else(|| UNKNOWN.into())
@@ -90,7 +91,8 @@ pub(super) fn records(
         let tx = acquired["transactions"]
             .get(txid.as_str())
             .ok_or_else(invalid)?;
-        if let Some(record) = bitcoin_records::from_electrum(txid, tx, &occurred, tracked, backend)?
+        if let Some(record) =
+            bitcoin_records::from_electrum_history(txid, tx, &occurred, in_block, tracked, backend)?
         {
             records.push(record);
         }
