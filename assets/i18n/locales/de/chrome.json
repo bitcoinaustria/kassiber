@@ -348,6 +348,12 @@
         "title": "Lokale Belege geändert",
         "body": "Eine Beobachtungsbedingung ist eingetreten. Die Änderung wartet unter Beobachtungen in der Kettenanalyse.",
         "action": "Beobachtungen öffnen"
+      },
+      "sourcesBehind": {
+        "title_one": "{{count}} Quelle braucht Handlung für {{period}}",
+        "title_other": "{{count}} Quellen brauchen Handlung für {{period}}",
+        "body": "Importiere einen neueren Export, starte einen Sync, prüfe einen fehlgeschlagenen Sync oder gib an, dass nach einem Datum nichts passiert ist.",
+        "action": "Quellen anzeigen"
       }
     },
     "result": {

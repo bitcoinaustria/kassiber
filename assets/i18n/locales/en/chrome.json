@@ -348,6 +348,12 @@
         "title": "Local evidence changed",
         "body": "A watch condition was met. Its change waits under Watches in Chain Analysis.",
         "action": "Open watches"
+      },
+      "sourcesBehind": {
+        "title_one": "{{count}} source needs action for {{period}}",
+        "title_other": "{{count}} sources need action for {{period}}",
+        "body": "Import a newer export, sync, review a failed sync, or state that nothing happened after a date.",
+        "action": "Show sources"
       }
     },
     "result": {

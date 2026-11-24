@@ -187,6 +187,9 @@ pub struct Ui {
     /// A select's trigger to focus again once the page shows it (key, with its ring): picking a
     /// year reloads the report, and the trigger is gone while it loads.
     pub refocus: Option<(String, bool)>,
+    /// Source coverage for the report period's end (`useSourcesBehind`): the period, its read and the
+    /// book refresh cycle it follows.
+    pub coverage: Option<(String, Load<Value>, u64)>,
 }
 
 impl Ui {
@@ -363,7 +366,53 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         tx.focus(key, ring);
         changed = true;
     }
-    changed | step(app)
+    changed | coverage_step(app) | step(app)
+}
+
+/// `reportPeriodEnd`: the year's last day, or today while the year runs.
+pub fn report_period_end(year: i32, now_secs: f64) -> String {
+    let end = format!("{year}-12-31");
+    let today = crate::format::Day::from_epoch_days((now_secs / 86_400.0).floor() as i64).iso();
+    if end < today { end } else { today }
+}
+
+/// The year on screen's period end (`reportPeriodEnd`).
+pub fn coverage_period(app: &App) -> Option<String> {
+    let ui = &app.reports.report;
+    let year = ui.year.or_else(|| {
+        ui.current()
+            .and_then(Load::ready)
+            .and_then(|v| v["year"].as_i64())
+            .map(|y| y as i32)
+    })?;
+    Some(report_period_end(year, crate::format::now_secs()))
+}
+
+/// Reads which sources do not reach the period end (local; never syncs), again after each book
+/// refresh cycle.
+fn coverage_step(app: &mut App) -> bool {
+    if app.route.path() != "/reports" {
+        return false;
+    }
+    let Some(period) = coverage_period(app) else {
+        return false;
+    };
+    let generation = app.book_generation;
+    let same = matches!(&app.reports.report.coverage, Some((p, _, _)) if *p == period);
+    if same && matches!(&app.reports.report.coverage, Some((_, _, g)) if *g == generation) {
+        return false;
+    }
+    let keep = match app.reports.report.coverage.take() {
+        Some((_, l @ Load::Ready(_), _)) if same => l,
+        _ => Load::Loading,
+    };
+    app.reports.report.coverage = Some((period.clone(), keep, generation));
+    app.send(
+        "ui.sources.coverage",
+        json!({"period_end": period}),
+        "reports.report.coverage",
+    );
+    true
 }
 
 pub fn prime(app: &mut App) {
@@ -385,6 +434,17 @@ pub fn on_any_reply(app: &mut App, tag: &str, _r: &Reply) {
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
+        "reports.report.coverage" => {
+            let period = r.data["period_end"].as_str().map(str::to_owned);
+            if let Some((p, load, _)) = app.reports.report.coverage.as_mut()
+                && (r.error.is_some() || period.as_deref() == Some(p.as_str()))
+            {
+                *load = match &r.error {
+                    Some(e) => Load::Failed(e.clone()),
+                    None => Load::Ready(r.data.clone()),
+                };
+            }
+        }
         "reports.report.cg" => {
             let ui = &mut app.reports.report;
             let Some(Some(key)) = ui.queue.pop_front() else {

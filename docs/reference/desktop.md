@@ -1147,18 +1147,19 @@ wallets with any transaction as "Up to date" now counts current sources.
 ```
 
 "Needs action" filters to `behind`, `sync_failed`, and `never_imported`; the
-shell's Needs attention condition "N sources are behind for 2025"
-(`sources.behind`: sources behind for the previous calendar year's end, from
+shell's Needs attention condition "N sources need action for 2025"
+(`sources.behind`: sources that need action for the previous calendar year's end,
+the same three states, from
 the local read when the shell mounts, no timer; it clears when a later read
-finds none behind) opens the list with that filter and period.
+finds none) opens the list with that filter and period.
 With a period the list reads that period's coverage; until the read answers its
 rows show none, and a failed read shows an alert with Retry instead of
 letting today's coverage stand in for the period.
 
 ### Connection detail: Coverage card
 
-The card sits at the top of the facts, in its own component
-(`SourceCoverageCard`).
+The card sits under the balance panel, above an exchange's sync card, in its own
+module (`crates/kassiber-desktop/src/wallets/sources.rs`).
 
 ```
  ┌ Coverage ─────────────────────────────────────────────────────────────┐
@@ -1186,8 +1187,9 @@ the gap from its date on; clearing it asks again.
 
 ### Add connection: key or file
 
-Where a provider offers both an API and a CSV (`connectionCatalog.tsx`
-entries with an exchange API and `refreshHint`), the modal asks first:
+Where a provider offers both an API and a CSV (the catalog pairs them:
+`file_source_id` in `crates/kassiber-desktop/src/wallets/add/meta.rs`; Binance today),
+the modal asks first:
 
 ```
  Kraken
@@ -1206,8 +1208,8 @@ transaction ID scheme.
 
 ### Refresh all and reports
 
-The title bar refresh (its button, Cmd/Ctrl+R, and the command palette's
-Refresh book set) is an explicit user action: after the book refresh it also
+The title bar refresh (its button and menu, Cmd/Ctrl+R and Cmd/Ctrl+Shift+R, and the
+command palette's Refresh and Full rescan) is an explicit user action: after the book refresh it also
 syncs every exchange wallet with a key, one `ui.connections.exchange.sync`
 each. The sequence belongs to the book the click was made in: each request
 carries that book's `expected_scope`, which the daemon refuses for another

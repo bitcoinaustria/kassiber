@@ -42,8 +42,8 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
             match (c, m.shift) {
                 ('k', false) => app.shell.toggle(Popup::Search),
                 ('b', false) => super::toggle_nav(app, super::narrow_now(app)),
-                ('r', false) | ('s', true) => app.refresh_book(false),
-                ('r', true) => app.refresh_book(true),
+                ('r', false) | ('s', true) => app.refresh_book_from_title_bar(false),
+                ('r', true) => app.refresh_book_from_title_bar(true),
                 ('j', true) => app.process_journals(),
                 ('h', true) => {
                     app.prefs.privacy = match app.prefs.privacy {

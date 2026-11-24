@@ -1558,7 +1558,7 @@
     },
     "sync": {
       "title": "{{provider}}-API",
-      "body": "Kassiber kontaktiert {{provider}} nur, wenn du „Sync starten“ drückst. „Alle aktualisieren“, die Hintergrundaktualisierung und der Assistent synchronisieren Börsenkonten nie.",
+      "body": "Kassiber kontaktiert {{provider}} nur, wenn du „Sync starten“ oder die Aktualisierung in der Titelleiste drückst. Die Hintergrundaktualisierung und der Assistent syncen Börsenkonten nie.",
       "button": "Sync starten",
       "running": "Sync läuft…",
       "key": "API-Key nur zum Lesen",

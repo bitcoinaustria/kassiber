@@ -19,6 +19,7 @@
 //! its "Sync now" (`ui.connections.exchange.sync`, egress, button only) is in flight.
 
 pub mod model;
+pub mod refresh;
 
 use rune::{Cx, El, TextEdit, Tx, col, row, text};
 use serde_json::{Value, json};
@@ -69,6 +70,8 @@ pub struct State {
     pub attach_offer: Option<(String, String)>,
     /// The wallet the next save adds the key to (the offer's button).
     pub attach_wallet: Option<String>,
+    /// The title-bar refresh's exchange syncs.
+    pub refresh: refresh::RefreshRun,
 }
 
 /// `useExchangeSync` for the wallet on screen.
@@ -125,6 +128,8 @@ pub fn reset(app: &mut App, exchange: &str) {
     let tests = std::mem::take(&mut s.tests);
     let syncs = std::mem::take(&mut s.syncs);
     let statuses = std::mem::take(&mut s.statuses);
+    // A title-bar run outlives the form (Codex 4660319610).
+    let refresh = std::mem::take(&mut s.refresh);
     let form = s.form + 1;
     app.wallets.add.exchange = State {
         exchange: exchange.to_owned(),
@@ -132,6 +137,7 @@ pub fn reset(app: &mut App, exchange: &str) {
         tests,
         syncs,
         statuses,
+        refresh,
         form,
         ..State::default()
     };
@@ -243,6 +249,9 @@ fn run_test(a: &mut App) {
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
+        "wallets.exchange.refresh_status" | "wallets.exchange.refresh_sync" => {
+            refresh::on_reply(app, tag, r)
+        }
         "wallets.exchange.test" => {
             let s = stm(app);
             let Some((form, sent)) = s.tests.pop_front() else {
