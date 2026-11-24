@@ -1928,6 +1928,9 @@ fn on_job(app: &mut App, r: &Reply) {
             });
             return;
         }
+        if stage == Stage::ExchangeCreate {
+            super::exchange::on_create_error(app, &r.error_detail);
+        }
         fail_job(app, job, e.clone());
         return;
     }
@@ -2032,6 +2035,7 @@ fn on_job(app: &mut App, r: &Reply) {
             if !job.dismissed {
                 set_last_import(app, &mut job, d.clone());
             }
+            app.wallets.imports_done += 1;
             let m = meta(job.source_id);
             if m.kind() == SetupKind::FileEnrichment {
                 let book = is_exchange_evidence(m.source_format);
@@ -2180,6 +2184,7 @@ fn on_job(app: &mut App, r: &Reply) {
             next_sync_job(app, job);
         }
         Stage::ExchangeCreate => {
+            super::exchange::clear_attach(app);
             let wallet = d.get("wallet").cloned().unwrap_or(Value::Null);
             let label = wallet
                 .get("label")

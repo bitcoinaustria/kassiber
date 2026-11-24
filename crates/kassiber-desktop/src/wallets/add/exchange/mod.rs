@@ -64,6 +64,11 @@ pub struct State {
     pub sync: SyncState,
     /// Scene harness: `wallets-detail-exchange-card` mounts `card_scene_view` full-page.
     pub card_scene: bool,
+    /// A save refused because the same exchange's CSV wallet holds this label: (id, label) of
+    /// that wallet, offered to take the key instead (one hybrid source, no double count).
+    pub attach_offer: Option<(String, String)>,
+    /// The wallet the next save adds the key to (the offer's button).
+    pub attach_wallet: Option<String>,
 }
 
 /// `useExchangeSync` for the wallet on screen.
@@ -144,7 +149,76 @@ pub fn submit(app: &mut App, label: &str) -> Result<Value, String> {
     }
     let mut args = model::credential_args(&c);
     args.insert("label".into(), json!(label));
+    // Building the request never consumes the target: validation builds it once before the
+    // request does. A save (or another choice) clears it (`clear_attach`).
+    if let Some(wallet) = st(app).attach_wallet.clone() {
+        args.insert("wallet".into(), json!(wallet));
+    }
     Ok(Value::Object(args))
+}
+
+/// The offer ends with a save, a new choice or another source.
+pub fn clear_attach(app: &mut App) {
+    stm(app).attach_offer = None;
+    stm(app).attach_wallet = None;
+}
+
+/// A refused save: the CSV wallet the daemon names (`details.attachable_wallet_id`) can take
+/// the key instead.
+pub fn on_create_error(app: &mut App, detail: &Value) {
+    // The attempt that named a wallet is over; another needs the offer pressed again.
+    stm(app).attach_wallet = None;
+    let d = &detail["details"];
+    stm(app).attach_offer = d["attachable_wallet_id"].as_str().map(|id| {
+        (
+            id.to_owned(),
+            d["attachable_wallet"].as_str().unwrap_or(id).to_owned(),
+        )
+    });
+}
+
+/// The offer under the panel: add the key to the existing CSV wallet.
+pub fn attach_offer(app: &App, tk: &Tk, provider: &str) -> Option<El> {
+    let (id, label) = st(app).attach_offer.clone()?;
+    let (fill, border, ink) = crate::wallets::detail::ui::amber(tk);
+    let button_label = tr("connections:coverage.attach.button", &[("wallet", &label)]);
+    Some(
+        col()
+            .key("connection-exchange-attach")
+            .w_full()
+            .padding(tk.r(0.75))
+            .gap(tk.r(0.5))
+            .radius(tk.r(0.375))
+            .fill(fill)
+            .border(1.0, border)
+            .border_layout()
+            .role("status")
+            .child(
+                text(tr(
+                    "connections:coverage.attach.body",
+                    &[("provider", provider), ("wallet", &label)],
+                ))
+                .font(tk.tsm(400.0))
+                .color(ink)
+                .wrap()
+                .w_full(),
+            )
+            .child(
+                crate::txdetail::widgets::button(
+                    tk,
+                    "connection-exchange-attach-submit",
+                    crate::txdetail::widgets::Variant::Outline,
+                    crate::txdetail::widgets::Size::Sm,
+                    None,
+                    &button_label,
+                    true,
+                )
+                .on_press(move |a: &mut App| {
+                    stm(a).attach_wallet = Some(id.clone());
+                    crate::wallets::add::submit_setup(a);
+                }),
+            ),
+    )
 }
 
 fn run_test(a: &mut App) {
@@ -328,6 +402,14 @@ pub fn sync_prime(app: &mut App, c: &Conn) -> bool {
         "wallets.exchange.status",
     );
     true
+}
+
+/// Sync `c` from its exchange (`ui.connections.exchange.sync`), as its sync card's button does.
+pub fn sync_wallet(app: &mut App, c: &Conn) {
+    sync_prime(app, c);
+    if st(app).sync.wallet.as_deref() == Some(c.id.as_str()) {
+        run_sync(app);
+    }
 }
 
 /// Whether the shown wallet has a sync in flight.
@@ -1240,6 +1322,35 @@ mod test_reply_tests {
         };
         on_reply(&mut app, "wallets.exchange.status", &status);
         assert!(st(&app).sync.row.is_none());
+    }
+
+    /// Codex 4660315083: "Add key to …" submits through validation, which builds the request
+    /// once before the real build. The attachment target survives that first build, so the
+    /// request sent names the wallet; only a save or another choice clears it.
+    #[test]
+    fn the_attachment_target_survives_validation() {
+        let mut app = crate::app::tests::quiet_app();
+        reset(&mut app, "kraken");
+        let s = stm(&mut app);
+        s.api_key.text = "K".into();
+        s.api_secret.text = "S".into();
+        let c = credentials(st(&app));
+        stm(&mut app).outcome = Some(Outcome {
+            credentials: c,
+            result: Some((true, Some(true))),
+            error: None,
+        });
+        stm(&mut app).attach_wallet = Some("csv-wallet".into());
+        let validated = submit(&mut app, "Kraken").unwrap();
+        let sent = submit(&mut app, "Kraken").unwrap();
+        assert_eq!(validated["wallet"], json!("csv-wallet"));
+        assert_eq!(sent["wallet"], json!("csv-wallet"));
+        // A refused save ends the attempt; a save or another choice clears it too.
+        on_create_error(&mut app, &json!({"details": {}}));
+        assert!(submit(&mut app, "Kraken").unwrap().get("wallet").is_none());
+        stm(&mut app).attach_wallet = Some("csv-wallet".into());
+        clear_attach(&mut app);
+        assert!(submit(&mut app, "Kraken").unwrap().get("wallet").is_none());
     }
 
     /// A test for credentials A still out when Add connection closes and reopens: its answer

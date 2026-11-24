@@ -269,6 +269,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.exchange.create",
   "ui.connections.exchange.sync",
   "ui.sources.coverage",
+  "ui.sources.attest_coverage",
   "ui.connections.node.snapshot",
   "ui.reports.lightning_profitability",
   "ui.metadata.bip329.preview",
