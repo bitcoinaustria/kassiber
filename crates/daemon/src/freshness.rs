@@ -5,7 +5,6 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-#[cfg(any(test, feature = "test-kinds"))]
 use std::time::Duration;
 use std::time::Instant;
 
@@ -43,7 +42,6 @@ struct Finished {
 }
 
 struct GraphActive {
-    #[cfg(any(test, feature = "test-kinds"))]
     id: String,
     cancel: Cancellation,
     worker: JoinHandle<GraphFinished>,
@@ -75,7 +73,6 @@ pub(crate) fn busy() -> AppError {
     .retryable(true)
 }
 
-#[cfg(any(test, feature = "test-kinds"))]
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     get(value, key).and_then(|v| match v {
         Value::Str(v) => v.as_str().filter(|v| !v.is_empty()),
@@ -121,7 +118,6 @@ impl Requests {
         }
     }
 
-    #[cfg(any(test, feature = "test-kinds"))]
     pub(crate) fn control(&mut self, args: &Value, revoke: bool) -> Result<Value, AppError> {
         let target = text(args, "target_request_id").ok_or_else(|| {
             AppError::new("validation", "Freshness control requires target_request_id")
@@ -221,7 +217,7 @@ impl Daemon {
         {
             return Ok(());
         }
-        let Some((_id, grant)) = self.freshness_requests.published.take() else {
+        let Some((id, grant)) = self.freshness_requests.published.take() else {
             return Ok(());
         };
         let cancel = grant.cancellation();
@@ -317,12 +313,7 @@ impl Daemon {
                 }
             })
             .map_err(|_| AppError::new("internal_error", "Could not start graph worker"))?;
-        self.freshness_requests.graph = Some(GraphActive {
-            #[cfg(any(test, feature = "test-kinds"))]
-            id: _id,
-            cancel,
-            worker,
-        });
+        self.freshness_requests.graph = Some(GraphActive { id, cancel, worker });
         Ok(())
     }
 
@@ -714,5 +705,45 @@ mod tests {
             .unwrap();
         assert_eq!(requests.pending.len(), 128);
         assert!(requests.pending.contains_key("0"));
+    }
+
+    #[test]
+    fn request_scoped_cancel_signals_active_worker_token_in_production() {
+        use kassiber_wallets::scan::Control;
+        let (release, hold) = std::sync::mpsc::channel();
+        let active_worker = active(false, hold);
+        let cancel_handle = active_worker.cancel.clone();
+        let mut requests = Requests {
+            active: Some(active_worker),
+            ..Requests::default()
+        };
+        let deadline = Instant::now() + Duration::from_secs(60);
+        assert!(cancel_handle.check(deadline).is_ok());
+        let response = requests
+            .control(
+                &dict([("target_request_id", kassiber_envelope::s("process"))]),
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            response,
+            dict([
+                ("cancelled", Value::Bool(true)),
+                ("queued", Value::Bool(false)),
+            ])
+        );
+        assert_eq!(cancel_handle.check(deadline).unwrap_err().code, "cancelled");
+        // Freshness slot stays occupied until the worker actually exits.
+        assert!(requests.running());
+        assert!(requests.take(false).is_none());
+        release.send(()).unwrap();
+        let taken = loop {
+            if let Some(a) = requests.take(false) {
+                break a;
+            }
+            std::thread::yield_now();
+        };
+        assert!(!requests.running());
+        assert!(taken.worker.join().is_ok());
     }
 }
