@@ -2066,9 +2066,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   absent (two such transfers on one day and amount refuse today as
   `bank_statement_line_conflict` when imported apart); an explicit CSV
   delimiter for positional column maps (punctuation in a description can pick
-  the wrong one, which refuses the file); and an accepted-decision filter for
-  `bank-lines list`, so the desktop's accepted evidence does not rest on the
-  newest 5000 outgoing lines.
+  the wrong one, which refuses the file as `bank_csv_ambiguous_delimiter`);
+  and an accepted-decision filter for `bank-lines list`, so the desktop's
+  accepted evidence does not rest on the newest 5000 outgoing lines. A durable
+  stale-decision marker (or the review-bound facts kept on the decision), so a
+  keep-decisions reset no longer has to refuse
+  (`book_reset_withheld_bank_decisions`) while a `changed` reservation
+  withholds an accepted bank decision (Codex #788).
 - [ ] Bank statement cases now refused, to build only on demand (dropped in
   the 2026-11-14 size pass): MT940 files; splitting CAMT batch entries into
   their `TxDtls`; fee-tolerant (within 3 %) and split/merge (one transfer for
@@ -2078,6 +2082,10 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Per-asset scale for large-supply tokens (SHIB, PEPE, BONK, BTTC): a
+  row holds at most about 92 million units at 10^-11, so one such row stops a
+  sync. Designed, not built, in [plan 24](docs/plan/24-crypto-assets.md#per-asset-scale-design-not-implemented);
+  needs the owner's decision on the released-Python exception.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
@@ -2095,7 +2103,8 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Bisq refusals that could become reviewed flows if real users hit them
   (the slim importer refuses by trade id instead): redating stored legs whose
   escrow dates moved or were read in another `--timezone`; network partitions
-  of a book with held trades; revising or grouping a pair with a
+  of a book with held or cleared trades (carrying the holds into the
+  partition); revising or grouping a pair with a
   provider-stated miner fee; fiat markets outside the shared fiat list;
   altcoin-market trades as crypto-scope swap legs once the multi-asset
   foundation lands.

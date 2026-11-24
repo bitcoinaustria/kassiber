@@ -26,9 +26,10 @@ kassiber-rates
 kassiber-release
 kassiber-runtime fake
 kassiber-secrets native-keyring test-hooks
-kassiber-store test-hooks
+kassiber-store test-hooks test-version
 kassiber-tax-core
 kassiber-tax-countries
+kassiber-test-support
 keyring-core
 libc
 nix user fs feature resource signal

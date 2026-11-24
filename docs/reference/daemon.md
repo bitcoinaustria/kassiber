@@ -1134,7 +1134,11 @@ daemon-owned queue with `rates=false`; when a wallet is supplied it is
 source-scoped to that wallet, while a book/global refresh can enqueue the
 remaining wallet, rate, and journal jobs without duplicating the already queued
 source. `ui.freshness.cancel`, `ui.freshness.pause`, and `ui.freshness.resume`
-mutate the job/source state.
+mutate the job/source state. `ui.freshness.cancel` also accepts
+`target_request_id` to cancel an active or queued freshness request (including
+prefetch and direct-sync stages before a queue `job_id` exists), and when both
+`target_request_id` and `job_id` are passed it cancels the active worker token
+and best-effort marks the queued job row cancelled.
 Their entire response, including `result`, uses the shared freshness UI
 projection. Private source checkpoints stay in SQLite and are omitted from
 cancel, pause, and resume results as well as status snapshots.

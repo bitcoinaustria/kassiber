@@ -6,15 +6,15 @@ $ daemon
 > {"args":{},"kind":"daemon.lock","request_id":2}
 < {"kind":"daemon.lock","schema_version":1,"data":{"locked":true},"request_id":2}
 > {"args":{"project_id":"default"},"kind":"ui.projects.select","request_id":3}
-< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1366 bytes fnv128 e5ab2ae59c419019f69766021a540802]
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1364 bytes fnv128 25c3f5de0b9b758c4e806a68f0f35342]
 > {"args":{"name":"Next","select":false},"kind":"ui.projects.create","request_id":4}
 < {"kind":"ui.projects.create","schema_version":1,"data":{"project":{"id":"next","name":"Next","path":"<SANDBOX>/xdg-data/kassiber/projects/next","data_root":"<SANDBOX>/xdg-data/kassiber/projects/next/data","database":"<SANDBOX>/xdg-data/kassiber/projects/next/data/kassiber.sqlite3","encrypted":false,"last_opened_at":null},"selected_project_id":"default","unlocked":false},"request_id":4}
 > {"args":{"id":"next","require_existing_project":true},"kind":"ui.projects.select","request_id":5}
 < {"kind":"error","schema_version":1,"error":{"code":"invalid_project_database","message":"database does not contain a Kassiber project schema","hint":"Choose an existing Kassiber project database, not an empty or missing database file.","details":{"database":"<SANDBOX>/xdg-data/kassiber/projects/next/data/kassiber.sqlite3"},"retryable":false,"debug":null},"request_id":5}
 > {"args":{"id":"next"},"kind":"ui.projects.select","request_id":6}
-< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"next","name":"Next","path":"<SANDBOX>/xdg-data/kassiber/projects/next","data_root":"<SANDBOX>/xdg-data/kassiber/projects/next/data","database":"<SANDBOX>/xdg-data/ka… [1318 bytes fnv128 e2041fc23a0b283d0ff164b3448fa0db]
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"next","name":"Next","path":"<SANDBOX>/xdg-data/kassiber/projects/next","data_root":"<SANDBOX>/xdg-data/kassiber/projects/next/data","database":"<SANDBOX>/xdg-data/ka… [1316 bytes fnv128 a485869ab9255abdaa0357ff4052b923]
 > {"args":{"id":"default"},"kind":"ui.projects.select","request_id":7}
-< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1366 bytes fnv128 e5ab2aef9c419019f69766021a5a479e]
+< {"kind":"ui.projects.select","schema_version":1,"data":{"project":{"id":"default","name":"Default","path":"<SANDBOX>/xdg-data/kassiber/projects/default","data_root":"<SANDBOX>/xdg-data/kassiber/projects/default/data","database":"<SANDBOX>… [1364 bytes fnv128 25c3f5e80b9b758c4e806a68f0f992de]
 > <shutdown>
 < {"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"stop"}
 === catalog

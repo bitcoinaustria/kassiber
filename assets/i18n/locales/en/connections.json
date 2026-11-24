@@ -933,6 +933,7 @@
       "errorMaterial": "Paste watch-only Silent Payments material.",
       "errorStartPoint": "Set a start height/date, or choose and acknowledge full-history scanning.",
       "errorStartHeight": "Start height must be a whole number.",
+      "errorStartDate": "Choose a valid start date.",
       "errorFullHistoryAck": "Acknowledge the full-history scan warning.",
       "errorServerAck": "Acknowledge the server-assisted scan privacy warning."
     },
@@ -1408,7 +1409,8 @@
     },
     "setupFailed": {
       "fallback": "Connection setup failed.",
-      "notFullySynced": "The connection was saved, but its history was not fully synced."
+      "notFullySynced": "The connection was saved, but its history was not fully synced.",
+      "notFullySyncedDetail": "The connection was saved, but its history was not fully synced: {{detail}}"
     },
     "summary": {
       "title": "Import summary",
@@ -1454,7 +1456,21 @@
     },
     "progress": {
       "importing": "Importing {{wallet}}…",
-      "rows": "{{processed}} / {{total}} rows"
+      "scanning": "Scanning {{wallet}}…",
+      "cancelling": "Stopping scan for {{wallet}}…",
+      "rows": "{{processed}} / {{total}} rows",
+      "cancelScan": "Stop scan",
+      "cancellingButton": "Stopping…"
+    },
+    "dismissed": {
+      "scanStoppedTitle": "Connection saved; scan stopped",
+      "savedScanStopped": "{{label}} was saved. Its scan was stopped — you can sync it from Connections later.",
+      "savedScanSkippedTitle": "Connection saved; scan skipped",
+      "savedScanSkippedBody": "{{label}} was saved in the background. Initial scanning was skipped because the dialog was closed — you can sync it from Connections.",
+      "failedTitle": "Connection setup failed",
+      "failedBody": "Could not finish setting up {{label}}: {{error}}",
+      "bisqHeldTitle": "Imported with held Bisq trades",
+      "bisqHeldBody": "{{label}} finished importing in the background, but some Bisq trades were held for review."
     }
   },
   "journalStep": {

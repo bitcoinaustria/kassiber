@@ -42,6 +42,12 @@ by name (`bank_statement_mt940`); export CAMT.053 or CSV instead.
 
 Each refusal names the row, column number or field and never quotes the file.
 
+- A map that names every column only by number, when the delimiter it read
+  with skipped a row another delimiter splits into every mapped column
+  (`bank_csv_ambiguous_delimiter`): a comma file with semicolons in its
+  descriptions would otherwise take a transaction as the header and a
+  description suffix as an amount. Name the columns by header instead.
+
 - A decimal mark no row decides (`1.000` alone), a day/month order no row
   decides (`03/04/2025`), malformed grouping (`1,2,3`), a currency symbol,
   space or apostrophe grouping, or two columns that could be the same field.
@@ -96,7 +102,10 @@ Accepting (a suggestion, or any explicit lines and purchases) reuses a
 purchase's reviewed `fiat_purchase` source together with its reviewed link,
 or creates the source and links it as a `manual_source` (`method`
 `bank_statement`), and records an `accepted` decision; the purchase keeps one
-allocation. Generated text names only dates, amounts, a curated exchange and
+allocation. The desktop accepts a suggestion by its `suggestion_id` (the
+suggestion's `id`): the daemon refuses it (`conflict`) unless the pair is
+still exactly that suggestion, so a match shown as exact and unique never
+lands as an explicit pairing after the purchase or the statements changed. Generated text names only dates, amounts, a curated exchange and
 the account's short form (`••3201`). Rejecting records `rejected`; on an
 accepted pair it withdraws the line from the source's evidence and keeps the
 source. The source-of-funds report lists accepted lines as `bank_evidence`

@@ -285,17 +285,7 @@ while IFS= read -r line; do
   esac
 done
 "#;
-    let tmp = dir.join(format!(
-        "kassiber-stub.{:?}.tmp",
-        std::thread::current().id()
-    ));
-    std::fs::write(&tmp, script).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
-    let _ = std::fs::rename(&tmp, &path);
+    kassiber_test_support::write_executable(&path, script).unwrap();
     path
 }
 

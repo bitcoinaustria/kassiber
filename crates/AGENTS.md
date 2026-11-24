@@ -52,10 +52,12 @@ others) own the behavior both share.
 - URL attachments remain literal references without fetching or indexing.
   Evidence reuse copies managed files to a new attachment identity, never a
   shared `stored_relpath` that deletion could invalidate.
-- Open write transactions with `kassiber_store::begin_write_savepoint`,
-  `write_savepoint`, `write_transaction`, or `BEGIN IMMEDIATE`. A deferred one
-  that reads first fails at once against another writer instead of waiting;
-  `crates/store/tests/write_transactions.rs` enforces this.
+- Open write transactions with `kassiber_store::WriteLock`,
+  `begin_write_savepoint`, `write_savepoint`, `write_transaction`, or
+  `BEGIN IMMEDIATE`. A deferred one that reads first fails at once against
+  another writer instead of waiting; a check a concurrent writer could
+  invalidate takes `&WriteLock`. `crates/store/tests/write_transactions.rs`
+  enforces this.
 - `kassiber-pyjson`, `kassiber-pydecimal`, and `kassiber-pytext` reproduce the
   CPython formats that stored bytes and exports depend on, including Unicode
   tables pinned to CPython 3.11 (Unicode 14). Do not replace them with

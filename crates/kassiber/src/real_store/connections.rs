@@ -54,7 +54,7 @@ impl RealBook {
             backends: &mut self.backends,
             sources: &SetupSources,
             gate: self.lightning_gate.clone(),
-            version: env!("CARGO_PKG_VERSION"),
+            version: crate::version::current(),
             book_id,
         };
         f(&mut book)
@@ -69,7 +69,7 @@ impl RealBook {
             conn,
             backends: &self.backends,
             gate: self.lightning_gate.clone(),
-            version: env!("CARGO_PKG_VERSION"),
+            version: crate::version::current(),
             book_id,
             progress: None,
         })

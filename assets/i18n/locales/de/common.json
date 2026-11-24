@@ -81,5 +81,56 @@
   "passphraseReveal": {
     "show": "Passphrase anzeigen",
     "hide": "Passphrase ausblenden"
+  },
+  "datePicker": {
+    "selectDate": "Datum wählen",
+    "clearDate": "Datum löschen",
+    "today": "Heute",
+    "previousMonth": "Vorheriger Monat",
+    "nextMonth": "Nächster Monat",
+    "previousYear": "Vorheriges Jahr",
+    "nextYear": "Nächstes Jahr",
+    "previousYears": "Frühere Jahre",
+    "nextYears": "Spätere Jahre",
+    "chooseMonth": "Monat wählen",
+    "chooseYear": "Jahr wählen",
+    "displayFormat": "{{day}}. {{month}} {{year}}",
+    "monthsFull": {
+      "jan": "Jänner",
+      "feb": "Februar",
+      "mar": "März",
+      "apr": "April",
+      "may": "Mai",
+      "jun": "Juni",
+      "jul": "Juli",
+      "aug": "August",
+      "sep": "September",
+      "oct": "Oktober",
+      "nov": "November",
+      "dec": "Dezember"
+    },
+    "monthsShort": {
+      "jan": "Jän.",
+      "feb": "Feb.",
+      "mar": "März",
+      "apr": "Apr.",
+      "may": "Mai",
+      "jun": "Juni",
+      "jul": "Juli",
+      "aug": "Aug.",
+      "sep": "Sep.",
+      "oct": "Okt.",
+      "nov": "Nov.",
+      "dec": "Dez."
+    },
+    "weekdays": {
+      "mon": "Mo",
+      "tue": "Di",
+      "wed": "Mi",
+      "thu": "Do",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "So"
+    }
   }
 }

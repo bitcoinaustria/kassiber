@@ -2,7 +2,7 @@
 name = "kassiber"
 description = "Kassiber's backend binary: the CLI, the desktop daemon, the MCP server, and the operator broker"
 # The product version, which --version, daemon.ready, and status report.
-version = "0.22.78"
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -29,6 +29,7 @@ test-harness = [
   "kassiber-runtime/fake",
   "kassiber-daemon/test-kinds",
   "kassiber-store/test-hooks",
+  "kassiber-store/test-version",
   "kassiber-secrets/test-hooks",
   "kassiber-backup/test-hooks",
   "kassiber-operator/test-harness",
@@ -75,6 +76,7 @@ zeroize = "1"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 # Loopback OpenCode API fakes for the provider broker's black-box tests.
 kassiber-net = { path = "../net", features = ["test-support"] }
 tempfile = "3"

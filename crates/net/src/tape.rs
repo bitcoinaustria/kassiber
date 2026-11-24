@@ -6,8 +6,10 @@
 //! how it failed. `replay:<file>` serves the recorded bytes instead of
 //! connecting. A recorded failure is replayed at connect time; a recorded
 //! connection is bound to the replayed one at its first write, to the unused
-//! recording for that endpoint whose first write was the same bytes, since
-//! parallel connections open in any order (recorded order is the fallback).
+//! recording for that endpoint whose first write matches, since parallel
+//! connections open in any order (recorded order is the fallback). An exact
+//! match takes priority over an HTTP match that differs only in Kassiber's
+//! User-Agent version.
 //! `replay-strict:<file>` has no fallback: a first write no unused recording
 //! began with gets a connection that delivers nothing, so a request the
 //! recording never made fails instead of reading another request's reply.
@@ -27,7 +29,11 @@
 //! write when it is empty) fires it: the hold creates `<dir>/held`, and
 //! every replayed read from then on waits until `<dir>/release` exists (at
 //! most a minute), as a server that answers nothing while it holds one
-//! request. It fires once per process.
+//! request. It fires once per process. When `<dir>/release-on-revoke`
+//! exists, revoking any network consent in the process (a cancelled or
+//! stopped request) releases it too: the recording's server answered only
+//! after the test saw the product stop, so the answer replays after the
+//! stop, never before it (a timer could release it first under load).
 //!
 //! `KASSIBER_TEST_NET_TAPE_WRITES=<file>` appends every replayed write to
 //! the file, one base64 line each, so a test can count the requests a replay
@@ -93,6 +99,12 @@ enum Event {
 static MODE: OnceLock<Option<Mode>> = OnceLock::new();
 static HOLD: OnceLock<Option<PathBuf>> = OnceLock::new();
 static HOLD_FIRED: AtomicBool = AtomicBool::new(false);
+static REVOKED: AtomicBool = AtomicBool::new(false);
+
+/// A consent was revoked: a hold armed to release on that releases.
+pub(crate) fn note_revoked() {
+    REVOKED.store(true, Ordering::SeqCst);
+}
 static WRITES: OnceLock<Option<Mutex<File>>> = OnceLock::new();
 
 /// Note one replayed write for the test.
@@ -136,8 +148,18 @@ fn fires(dir: &std::path::Path, bytes: &[u8]) -> bool {
 
 /// Wait for the hold's release, at most a minute.
 fn wait_for_release(dir: &std::path::Path) {
+    wait_for_release_or_revoked(dir, &REVOKED);
+}
+
+/// [`wait_for_release`] against a given revocation flag, so unit tests don't
+/// share the process-wide one other tests' `Consent::revoke` calls set.
+fn wait_for_release_or_revoked(dir: &std::path::Path, revoked: &AtomicBool) {
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    while !dir.join("release").exists() && std::time::Instant::now() < deadline {
+    let on_revoke = dir.join("release-on-revoke").exists();
+    while !dir.join("release").exists()
+        && !(on_revoke && revoked.load(Ordering::SeqCst))
+        && std::time::Instant::now() < deadline
+    {
         std::thread::sleep(Duration::from_millis(5));
     }
 }
@@ -289,7 +311,21 @@ fn bind(key: &str, first: Option<&[u8]>) -> Option<Recorded> {
     let strict = replays.strict;
     let slots = replays.by_key.get_mut(key)?;
     match pick(slots, first, strict) {
-        Some(index) => slots[index].take(),
+        Some(index) => {
+            let mut recorded = slots[index].take()?;
+            if let (Some(actual), Some(saved)) = (first, recorded.first_write.as_deref()) {
+                if saved != actual && same_http_request(saved, actual) {
+                    // Keep the strict replay's byte budget accurate when the version has a
+                    // different length. Retain the recorded budget for malformed tapes.
+                    recorded.recorded_written = recorded
+                        .recorded_written
+                        .checked_sub(saved.len())
+                        .and_then(|remaining| remaining.checked_add(actual.len()))
+                        .unwrap_or(recorded.recorded_written);
+                }
+            }
+            Some(recorded)
+        }
         None => {
             drop(replays);
             if strict {
@@ -321,14 +357,57 @@ fn miss(key: &str, what: &str) {
 fn pick(slots: &[Option<Recorded>], first: Option<&[u8]>, strict: bool) -> Option<usize> {
     let open = |slot: &Option<Recorded>| slot.as_ref().is_some_and(|r| r.failure.is_none());
     let matching = first.and_then(|bytes| {
-        slots.iter().position(|slot| {
-            open(slot) && slot.as_ref().and_then(|r| r.first_write.as_deref()) == Some(bytes)
-        })
+        let find = |matches: &dyn Fn(&[u8]) -> bool| {
+            slots.iter().position(|slot| {
+                open(slot)
+                    && slot
+                        .as_ref()
+                        .and_then(|r| r.first_write.as_deref())
+                        .is_some_and(matches)
+            })
+        };
+        find(&|saved| saved == bytes).or_else(|| find(&|saved| same_http_request(saved, bytes)))
     });
     if strict && first.is_some() {
         return matching;
     }
     matching.or_else(|| slots.iter().position(open))
+}
+
+fn same_http_request(saved: &[u8], actual: &[u8]) -> bool {
+    match (http_agent_parts(saved), http_agent_parts(actual)) {
+        (Some(saved), Some(actual)) => saved == actual,
+        _ => false,
+    }
+}
+
+/// Split around only a numeric Kassiber version in an HTTP request's User-Agent.
+/// Keep the request line, other headers and body in the comparison.
+fn http_agent_parts(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let mut lines = bytes.split_inclusive(|&byte| byte == b'\n');
+    let request = lines.next()?;
+    if !request.ends_with(b" HTTP/1.1\r\n") {
+        return None;
+    }
+    let mut offset = request.len();
+    for line in lines.take_while(|line| *line != b"\r\n") {
+        if let Some(value) = line.strip_prefix(b"User-Agent: ") {
+            let (product, version) = value.split_at_checked(b"kassiber/".len())?;
+            let version = version.strip_suffix(b"\r\n")?;
+            if product.eq_ignore_ascii_case(b"kassiber/")
+                && version.first().is_some_and(u8::is_ascii_digit)
+                && version.contains(&b'.')
+                && version
+                    .iter()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b".-+".contains(byte))
+            {
+                let end = offset + line.len() - 2;
+                return Some((&bytes[..end - version.len()], &bytes[end..]));
+            }
+        }
+        offset += line.len();
+    }
+    None
 }
 
 /// A connection's handle while recording.
@@ -613,6 +692,32 @@ mod tests {
     }
 
     #[test]
+    fn a_recording_matches_a_new_version_only_in_its_user_agent() {
+        let previous = b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/0.22.78\r\n\r\n";
+        let current = b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/1.0.0-alpha.0\r\n\r\n";
+        let slot = |first: &[u8]| {
+            Some(Recorded {
+                first_write: Some(first.to_vec()),
+                ..Recorded::default()
+            })
+        };
+        let slots = [slot(previous), slot(current)];
+        assert_eq!(pick(&slots, Some(current), true), Some(1));
+        assert_eq!(pick(&slots[..1], Some(current), true), Some(0));
+        for changed in [
+            b"GET /other HTTP/1.1\r\nUser-Agent: kassiber/1.0.0\r\n\r\n".as_slice(),
+            b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/ai\r\n\r\n",
+            b"GET /tx HTTP/1.1\r\nUser-Agent: kassiber/1.0.0\r\n\r\nchanged body",
+        ] {
+            assert_eq!(pick(&slots, Some(changed), true), None);
+        }
+        assert!(!same_http_request(
+            b"GET /tx HTTP/1.1\r\n\r\nUser-Agent: kassiber/0.22.78\r\n",
+            b"GET /tx HTTP/1.1\r\n\r\nUser-Agent: kassiber/1.0.0\r\n",
+        ));
+    }
+
+    #[test]
     fn a_tape_round_trips_reads_failures_and_order() {
         let text = [
             format!("open\t1\t0\t{}\t5000", b64(b"127.0.0.1")),
@@ -669,6 +774,29 @@ mod tests {
             decode_error(&encode_error(&Error::CertificateChanged)),
             Error::CertificateChanged
         ));
+    }
+
+    #[test]
+    fn a_hold_marked_release_on_revoke_ends_when_a_consent_is_revoked() {
+        let dir = std::env::temp_dir().join(format!("kassiber-tape-revoke-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("release-on-revoke"), b"").unwrap();
+        // Other tests revoke consents and set the process-wide flag; use our own.
+        let revoked = std::sync::Arc::new(AtomicBool::new(false));
+        let waiting = {
+            let dir = dir.clone();
+            let revoked = revoked.clone();
+            std::thread::spawn(move || {
+                let began = std::time::Instant::now();
+                wait_for_release_or_revoked(&dir, &revoked);
+                began.elapsed()
+            })
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!waiting.is_finished(), "held until the stop");
+        revoked.store(true, Ordering::SeqCst);
+        assert!(waiting.join().unwrap() < Duration::from_secs(30));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

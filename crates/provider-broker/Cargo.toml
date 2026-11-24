@@ -39,6 +39,7 @@ sha2 = "0.11"
 nix = { version = "0.30", features = ["signal", "fs"] }
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 # Loopback OpenCode servers for the adapter's fake-CLI tests.
 kassiber-net = { path = "../net", features = ["test-support"] }
 tempfile = "3"

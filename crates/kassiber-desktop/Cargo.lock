@@ -1545,6 +1545,7 @@ dependencies = [
  "bytemuck",
  "core-foundation 0.10.1",
  "dispatch2",
+ "kassiber-test-support",
  "keyring-core",
  "miniz_oxide 0.8.9",
  "objc2 0.6.5",
@@ -1561,6 +1562,10 @@ dependencies = [
  "zbus-secret-service-keyring-store",
  "zeroize",
 ]
+
+[[package]]
+name = "kassiber-test-support"
+version = "0.1.0"
 
 [[package]]
 name = "keyring-core"

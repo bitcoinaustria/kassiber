@@ -405,11 +405,7 @@ done
 "#
         .replace("__STORE__", native_id())
         .replace("__SERVICE__", SERVICE);
-        std::fs::write(&path, script).unwrap();
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        kassiber_test_support::write_executable(&path, script).unwrap();
         let launch = Launch {
             data_root: Some(dir.join("data")),
             explicit_root: true,

@@ -42,6 +42,7 @@ members = [
   "crates/pytext",
   "crates/runtime",
   "crates/tax-countries",
+  "crates/test-support",
   "crates/xlsx",
   "crates/reports",
   "crates/repo-checks",

@@ -278,6 +278,8 @@ pub struct App {
     /// What the last cycle changed, for 30 s (`lastChange`).
     pub last_change: Option<BookChange>,
     meta: HashMap<String, Meta>,
+    #[cfg(test)]
+    pub(crate) sent_args: HashMap<String, Value>,
     /// Requests whose answers are dropped (made before a lock, an unlock or a book switch):
     /// request_id → (kind, process generation).
     orphaned: HashMap<String, (String, u64)>,
@@ -548,6 +550,8 @@ impl App {
             cycle: BookRefresh::default(),
             last_change: None,
             meta: HashMap::new(),
+            #[cfg(test)]
+            sent_args: HashMap::new(),
             orphaned: HashMap::new(),
             parked: HashMap::new(),
             next_seq: 0,
@@ -804,12 +808,29 @@ impl App {
 
     /// [`send`](Self::send), keeping the answer for as long as the returned ticket lives.
     pub fn send_ticket(&mut self, kind: &str, args: Value, tag: &'static str) -> Ticket {
+        self.send_ticket_id(kind, args, tag).1
+    }
+
+    /// [`send_ticket`](Self::send_ticket), also naming the request: for a caller that cancels it
+    /// or matches its progress records by id. Its answer still reaches only the ticket's holder.
+    pub fn send_ticket_id(
+        &mut self,
+        kind: &str,
+        args: Value,
+        tag: &'static str,
+    ) -> (String, Ticket) {
         let id = self
             .send(kind, args, tag)
             .expect("send answers every request");
         let ticket = Ticket(Arc::new(()));
-        self.tickets.insert(id, Arc::downgrade(&ticket.0));
-        ticket
+        self.tickets.insert(id.clone(), Arc::downgrade(&ticket.0));
+        (id, ticket)
+    }
+
+    /// Whether the answer `on_reply` is handling now was sent with a ticket ([`Ticket::answers`]
+    /// tells whose). An answer without one names no caller.
+    pub fn delivering_ticketed(&self) -> bool {
+        self.delivering_ticket.is_some()
     }
 
     /// Hands a registered request to the daemon.
@@ -843,6 +864,8 @@ impl App {
         let reread = (kinds::is_read(kind) && !kinds::is_streaming(kind)).then(|| args.clone());
         self.pending
             .insert(id.to_owned(), (tag, kind.to_owned(), Instant::now()));
+        #[cfg(test)]
+        self.sent_args.insert(id.to_owned(), args.clone());
         self.meta.insert(
             id.to_owned(),
             Meta {
@@ -972,6 +995,7 @@ impl App {
                 crate::review::on_progress(self, tag, &envelope);
                 crate::reports::books::on_progress(self, tag, &envelope);
                 crate::assistant::on_progress(self, tag, &envelope);
+                crate::wallets::on_progress(self, tag, &request_id, &envelope);
             }
             RecordRoute::Violation(err) => {
                 // The daemon broke the protocol: it is killed, and everything it had fails.
@@ -1107,7 +1131,9 @@ impl App {
         true
     }
 
-    fn deliver_as(&mut self, tag: &'static str, id: &str, reply: Reply) {
+    /// Hands a finished reply to the app and every module. An answer whose caller dropped
+    /// every clone of its ticket is not delivered.
+    pub(crate) fn deliver_as(&mut self, tag: &'static str, id: &str, reply: Reply) {
         let ticket = self.tickets.remove(id);
         if ticket
             .as_ref()

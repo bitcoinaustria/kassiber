@@ -265,6 +265,23 @@ fn mapped_plan(header: &[String], map: &[(String, Value)]) -> Result<Option<Plan
     Ok(Some(plan))
 }
 
+/// The columns a map names only by number need this many cells; `None`
+/// when any mapped field names a header, which checks the row itself.
+fn positional_width(map: &[(String, Value)]) -> Option<usize> {
+    let mut width = 0;
+    for (_, value) in map.iter().filter(|(k, _)| !OPTIONS.contains(&k.as_str())) {
+        let items = match value {
+            Value::List(items) => items.clone(),
+            other => vec![other.clone()],
+        };
+        for item in items {
+            let Value::Int(n) = item else { return None };
+            width = width.max(usize::try_from(n).ok()?);
+        }
+    }
+    (width > 0).then_some(width)
+}
+
 /// Table, header row and plan: the first delimiter under which
 /// an early row reads as a usable header.
 fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usize, Plan)> {
@@ -304,6 +321,30 @@ fn choose(text: &str, map: &[(String, Value)]) -> Result<(Vec<Vec<String>>, usiz
                     ))
                     .with_hint("Export the statement again unchanged.")
                     .with_details(dict([("reason", s("bank_csv_text_after_quote"))])));
+                }
+                // A map of column numbers can't tell a header from a data
+                // row: when this delimiter skipped a row another delimiter
+                // splits into every mapped column, the file's own delimiter
+                // may be the other one (punctuation inside a description),
+                // and reading on would take the wrong cells as amounts.
+                if let Some(width) = mapped.then(|| positional_width(map)).flatten() {
+                    let skipped = [';', '\t', ',']
+                        .into_iter()
+                        .filter(|other| *other != delimiter)
+                        .any(|other| {
+                            rows(text, other)
+                                .rows
+                                .iter()
+                                .take(index)
+                                .any(|row| row.len() >= width)
+                        });
+                    if skipped {
+                        return Err(invalid(
+                            "The file's delimiter is ambiguous for a column map of column numbers",
+                        )
+                        .with_hint("Name the columns by their header text in the column map, e.g. {\"booking_date\": \"Date\", \"amount\": \"Amount\"}.")
+                        .with_details(dict([("reason", s("bank_csv_ambiguous_delimiter"))])));
+                    }
                 }
                 return Ok((table, index, plan));
             }

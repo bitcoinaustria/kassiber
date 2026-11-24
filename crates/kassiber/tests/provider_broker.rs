@@ -341,7 +341,6 @@ fn the_mcp_child_refuses_a_missing_manifest() {
 /// text, and an OpenCode 2 `serve` announcing `port` and waiting for its
 /// stdin to close. It records the names of its environment per run.
 fn fake_opencode(dir: &Path, version: &str, models: &str, port: u16) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::write(dir.join("models"), models).unwrap();
@@ -363,8 +362,7 @@ esac
         root = dir.display()
     );
     let executable = bin.join("opencode");
-    std::fs::write(&executable, script).unwrap();
-    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    kassiber_test_support::write_executable(&executable, script).unwrap();
     bin
 }
 

@@ -93,9 +93,7 @@ impl Runner {
         fs::create_dir(&bin).unwrap();
         for tool in ["git", "gh", "kassiber-release"] {
             let path = bin.join(tool);
-            fs::write(&path, MOCK).unwrap();
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+            kassiber_test_support::write_executable(&path, MOCK).unwrap();
         }
         let path = |name: &str| root.path().join(name).to_string_lossy().into_owned();
         let env = BTreeMap::from([

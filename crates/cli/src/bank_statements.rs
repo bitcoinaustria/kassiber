@@ -110,6 +110,7 @@ mod tests {
         let Ok(Command::Accept {
             lines,
             transactions,
+            suggestion: None,
         }) = command(&accept)
         else {
             panic!("accept")

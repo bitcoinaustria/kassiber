@@ -610,44 +610,22 @@ mod tests {
         );
     }
 
-    /// Runs a stand-in script this test just wrote. Spawning it can fail with ETXTBSY ("Text file
-    /// busy") while another test thread sits between fork and exec holding the script's write
-    /// descriptor, so only that start failure is retried.
-    #[cfg(unix)]
-    fn run_written(
-        program: &std::path::Path,
-        cwd: &std::path::Path,
-        preference: Option<&std::path::Path>,
-    ) -> Result<AppUpdate, UpdateError> {
-        for _ in 0..50 {
-            match run_cli_check(program, cwd, preference) {
-                Err(UpdateError::StartFailed) => {
-                    std::thread::sleep(std::time::Duration::from_millis(20))
-                }
-                other => return other,
-            }
-        }
-        run_cli_check(program, cwd, preference)
-    }
-
     /// The real spawn path against a stand-in CLI that prints a canned envelope: no network.
     #[cfg(unix)]
     #[test]
     fn runs_the_cli_and_caps_its_output() {
-        use std::os::unix::fs::PermissionsExt;
+        use kassiber_test_support::write_executable;
         let dir = std::env::temp_dir().join(format!("kassiber-rune-update-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let fake = dir.join("kassiber");
-        std::fs::write(&fake, "#!/bin/sh\n[ \"$1 $2 $3\" = \"--format json update\" ] || exit 9\nprintf '%s' '{\"kind\":\"update\",\"data\":{\"current_version\":\"0.22.55\",\"latest_version\":\"0.22.56\",\"update_available\":true,\"prerelease\":false,\"release_url\":\"https://github.com/bitcoinaustria/kassiber/releases/tag/v0.22.56\"}}'\n").unwrap();
-        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let r = run_written(&fake, &dir, None).unwrap();
+        write_executable(&fake, "#!/bin/sh\n[ \"$1 $2 $3\" = \"--format json update\" ] || exit 9\nprintf '%s' '{\"kind\":\"update\",\"data\":{\"current_version\":\"0.22.55\",\"latest_version\":\"0.22.56\",\"update_available\":true,\"prerelease\":false,\"release_url\":\"https://github.com/bitcoinaustria/kassiber/releases/tag/v0.22.56\"}}'\n").unwrap();
+        let r = run_cli_check(&fake, &dir, None).unwrap();
         assert_eq!(r.latest_version.as_deref(), Some("0.22.56"));
         let big = dir.join("big");
-        std::fs::write(&big, "#!/bin/sh\nhead -c 300000 /dev/zero\n").unwrap();
-        std::fs::set_permissions(&big, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&big, "#!/bin/sh\nhead -c 300000 /dev/zero\n").unwrap();
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(
-            run_written(&big, &dir, None).unwrap_err().message(),
+            run_cli_check(&big, &dir, None).unwrap_err().message(),
             "The Kassiber CLI returned an unexpectedly large update response."
         );
         assert_eq!(
@@ -658,10 +636,9 @@ mod tests {
         );
         // The CLI is told which consent file the app read.
         let named = dir.join("named");
-        std::fs::write(&named, "#!/bin/sh\n[ \"$KASSIBER_UPDATE_PREFERENCE_FILE\" = /x/config/update-checks.json ] || exit 9\nprintf '%s' '{\"kind\":\"update\",\"data\":{\"current_version\":\"1\",\"latest_version\":\"1\",\"update_available\":false,\"prerelease\":false,\"release_url\":\"\"}}'\n").unwrap();
-        std::fs::set_permissions(&named, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_executable(&named, "#!/bin/sh\n[ \"$KASSIBER_UPDATE_PREFERENCE_FILE\" = /x/config/update-checks.json ] || exit 9\nprintf '%s' '{\"kind\":\"update\",\"data\":{\"current_version\":\"1\",\"latest_version\":\"1\",\"update_available\":false,\"prerelease\":false,\"release_url\":\"\"}}'\n").unwrap();
         assert!(
-            run_written(
+            run_cli_check(
                 &named,
                 &dir,
                 Some(std::path::Path::new("/x/config/update-checks.json"))

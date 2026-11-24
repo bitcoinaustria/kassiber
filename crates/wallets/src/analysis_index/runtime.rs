@@ -111,6 +111,23 @@ struct JobState {
 struct Jobs {
     state: Mutex<JobState>,
     idle: Condvar,
+    /// Fixture only: spawned workers wait while held ([`Runtime::hold_workers`]).
+    #[cfg(any(test, feature = "test-harness"))]
+    held: Mutex<bool>,
+    #[cfg(any(test, feature = "test-harness"))]
+    released: Condvar,
+}
+
+/// Fixture only: workers started while this lives wait until it drops.
+#[cfg(any(test, feature = "test-harness"))]
+pub struct HeldWorkers(Arc<Jobs>);
+
+#[cfg(any(test, feature = "test-harness"))]
+impl Drop for HeldWorkers {
+    fn drop(&mut self) {
+        *lock(&self.0.held) = false;
+        self.0.released.notify_all();
+    }
 }
 
 fn busy(message: &str) -> AppError {
@@ -286,6 +303,15 @@ impl Runtime {
         Arc::new(Self::default())
     }
 
+    /// Fixture only: hold every worker started from now on before it
+    /// computes, until the guard drops, so a fixture can cancel a job that
+    /// has not begun (as a recording did) instead of racing its thread.
+    #[cfg(any(test, feature = "test-harness"))]
+    pub fn hold_workers(&self) -> HeldWorkers {
+        *lock(&self.jobs.held) = true;
+        HeldWorkers(Arc::clone(&self.jobs))
+    }
+
     /// `clear_runtime`: cancel every worker and forget receipts and grants.
     pub fn clear(&self) {
         let mut state = lock(&self.jobs.state);
@@ -385,6 +411,13 @@ impl Runtime {
         let spawned = std::thread::Builder::new()
             .name("chain-analysis".into())
             .spawn(move || {
+                #[cfg(any(test, feature = "test-harness"))]
+                {
+                    let mut held = lock(&jobs.held);
+                    while *held {
+                        held = jobs.released.wait(held).unwrap_or_else(|e| e.into_inner());
+                    }
+                }
                 let update = |value: Value| {
                     if let Some(job) = lock(&jobs.state).jobs.get_mut(&id) {
                         job.progress = value;

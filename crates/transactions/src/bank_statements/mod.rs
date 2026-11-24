@@ -428,6 +428,9 @@ pub enum Command {
     Accept {
         lines: Vec<String>,
         transactions: Vec<String>,
+        /// The suggestion the user was shown (desktop): the acceptance is
+        /// refused unless the pair is still exactly that suggestion.
+        suggestion: Option<String>,
     },
     Reject {
         lines: Vec<String>,
@@ -688,6 +691,7 @@ impl Command {
             "ui.source_funds.bank_lines.accept" => Command::Accept {
                 lines: ids("line_ids")?,
                 transactions: ids("transaction_ids")?,
+                suggestion: text("suggestion_id"),
             },
             "ui.source_funds.bank_lines.reject" => Command::Reject {
                 lines: ids("line_ids")?,

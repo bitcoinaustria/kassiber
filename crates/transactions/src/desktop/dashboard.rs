@@ -1164,6 +1164,14 @@ fn activity(
             }
         }
         row_of.insert(text(row, "id"), output.len());
+        // The pair metadata of the leg this row shows: a cross-asset pair is
+        // sized by the shown leg's own role, quantity and rate.
+        let pair = match (pair, pairs.get(text(source, "id"))) {
+            (Some(first), Some(shown)) if text(first, "pair_id") == text(shown, "pair_id") => {
+                Some(shown)
+            }
+            _ => pair,
+        };
         output.push(render::untagged(source, pair));
     }
     let mut unshown: BTreeMap<usize, i64> = BTreeMap::new();
