@@ -86,6 +86,9 @@ concurrency:
 jobs:
   build-cli:
     name: Build ${{ matrix.label }} CLI
+    # Stacked pull requests (based on another pull request's branch) skip the
+    # package builds; they run once the layer targets main (ci.yml lane note).
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # The CLI and the desktop sidecar are the Rust `kassiber` binary (plan 21,

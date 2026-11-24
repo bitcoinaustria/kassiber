@@ -439,7 +439,24 @@ that each fetch the locked test data first:
    observer-sensitive paths change.
 6. The stable `required` aggregate succeeds only when every required job
    passes. Platform credential jobs keep their separate credential/packaging
-   path filter, and ordinary pull requests do not build release packages.
+   path filter. `prerelease-binaries.yml` builds the CLI and desktop packages
+   (unpublished, `dev` channel) on pull requests that touch Rust, packaging or
+   release paths.
+
+A pull request whose base is another pull request's branch (a stacked layer)
+runs a fast lane: `Recorded sessions`, `Chain observers` and the macOS and
+Windows desktop builds are skipped, and `required` accepts those skips. Pull
+requests into `main` and pushes to `main` run every job. A stack pays the full
+lane on the layer that targets `main`, and each later layer pays it once it is
+retargeted there, so stacked layers must target the branch below them, not
+`main`. `prerelease-binaries.yml` skips its package builds on stacked layers
+the same way.
+
+Starting `ci` by hand (workflow_dispatch, on any branch) runs only the desktop
+app checks on the chosen OS (`windows-latest` by default). Use it for the
+Windows or macOS desktop checks of work that is tested locally and merged
+without the full cloud lane:
+`gh workflow run ci.yml --ref <branch> -f desktop_os=windows-latest`.
 
 Every job that compiles Rust first installs the toolchain `rust-toolchain.toml`
 pins and restores a Cargo cache of the registry and the dependency builds (the
