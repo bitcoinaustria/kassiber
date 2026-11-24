@@ -1194,7 +1194,8 @@ pub fn model(
             )),
         )),
     }
-    Ok(dict([
+    let wallet_ids: Vec<String> = wallets.iter().map(|w| w.id.clone()).collect();
+    let mut model = dict([
         ("workspace", value(workspace, "label").clone()),
         ("profile", value(profile, "label").clone()),
         ("fiat_currency", value(profile, "fiat_currency").clone()),
@@ -1248,7 +1249,16 @@ pub fn model(
             Value::List(holdings.iter().map(appendix_row).collect()),
         ),
         ("snapshot", snapshot),
-    ]))
+    ]);
+    crate::source_coverage::attach(
+        conn,
+        &mut model,
+        &text(profile, "id"),
+        Some(&wallet_ids),
+        &stamp(end)?,
+        &generated_at,
+    )?;
+    Ok(model)
 }
 
 #[cfg(test)]

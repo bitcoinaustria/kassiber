@@ -2036,6 +2036,20 @@ rather than assume it is complete. Details:
 [imports](imports.md#onboarding-an-unsupported-exchange-with-the-assistant) and
 [wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
 
+`ui_sources_coverage` reads how current each source is for a period end (live
+sync, file snapshot, hybrid, or manual; `covered_through`, `freshness_state`,
+and the one action that fixes it). Before saying a report for a period is
+complete, read it with that `period_end`: a source that is `behind` makes the
+report provisional, though `ui_report_blockers` does not list it (the blockers
+payload is unchanged). `ui_sources_attest_coverage` records the user's own
+statement that a source had no activity after a date or was closed on it, or
+clears it, after consent; the assistant states only what the user said. The
+statement closes a coverage gap only when its date is on or before the
+source's covered end (`attestation_gap` names what a later date leaves open)
+and creates no transactions, balances or tax facts. Exports of a period whose
+sources lag carry the same provisional note. Both are local; see
+[source coverage](desktop.md#sources-live-sync-and-file-snapshots).
+
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

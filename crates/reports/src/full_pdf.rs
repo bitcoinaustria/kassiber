@@ -299,6 +299,17 @@ pub fn model(
         let data = (layer.collect)(conn, profile, wallet_id)?;
         replace(&mut model, "country_layer", data);
     }
+    // Sources that do not reach the report's end (its generation time):
+    // the figures are provisional; nothing else changes.
+    let wallet_ids = wallet_id.map(|id| vec![id.to_owned()]);
+    crate::source_coverage::attach(
+        conn,
+        &mut model,
+        &text(profile, "id"),
+        wallet_ids.as_deref(),
+        &context.generated_at,
+        &context.generated_at,
+    )?;
     Ok(model)
 }
 

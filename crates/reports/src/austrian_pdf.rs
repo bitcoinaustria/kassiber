@@ -64,8 +64,9 @@ pub fn model(
     let report = austrian::report(conn, workspace, profile, args)?;
     let year = int(&report, "tax_year");
     let transactions = transactions(conn, profile, year)?;
+    let generated_at = sources.now(conn)?;
     let portfolio = holdings::report(conn, profile, true)?;
-    Ok(dict([
+    let mut model = dict([
         ("report", report),
         ("portfolio", portfolio),
         ("transactions", Value::List(transactions)),
@@ -84,7 +85,16 @@ pub fn model(
                 .map(|key| (key, value(profile, key).clone())),
             ),
         ),
-    ]))
+    ]);
+    crate::source_coverage::attach(
+        conn,
+        &mut model,
+        &text(profile, "id"),
+        None,
+        &crate::source_coverage::year_end(year, &generated_at),
+        &generated_at,
+    )?;
+    Ok(model)
 }
 
 /// The sections Python's envelope lists for its own layout, kept so the

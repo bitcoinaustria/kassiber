@@ -689,6 +689,7 @@ pub fn austrian(model: &Value) -> Document {
             )
         }));
     }
+    blocks.extend(source_coverage(lang, model));
     blocks.push(note(t("at.issues.not_modelled")));
     sections.push(Section {
         id: "issues",

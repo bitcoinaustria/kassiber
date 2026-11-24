@@ -55,6 +55,7 @@ pub mod review_figures;
 pub mod scan_readiness;
 mod snapshot_write;
 mod snapshots;
+pub mod source_coverage;
 mod source_funds_assemble;
 mod source_funds_assembly;
 pub mod source_funds_bank;
