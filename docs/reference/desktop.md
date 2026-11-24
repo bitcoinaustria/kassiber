@@ -1151,6 +1151,9 @@ shell's Needs attention condition "N sources are behind for 2025"
 (`sources.behind`: sources behind for the previous calendar year's end, from
 the local read when the shell mounts, no timer; it clears when a later read
 finds none behind) opens the list with that filter and period.
+With a period the list reads that period's coverage; until the read answers its
+rows show none, and a failed read shows an alert with Retry instead of
+letting today's coverage stand in for the period.
 
 ### Connection detail: Coverage card
 

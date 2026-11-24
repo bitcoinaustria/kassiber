@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use super::common::asset_badge;
 use super::conn::{Conn, all, kind_category_label, snapshot};
+use super::coverage;
 use crate::app::{App, Currency, Reply};
 use crate::i18n::{t, tc, tr};
 use crate::icons as I;
@@ -22,7 +23,8 @@ pub enum SortKey {
     Label,
     Kind,
     Transactions,
-    Last,
+    /// Coverage, problems first (`coverageSortRank`).
+    Coverage,
     TaxFree,
     Balance,
 }
@@ -30,7 +32,7 @@ pub enum SortKey {
 impl SortKey {
     /// `defaultSortDir`: the first click starts in the most useful direction.
     fn default_asc(self) -> bool {
-        matches!(self, SortKey::Label | SortKey::Kind)
+        matches!(self, SortKey::Label | SortKey::Kind | SortKey::Coverage)
     }
 }
 
@@ -48,6 +50,21 @@ pub struct State {
     /// The remembered sort (`useRememberedTableSort("wallets")`, default kind ascending).
     pub sort: Option<(SortKey, bool)>,
     pub popup: Option<Popup>,
+    /// Coverage for the route's period (`ui.sources.coverage {period_end}`): the period it was read
+    /// for and where that read stands.
+    pub period_coverage: Option<(String, PeriodCoverage)>,
+    /// The book refresh cycle that read follows (`App::book_generation`).
+    pub period_generation: u64,
+}
+
+/// A chosen period's coverage read. Until it answers (or when it fails) rows show no coverage:
+/// today's never stands in for the period (Codex 4660314511).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PeriodCoverage {
+    /// Reading; the report of the previous read for the same period while it refreshes.
+    Loading(Option<Value>),
+    Ready(Value),
+    Failed,
 }
 
 impl Default for State {
@@ -57,11 +74,13 @@ impl Default for State {
             status: None,
             sort: Some((SortKey::Kind, true)),
             popup: None,
+            period_coverage: None,
+            period_generation: 0,
         }
     }
 }
 
-const STATUSES: [&str; 4] = ["synced", "syncing", "idle", "error"];
+const STATUSES: [&str; 5] = ["synced", "syncing", "idle", "behind", "error"];
 
 /// `kindFilterOptions`: the distinct kind categories in declaration order, then "Liquid".
 pub fn kind_options() -> Vec<&'static str> {
@@ -140,36 +159,6 @@ fn display_btc(v: f64, precision: usize) -> String {
     format!("₿ {:.*}", precision, v)
 }
 
-fn ts_ms(s: &str) -> Option<f64> {
-    crate::format::parse_ts(s)
-}
-
-/// `activityLabel`: never / just now / Nm / Nh / Nd ago, then the ISO date.
-fn activity_label(c: &Conn) -> String {
-    let Some(secs) = c.last_transaction_at.as_deref().and_then(ts_ms) else {
-        return t("connections:table.never");
-    };
-    let now = crate::format::now_secs();
-    let diff = (now - secs).max(0.0).floor() as i64;
-    if diff < 60 {
-        return t("overview:marketRate.justNow");
-    }
-    let ago = |key: &str, n: i64| tr(key, &[("count", &n.to_string())]);
-    let m = diff / 60;
-    if m < 60 {
-        return ago("overview:marketRate.minutesAgo", m);
-    }
-    let h = m / 60;
-    if h < 24 {
-        return ago("overview:marketRate.hoursAgo", h);
-    }
-    let d = h / 24;
-    if d < 30 {
-        return ago("overview:marketRate.daysAgo", d);
-    }
-    crate::format::Day::from_epoch_days((secs / 86400.0).floor() as i64).iso()
-}
-
 /// `Intl.Collator(undefined, {sensitivity: "base", numeric: true})`, close enough: case- and
 /// accent-folded, digit runs compared numerically.
 pub fn collate(a: &str, b: &str) -> std::cmp::Ordering {
@@ -233,16 +222,19 @@ pub fn compare(a: &Conn, b: &Conn, key: SortKey, tax_free: &[String]) -> std::cm
             .unwrap_or(0.0)
             .partial_cmp(&b.transaction_count.unwrap_or(0.0))
             .unwrap_or(Equal),
-        SortKey::Last => {
-            let ma = a.last_transaction_at.as_deref().and_then(ts_ms);
-            let mb = b.last_transaction_at.as_deref().and_then(ts_ms);
-            match (ma, mb) {
-                (None, None) => Equal,
-                (None, _) => Less,
-                (_, None) => Greater,
-                (Some(x), Some(y)) => x.partial_cmp(&y).unwrap_or(Equal),
-            }
-        }
+        SortKey::Coverage => coverage::sort_rank(a.coverage.as_ref())
+            .cmp(&coverage::sort_rank(b.coverage.as_ref()))
+            .then_with(|| {
+                let through = |c: &Conn| {
+                    c.coverage
+                        .as_ref()
+                        .and_then(|v| v["covered_through"].as_str())
+                        .unwrap_or("")
+                        .to_owned()
+                };
+                through(a).cmp(&through(b))
+            })
+            .then_with(|| collate(&a.label, &b.label)),
         SortKey::TaxFree => {
             let ra = tax_free.contains(&a.id) as i32;
             let rb = tax_free.contains(&b.id) as i32;
@@ -324,11 +316,13 @@ fn total_btc(app: &App, conns: &[Conn]) -> f64 {
 
 fn filtered(app: &App, conns: &[Conn]) -> Vec<Conn> {
     let st = &app.wallets.list;
+    let needs_action = search(app).needs_action;
     conns
         .iter()
         .filter(|c| {
             st.kind.as_deref().is_none_or(|k| c.category_label() == k)
                 && st.status.is_none_or(|s| c.status == s)
+                && (!needs_action || coverage::needs_action(row_coverage(app, c).as_ref()))
         })
         .cloned()
         .collect()
@@ -349,6 +343,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let total = total_btc(app, &conns);
     page.child(header(app, tk))
         .child(metrics(app, cx, tk, &conns, total))
+        .children(period_failure(app, tk))
         .child(
             surface(tk)
                 .w_full()
@@ -520,20 +515,26 @@ fn metrics(app: &App, cx: &Cx<App>, tk: &Tk, conns: &[Conn], total: f64) -> El {
     } else {
         snap_syncing
     };
-    let synced = conns.iter().filter(|c| c.status == "synced").count();
-    let unsynced = conns.len() - synced;
+    // Coverage, not "has transactions": a source counts once it is current for today
+    // (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+    let current = conns
+        .iter()
+        .filter(|c| {
+            c.coverage
+                .as_ref()
+                .is_some_and(|v| coverage::state(v) == "current")
+        })
+        .count();
+    let needs_action = conns
+        .iter()
+        .filter(|c| coverage::needs_action(c.coverage.as_ref()))
+        .count();
     let up_detail = if syncing > 0 {
-        tc(
-            "connections:metrics.upToDateRefreshingNow",
-            syncing,
-            &[("count", &crate::format::count(syncing))],
-        )
+        tc("connections:coverage.metric.refreshingNow", syncing, &[])
+    } else if needs_action == 0 {
+        t("connections:coverage.metric.allCurrent")
     } else {
-        tc(
-            "connections:metrics.upToDateNotUpToDate",
-            unsynced,
-            &[("count", &crate::format::count(unsynced))],
-        )
+        tc("connections:coverage.metric.needsAction", needs_action, &[])
     };
     let balance_text = if fiat_unavailable {
         "—".to_owned()
@@ -648,15 +649,15 @@ fn metrics(app: &App, cx: &Cx<App>, tk: &Tk, conns: &[Conn], total: f64) -> El {
             a.navigate("/transactions")
         }),
     );
-    if syncing > 0 || unsynced > 0 {
+    if syncing > 0 || needs_action > 0 {
         stats.push(
             Stat::new(
                 "wallets-metric-uptodate",
                 &I::REFRESH_CW,
-                t("connections:metrics.upToDate"),
+                t("connections:coverage.metric.label"),
                 format!(
                     "{} / {}",
-                    crate::format::count(synced),
+                    crate::format::count(current),
                     crate::format::count(conns.len())
                 ),
             )
@@ -688,6 +689,116 @@ fn metrics(app: &App, cx: &Cx<App>, tk: &Tk, conns: &[Conn], total: f64) -> El {
         t("connections:metrics.walletBalance"),
         stats,
     )
+}
+
+// ---- Coverage ----------------------------------------------------------------------------
+
+/// The route's coverage filter and period (`parseConnectionsSearch`).
+pub fn search(app: &App) -> coverage::Search {
+    coverage::parse_search(app.route.0.split_once('?').map(|(_, q)| q).unwrap_or(""))
+}
+
+/// The coverage a row shows: with a chosen period, that period's (`ui.sources.coverage`) once
+/// read, and nothing while it loads or after it failed; else today's.
+fn row_coverage(app: &App, c: &Conn) -> Option<Value> {
+    let Some(period) = search(app).period else {
+        return c.coverage.clone();
+    };
+    let (read_for, state) = app.wallets.list.period_coverage.as_ref()?;
+    let report = match state {
+        PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report)) => report,
+        _ => return None,
+    };
+    if *read_for != period {
+        return None;
+    }
+    report["sources"]
+        .as_array()?
+        .iter()
+        .find(|v| v["wallet_id"].as_str() == Some(c.id.as_str()))
+        .cloned()
+}
+
+/// The period's failed read, as an alert with a retry above the table.
+fn period_failure(app: &App, tk: &Tk) -> Option<El> {
+    let period = search(app).period?;
+    let (read_for, PeriodCoverage::Failed) = app.wallets.list.period_coverage.as_ref()? else {
+        return None;
+    };
+    (*read_for == period).then(|| {
+        row()
+            .key("wallets-period-coverage-failed")
+            .w_full()
+            .gap(tk.r(0.75))
+            .center_y()
+            .flex_wrap()
+            .child(
+                text(tr(
+                    "connections:coverage.periodLoadError",
+                    &[("period", &period)],
+                ))
+                .font(tk.tsm(400.0))
+                .color(tk.destructive)
+                .role("alert")
+                .wrap(),
+            )
+            .child(
+                crate::ui::button::button(
+                    tk,
+                    "wallets-period-coverage-retry",
+                    crate::ui::button::Variant::Outline,
+                    crate::ui::button::Size::Sm,
+                    None,
+                    &t("connections:coverage.retry"),
+                    true,
+                )
+                .on_press(retry_period),
+            )
+    })
+}
+
+/// Drop a failed period read so the next poll asks again.
+fn retry_period(a: &mut App) {
+    a.wallets.list.period_coverage = None;
+}
+
+/// `CoverageCell`: the state glyph in its tone, then the one-line summary.
+fn coverage_cell(app: &App, tk: &Tk, c: &Conn) -> El {
+    let Some(cov) = c.coverage.as_ref() else {
+        return text("—").font(tk.tsm(400.0)).color(tk.muted_fg);
+    };
+    let period = search(app).period;
+    let (glyph, ink) = coverage_glyph(tk, coverage::tone(cov));
+    let line = coverage::summary(cov, period.as_deref(), crate::format::now_secs());
+    row()
+        .min_w(0.0)
+        .gap(tk.r(0.375))
+        .center_y()
+        .child(text(glyph).font(tk.txs(400.0)).color(ink).a11y_hidden())
+        .child(crate::ui::table::cell_text(line, tk.tsm(400.0), tk.fg))
+}
+
+/// The tone's glyph and ink (`coverageToneClassName`).
+pub fn coverage_glyph(tk: &Tk, tone: coverage::Tone) -> (&'static str, Color) {
+    let h = |s: &str| rune::color::hex(s).expect("hex");
+    match tone {
+        coverage::Tone::Ok => ("●", if tk.dark { h("#34d399") } else { h("#059669") }),
+        coverage::Tone::Warning => ("▲", if tk.dark { h("#fbbf24") } else { h("#d97706") }),
+        coverage::Tone::Error => ("✕", if tk.dark { h("#f87171") } else { h("#dc2626") }),
+        coverage::Tone::Muted => ("○", tk.muted_fg),
+    }
+}
+
+/// The list with or without the needs-action filter, in place (`replace: true`): turning it on
+/// keeps the period, turning it off clears both.
+fn set_needs_action(a: &mut App, on: bool) {
+    let period = search(a).period;
+    let to = coverage::search_route(on, period.as_deref());
+    if a.route.path() == "/connections" {
+        a.route = crate::app::Route(to);
+    } else {
+        a.navigate(&to);
+    }
 }
 
 // ---- Filters ---------------------------------------------------------------------------------
@@ -751,6 +862,40 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
         );
     }
     let count_badge = crate::ui::count(tk, count, if sm { tk.tbase(400.0) } else { tk.tsm(400.0) });
+    // "Needs action": only sources behind, failed or never imported (for the route's period).
+    let cov = search(app);
+    let needs_label = match cov.period.as_deref() {
+        Some(p) => tr(
+            "connections:coverage.filter.needsActionFor",
+            &[("period", &coverage::period_label(p))],
+        ),
+        None => t("connections:coverage.filter.needsAction"),
+    };
+    let needs_count = all(app)
+        .iter()
+        .filter(|c| coverage::needs_action(row_coverage(app, c).as_ref()))
+        .count();
+    let on = cov.needs_action;
+    // A toggle beside the Filters trigger, the same size; on, it takes the muted fill.
+    let mut needs_button = crate::ui::button::button(
+        tk,
+        "wallets-needs-action",
+        Variant::Outline,
+        if sm { Size::Default } else { Size::Sm },
+        None,
+        &needs_label,
+        true,
+    )
+    .checked(on)
+    .on_press(move |a: &mut App| set_needs_action(a, !on))
+    .child(
+        text(crate::format::count(needs_count))
+            .font(tk.tsm(500.0).features("'tnum' 1"))
+            .color(tk.muted_fg),
+    );
+    if on {
+        needs_button = needs_button.fill(tk.muted).border(1.0, tk.muted);
+    }
     let head = row()
         .w_full()
         .px(if sm { tk.card_pad() } else { tk.r(0.75) })
@@ -774,12 +919,18 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 )
                 .child(count_badge),
         )
-        .child(trigger);
+        .child(
+            row()
+                .gap(tk.r(0.5))
+                .center_y()
+                .child(needs_button)
+                .child(trigger),
+        );
     if open {
         filters_menu(app, tk, layer);
     }
     let mut out = col().w_full().child(head);
-    if st.status.is_some() || st.kind.is_some() {
+    if st.status.is_some() || st.kind.is_some() || cov.needs_action {
         let chip_font = if sm { tk.txs(500.0) } else { tk.t2xs(500.0) };
         let small = if sm { tk.txs(400.0) } else { tk.t2xs(400.0) };
         let chip = |key: &str, label: String, aria: String| {
@@ -823,6 +974,16 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 .on_press(|a: &mut App| a.wallets.list.status = None),
             );
         }
+        if cov.needs_action {
+            chips = chips.child(
+                chip(
+                    "wallets-chip-coverage",
+                    needs_label.clone(),
+                    t("connections:coverage.filter.clear"),
+                )
+                .on_press(|a: &mut App| set_needs_action(a, false)),
+            );
+        }
         if let Some(k) = &st.kind {
             chips = chips.child(
                 chip(
@@ -846,6 +1007,10 @@ fn filters(app: &App, tk: &Tk, layer: &mut Vec<El>, count: usize) -> El {
                 .on_press(|a: &mut App| {
                     a.wallets.list.status = None;
                     a.wallets.list.kind = None;
+                    let s = search(a);
+                    if s.needs_action || s.period.is_some() {
+                        set_needs_action(a, false);
+                    }
                 })
                 .child(text(clear).font(small).color(tk.destructive)),
         );
@@ -1135,9 +1300,9 @@ fn sort_head(
 /// width as well.
 fn columns(tk: &Tk, table_w: f32, tax_col: bool, lg: bool) -> Vec<f32> {
     let mut pct: Vec<f32> = if tax_col {
-        vec![43.0, 8.0, 7.0, 7.0, 17.0, 6.0, 12.0]
+        vec![33.0, 8.0, 7.0, 17.0, 17.0, 6.0, 12.0]
     } else {
-        vec![45.0, 10.0, 8.0, 8.0, 17.0, 12.0]
+        vec![35.0, 10.0, 8.0, 18.0, 17.0, 12.0]
     };
     if !lg {
         pct[4] = 0.0;
@@ -1150,7 +1315,7 @@ fn columns(tk: &Tk, table_w: f32, tax_col: bool, lg: bool) -> Vec<f32> {
     let mut labels: Vec<(String, bool)> = vec![
         (t("connections:filters.kind"), true),
         (t("connections:table.columns.transactions"), true),
-        (t("connections:table.columns.lastActivity"), true),
+        (t("connections:coverage.column"), true),
         (t("connections:table.columns.composition"), false),
     ];
     if tax_col {
@@ -1192,7 +1357,14 @@ fn table(
     let tax_ids = tax_free_ids(app);
     let tax_col = tax_ids.is_some();
     let tax_ids = tax_ids.unwrap_or_default();
-    let mut rows: Vec<Conn> = shown.to_vec();
+    // Each row shows (and sorts by) the chosen period's coverage when there is one.
+    let mut rows: Vec<Conn> = shown
+        .iter()
+        .map(|c| Conn {
+            coverage: row_coverage(app, c),
+            ..c.clone()
+        })
+        .collect();
     if let Some((key, asc)) = app.wallets.list.sort {
         rows.sort_by(|a, b| {
             let o = compare(a, b, key, &tax_ids);
@@ -1250,9 +1422,9 @@ fn table(
     head = head.child(sort_head(
         app,
         tk,
-        &t("connections:table.columns.lastActivity"),
-        SortKey::Last,
-        true,
+        &t("connections:coverage.column"),
+        SortKey::Coverage,
+        false,
         next(),
         (tk.r(0.5), tk.r(0.5)),
     ));
@@ -1482,11 +1654,7 @@ fn wallet_row(
                 .color(tk.fg)
             }),
     );
-    r = r.child(
-        cell(next(), tk.r(0.5), tk.r(0.5))
-            .justify_end()
-            .child(text(activity_label(c)).font(tk.tsm(400.0)).color(tk.fg)),
-    );
+    r = r.child(cell(next(), tk.r(0.5), tk.r(0.5)).child(coverage_cell(app, tk, c)));
     let comp_w = next();
     if lg {
         let content = if backend {
@@ -1622,11 +1790,55 @@ pub fn skeleton(tk: &Tk) -> El {
         .child(list)
 }
 
-pub fn poll(_app: &mut App, _tx: &mut Tx) -> bool {
-    false
+/// A chosen period (`?period=`) reads its own coverage (a local read; today's rides with the
+/// overview), again after each book refresh cycle.
+pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
+    if app.route.path() != "/connections" {
+        return false;
+    }
+    let Some(period) = search(app).period else {
+        return false;
+    };
+    let st = &app.wallets.list;
+    let same = st
+        .period_coverage
+        .as_ref()
+        .is_some_and(|(p, _)| *p == period);
+    if same && st.period_generation == app.book_generation {
+        return false;
+    }
+    let keep = match st.period_coverage.as_ref() {
+        Some((_, PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report))))
+            if same =>
+        {
+            Some(report.clone())
+        }
+        _ => None,
+    };
+    app.wallets.list.period_coverage = Some((period.clone(), PeriodCoverage::Loading(keep)));
+    app.wallets.list.period_generation = app.book_generation;
+    app.send(
+        "ui.sources.coverage",
+        serde_json::json!({"period_end": period}),
+        "wallets.list.coverage",
+    );
+    true
 }
 
-pub fn on_reply(_app: &mut App, _tag: &str, _r: &Reply) {}
+pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+    if tag != "wallets.list.coverage" {
+        return;
+    }
+    let period = r.data["period_end"].as_str().map(str::to_owned);
+    if let Some((p, state)) = app.wallets.list.period_coverage.as_mut()
+        && (r.error.is_some() || period.as_deref().is_none_or(|x| x == p))
+    {
+        *state = match r.error {
+            Some(_) => PeriodCoverage::Failed,
+            None => PeriodCoverage::Ready(r.data.clone()),
+        };
+    }
+}
 
 /// Escape closes the Filters menu (the submenu first, as Radix does).
 pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
@@ -1674,6 +1886,10 @@ fn scene_attention(a: &mut App) {
 pub const SCENES: &[crate::app::Scene] = &[
     ("wallets-list", |a| super::scene_route(a, "/connections")),
     ("wallets-list-attention", scene_attention),
+    // The needs-action filter for a period (the `sources.behind` row's target).
+    ("wallets-list-needs-action", |a| {
+        super::scene_route(a, "/connections?coverage=needs_action&period=2025-12-31")
+    }),
     ("wallets-list-attention-de", |a| {
         a.prefs.lang = crate::i18n::Lang::De;
         scene_attention(a);
@@ -1770,6 +1986,50 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(fiat_value(&app, 0.5), "$50,000.00");
+    }
+
+    /// Codex 4660314511: a chosen period's coverage that fails to read is a
+    /// failure with a retry, never today's coverage standing in for the period.
+    #[test]
+    fn a_failed_period_read_never_falls_back_to_today() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/connections?period=2025-12-31".into());
+        let today = serde_json::json!({"wallet_id": "w", "freshness_state": "behind"});
+        let c = Conn {
+            id: "w".into(),
+            coverage: Some(today),
+            ..Default::default()
+        };
+        app.wallets.list.period_coverage =
+            Some(("2025-12-31".into(), PeriodCoverage::Loading(None)));
+        assert_eq!(row_coverage(&app, &c), None, "nothing while it loads");
+        on_reply(
+            &mut app,
+            "wallets.list.coverage",
+            &crate::app::Reply {
+                kind: "ui.sources.coverage".into(),
+                data: serde_json::Value::Null,
+                error: Some("boom".into()),
+                error_detail: serde_json::Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        assert!(matches!(
+            app.wallets.list.period_coverage,
+            Some((_, PeriodCoverage::Failed))
+        ));
+        assert_eq!(row_coverage(&app, &c), None, "no fallback to today");
+        assert!(filtered(&app, std::slice::from_ref(&c)).len() == 1);
+        // Retrying drops the failure so the next poll reads again.
+        retry_period(&mut app);
+        assert!(app.wallets.list.period_coverage.is_none());
+        // A period read that answers is the period's coverage.
+        let period = serde_json::json!({"wallet_id": "w", "freshness_state": "current"});
+        app.wallets.list.period_coverage = Some((
+            "2025-12-31".into(),
+            PeriodCoverage::Ready(serde_json::json!({"sources": [period.clone()]})),
+        ));
+        assert_eq!(row_coverage(&app, &c), Some(period));
     }
 
     #[test]

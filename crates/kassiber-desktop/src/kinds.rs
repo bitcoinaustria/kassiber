@@ -235,6 +235,7 @@ pub const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.exchange.preview",
     "ui.connections.exchange.create",
     "ui.connections.exchange.sync",
+    "ui.sources.coverage",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
     "ui.metadata.bip329.preview",

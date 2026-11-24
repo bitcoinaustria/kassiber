@@ -16,6 +16,7 @@
     "balanceQuarantines_other": "{{count}} quarantines · accounting view may change after review",
     "totalTransactions": "Total transactions",
     "totalTransactionsDetail": "Imported across wallets",
+    "upToDateNotUpToDate": "{{count}} not yet up to date",
     "openTransactions": "Open all wallet transactions",
     "openReview": "Open transaction review queue",
     "taxFreeBalance": "Tax-free balance",
@@ -29,7 +30,6 @@
     "upToDate": "Up to date",
     "upToDateAllSources": "All configured sources",
     "upToDateRefreshingNow": "{{count}} refreshing now",
-    "upToDateNotUpToDate": "{{count}} not yet up to date",
     "needsAttention": "Needs attention",
     "needsAttentionFailed": "Failed source(s)",
     "needsAttentionNoFailed": "No failed sources",
@@ -1576,6 +1576,148 @@
       "balanceMismatchNote": "The book and {{provider}} disagree. Check for excluded transactions, transactions added to this wallet from other sources, or {{provider}} history the API did not return.",
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
       "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat."
+    }
+  },
+  "coverage": {
+    "column": "Coverage",
+    "periodLoadError": "Couldn't read coverage for {{period}}. Today's coverage is not shown in its place.",
+    "retry": "Retry",
+    "mode": {
+      "live": "Live",
+      "file": "File",
+      "hybrid": "API + CSV",
+      "manual": "Manual"
+    },
+    "modeLong": {
+      "live": "Live sync",
+      "file": "File snapshot",
+      "hybrid": "API + CSV",
+      "manual": "Manual entries"
+    },
+    "state": {
+      "current": "Current",
+      "behind": "Behind",
+      "never_imported": "Nothing yet",
+      "sync_failed": "Sync failed",
+      "unknown": "Unknown",
+      "syncFailed": "Sync failed",
+      "neverSynced": "{{mode}} · never synced",
+      "neverImported": "{{mode}} · nothing imported yet",
+      "behindFor": "Behind for {{period}}",
+      "stateFor": "{{state}} for {{period}}"
+    },
+    "line": {
+      "synced": "{{mode}} · synced {{when}}",
+      "coversThrough": "{{mode}} · covers through {{date}}",
+      "noActivityAfter": "{{mode}} · no activity after {{date}}",
+      "closedOn": "{{mode}} · closed on {{date}}",
+      "manual": "Manual entries",
+      "unknown": "{{mode}} · no dated rows"
+    },
+    "filter": {
+      "needsAction": "Needs action",
+      "needsActionFor": "Needs action for {{period}}",
+      "clear": "Clear needs-action filter"
+    },
+    "metric": {
+      "label": "Current coverage",
+      "allCurrent": "All sources current",
+      "needsAction_one": "{{count}} needs action",
+      "needsAction_other": "{{count}} need action",
+      "refreshingNow": "{{count}} refreshing now"
+    },
+    "card": {
+      "title": "Coverage",
+      "window": "Covers {{from}} – {{through}}",
+      "windowThrough": "Covers through {{through}}",
+      "windowNone": "No dated history yet",
+      "imports_one": "{{count}} import, last {{date}}",
+      "imports_other": "{{count}} imports, last {{date}}",
+      "lastSync": "Synced {{when}}",
+      "lastSyncCounts": "Synced {{when}} ({{imported}} new, {{fetched}} fetched)",
+      "lastSyncFailed": "Last sync failed {{when}}: {{message}}",
+      "hybridNote": "The API keeps recent activity current; CSV files cover history before {{date}}.",
+      "hybridNoteNoLimit": "The API keeps recent activity current; CSV files cover older history the API cannot return.",
+      "fileNote": "A file is a snapshot: it covers the rows it held. Download a newer export to move it forward.",
+      "fileChanged": "This file may have changed since the last import (its size or time differs).",
+      "syncNow": "Sync now",
+      "importNewer": "Import newer export",
+      "importOlder": "Import older CSV",
+      "attest": "No activity after…",
+      "attestEdit": "Edit statement",
+      "attestClear": "Clear statement",
+      "reviewError": "Review sync error",
+      "attestedNoActivity": "You stated: no activity after {{date}}.",
+      "attestedClosed": "You stated: account closed on {{date}}.",
+      "importResult": "{{imported}} new rows, {{present}} already present, now covers through {{date}}.",
+      "importResultNoDate": "{{imported}} new rows, {{present}} already present.",
+      "importNothingNew": "Nothing new — every row in this file is already present.",
+      "howToRefresh": "How to get a newer export",
+      "providerGuide": "Open the {{provider}} export guide",
+      "attestationGap": "Your statement starts later than the covered history: nothing is stated for {{from}} – {{through}}. State the day the history ends, or import a newer export.",
+      "checkFile": "Check file contents",
+      "fileCheck": {
+        "same": "The file matches the last import.",
+        "different": "The file differs from the last import — import it to bring this source current.",
+        "unknown": "Kassiber cannot compare: no fingerprint is available for the last import (it was too large, or imported before fingerprints were kept), or the file cannot be read."
+      }
+    },
+    "attestDialog": {
+      "title": "State that nothing happened after a date",
+      "body": "This only closes the coverage gap from the date on. Pick the day the history ends ({{wallet}}); a later date leaves the days in between open. It creates no transactions, balances or tax facts, and you can clear it any time.",
+      "kind": "Statement",
+      "kindNoActivity": "No activity after",
+      "kindClosed": "Account closed on",
+      "date": "Date",
+      "note": "Note (optional)",
+      "notePlaceholder": "Why you know, e.g. moved everything to cold storage",
+      "confirm": "Record statement",
+      "cancel": "Cancel",
+      "clearTitle": "Clear the statement?",
+      "clearBody": "Coverage warnings for {{wallet}} will show again where its history ends.",
+      "clearConfirm": "Clear statement",
+      "failed": "Could not save the statement"
+    },
+    "scanWarnings": {
+      "incomplete_by_construction": "An address list only sees the addresses you entered; other addresses of the same wallet are missing.",
+      "never_synced": "Never synced yet.",
+      "no_transactions": "No transactions yet.",
+      "undated_transactions": "Some transactions have no date.",
+      "history_starts_after_first_funding": "History starts after the wallet was first funded; earlier transactions are missing.",
+      "other": "Coverage warning: {{code}}"
+    },
+    "report": {
+      "title": "Sources behind for this period",
+      "body": "These sources do not reach the period end, so this report is provisional:",
+      "action": "Open connections",
+      "unknownTitle": "Source coverage unknown",
+      "unknownBody": "Kassiber could not read how far the sources reach for this period, so this report may be provisional."
+    },
+    "choice": {
+      "title": "How should Kassiber read {{provider}}?",
+      "api": "Connect with a read-only key",
+      "apiDetail": "Keeps itself current when you sync.",
+      "file": "Import a file",
+      "fileDetail": "A snapshot you re-import later.",
+      "recommended": "Recommended",
+      "note": "Connect for ongoing use; import a CSV for older history the API cannot return. You can add the other one to the same source later."
+    },
+    "attach": {
+      "body": "A {{provider}} wallet named {{wallet}} already holds CSV history. Add the key to it so one source keeps both?",
+      "button": "Add key to {{wallet}}"
+    },
+    "refreshHints": {
+      "river": "In River: Account → Activity → Download CSV.",
+      "strike": "In Strike: Settings → Reports → Account activity, CSV.",
+      "21bitcoin": "In the 21bitcoin app: Profile → Transaction history → Export.",
+      "pocketbitcoin": "In Pocket: Account → Export → CSV.",
+      "coinfinity": "In Coinfinity: Orders → Export CSV.",
+      "bullbitcoin": "In Bull Bitcoin: Orders → Export CSV.",
+      "binance": "In Binance: Orders → Export, for the months you need.",
+      "phoenix": "In Phoenix: Settings → Export payments (CSV).",
+      "cointracking": "In CoinTracking: Transactions → Export → CSV, filters cleared.",
+      "blockpit": "In Blockpit: Transactions → Export CSV, filters cleared.",
+      "generic": "Export the newest history from the provider, covering everything since your last file."
     }
   },
   "catalog": {
