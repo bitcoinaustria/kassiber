@@ -81,5 +81,18 @@
   "passphraseReveal": {
     "show": "Passphrase anzeigen",
     "hide": "Passphrase ausblenden"
+  },
+  "datePicker": {
+    "selectDate": "Datum wählen",
+    "clearDate": "Datum löschen",
+    "today": "Heute",
+    "previousMonth": "Vorheriger Monat",
+    "nextMonth": "Nächster Monat",
+    "previousYear": "Vorheriges Jahr",
+    "nextYear": "Nächstes Jahr",
+    "previousYears": "Frühere Jahre",
+    "nextYears": "Spätere Jahre",
+    "chooseMonth": "Monat wählen",
+    "chooseYear": "Jahr wählen"
   }
 }
