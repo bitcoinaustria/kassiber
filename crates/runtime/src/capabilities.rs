@@ -41,7 +41,7 @@ const CLI_READ_PATHS: &str = "
     backends.list backends.kinds backends.get context.show context.current
     workspaces.list profiles.list profiles.get profiles.settings accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
-    wallets.analyze-file
+    wallets.analyze-file wallets.coverage
     transactions.list transactions.verify transfers.dismissals.list attachments.list attachments.verify metadata.tags.list
     metadata.bip329.preview metadata.bip329.list metadata.records.list
     metadata.records.get metadata.records.history.list
@@ -131,6 +131,7 @@ const CLI_ACCOUNTING_DECISION_PATHS: &str = "
     btcpay.provenance.review source-funds.links.review
     source-funds.links.bulk-review reports.filed-snapshots.create
     source-funds.bank-lines.accept source-funds.bank-lines.reject
+    wallets.attest-coverage
 ";
 
 const CLI_ADMIN_PATHS: &str = "
@@ -163,7 +164,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.transactions.graph
     ui.transactions.search ui.transactions.ledger_template
     ui.transactions.history ui.activity.history ui.activity.stale
-    ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos
+    ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos ui.sources.coverage
     ui.privacy_hygiene.snapshot ui.wallets.identify ui.loans.list
     ui.backends.list ui.backends.options ui.backends.public_defaults
     ui.backends.settings.list
@@ -264,7 +265,7 @@ const DAEMON_ACCOUNTING_DECISION_KINDS: &str = "
     ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss ui.transfers.dismissals.delete
     ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
     ui.transfers.rules.delete ui.transfers.rules.set_enabled
-    ui.transfers.rules.apply
+    ui.transfers.rules.apply ui.sources.attest_coverage
 ";
 
 const DAEMON_ADMIN_KINDS: &str = "

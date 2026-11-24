@@ -846,7 +846,9 @@ The title bar's bell opens the notification list
   or node sync that failed (per connection), BTCPay stores whose invoices did
   not load, a price rebuild that failed, a source-of-funds case whose wallet
   needs a full rescan, an all-books refresh that failed or left books
-  needing attention, unread evidence-watch changes, Touch ID unlock turned
+  needing attention, unread evidence-watch changes, sources behind for the
+  previous calendar year ([coverage](#sources-live-sync-and-file-snapshots)),
+  Touch ID unlock turned
   off, a saved unlock method that could not be removed, and a backup restore
   that failed or could not reset unlock methods (both outlast the lock the
   restore triggers) are conditions too. Each row says what is wrong and
@@ -1031,6 +1033,202 @@ kassiber status
 ```
 
 Use `--cli ...` for any other symlink or executable name.
+
+## Sources: live sync and file snapshots
+
+Kassiber has two kinds of sources, and the desktop says which one each wallet
+is, how far its history reaches, and the one action that brings it current.
+
+- **Live** sources keep themselves current when the user asks: descriptor,
+  xpub and address wallets (Electrum, Esplora, Core RPC), Silent Payments,
+  Liquid, Lightning nodes, BTCPay, and exchange APIs with a read-only key.
+  A live source covers history through its last *successful* sync.
+- **File** sources are snapshots: an exchange CSV, a generic ledger, Wasabi or
+  Phoenix exports, OCR drafts. A file covers the span of the rows it held
+  (every row read, including rows already in the book), never the time it was
+  imported. The user downloads a newer export to move it forward.
+- **Hybrid** sources are exchanges with both: the API keeps recent activity
+  current and a CSV covers older history the API cannot return. The exchange
+  module may declare how far back its API reaches (`api_history_limit`;
+  none declare one yet).
+- **Manual** ledgers (a custom or generic-ledger wallet with no remembered
+  file and no import run, untracked wallets) have no notion of currency; they
+  show their transaction span only. A remembered `source_file` or any import
+  run makes a wallet a file source whatever its completeness class says.
+
+### Coverage model
+
+`kassiber_wallets::coverage` computes each source's coverage from the book
+alone, plus the local metadata of the file the wallet remembers importing
+(`symlink_metadata`: a regular file's size and modification time; a symlink,
+FIFO or device yields nothing). It never opens or reads that file and never
+opens a socket. Per source:
+
+| Field | Meaning |
+| --- | --- |
+| `source_mode` | `live`, `file`, `hybrid`, or `manual`, from the source's configuration: an exchange API key makes it live (hybrid when it also has a remembered file or file import runs; the run an API sync records names no file and is never file evidence), a remembered file or import run makes it a file source, the live completeness classes stay live, and a wallet with none of these is manual. |
+| `covered_from` | Live: the declared scan start or first transaction. File: the earliest row its import runs held. Hybrid: the earlier of both. |
+| `covered_through` | Live: the last successful sync. File: the latest row its import runs held. Hybrid: the later of the API sync and the files' last row. Rows outside import runs (entered by hand, synced from an API) never extend a file's reach. A run's range counts only as far as the rows that import runs of the same wallet and importer (`source_format`) created still reach: rows removed by a rollback or a book reset take that coverage with them, also for runs that only re-observed them. Rows entered by hand, synced from an API, or created by another importer never support a file range. |
+| `freshness_state` | `current`, `behind` (covered through a day before the period end and no attestation covers it), `never_imported`, `sync_failed` (a freshness source or the stored exchange sync failed after the last success, reason `last_sync_failed`; or the last sync stored degraded results that block reports, such as a partial silent-payment scan, reason `last_sync_incomplete`, until a complete sync clears it), or `unknown` (manual, or no dated rows). |
+| `reason`, `action` | A stable code and the one action that fixes it: `sync`, `import_newer_file`, `sync_or_import`, `review_sync_error`, or `none`. |
+| `attestation` | The user's statement "no activity after *date*" or "account closed on *date*", with a note. Both say nothing happened after the date. A period's missing interval is (covered_through, period end]; the statement closes it only when its date is on or before the covered end's day, and then for every later period end. A later date leaves (covered_through, date] unattested: the source stays `behind` with reason `attestation_leaves_gap` and `attestation_gap` names that interval, ending at the period end when the date is later. A statement never stands in for a source with nothing covered. It never creates transactions, balances, or tax facts. |
+
+The period end defaults to today; reports pass their own. Comparison is by UTC
+day, so a wallet synced earlier today is current for today.
+
+Every successful file import records a run with what its file held
+(`import_batches.first_row_at`, `last_row_at`, `rows_read`, `file_sha256`,
+`file_size`; see [imports](imports.md#import-runs-and-rolling-one-back)), also
+when it added no rows, so a re-import counts as evidence that the file was
+seen. Older runs have NULLs; coverage then uses the span of the rows those runs
+created, never other rows of the wallet. Rolling a run back also clears the
+ranges of runs of the same file (same `file_sha256`) that created no rows of
+their own, and a book reset clears every run's range: such runs only
+re-observed rows that are gone. "This file may have changed since the last
+import" is advisory: it compares the remembered file's metadata with the
+newest run (a different size, or a modification after that import), which a
+touched but identical file also trips. Every source that remembers its file
+(`file.source_file_remembered`, present only then; the path never leaves the
+backend) offers "Check file contents", whether or not the advisory shows. It
+asks for `check_file` with one `wallet`: the read hashes the remembered file
+under the same bounds as an import and compares it with the newest run's
+`file_sha256` only, reporting `file.source_file_check` as `same`, `different`,
+or `unknown` (no file, refused or over the limit, or a newest run with no
+hash, as for a file too large to fingerprint; an older run's hash says
+nothing about the last import). Other reads never open the file. The book stores the size, not the file's
+time, inode or device: recorded sessions require deterministic stored bytes.
+Hashing happens only during an explicit import or check, streamed, up to
+256 MiB, after a regular-file check that refuses symlinks and FIFOs. Every exchange API sync,
+CLI or desktop, stores its outcome on the wallet it ran for, also when no
+`--wallet` named it (`config_json.exchange_sync`: time, status, counts, and for
+a failure only an error class: `auth`, `rate_limited`, `offline`, `network`,
+`protocol`, `validation`, `config`, or `other`). No provider message, hint, or
+response text is stored; the desktop explains the class in its own words.
+Books written before classes kept the provider's message and hint there: every
+open rewrites such a record to its class, with `secure_delete` on so the old
+text does not survive in freed pages, then checkpoints the WAL into the
+database file and truncates it. Only a completed truncate ends the cleanup: a
+reader holding an older snapshot keeps the old pages alive, so after a few
+short tries the cleanup stays pending (the book stays usable) and each later
+open retries it ([compatibility](database-compatibility.md)). A
+success also stores `last_synced_at`, so the sync card, coverage, and completeness survive a
+restart. API syncs write no import batch: the next sync would re-import any
+rolled-back row by its exchange ID, so a batch could not be undone; the CLI
+behaviour is unchanged.
+
+Reads: `ui.sources.coverage` (`period_end`, `wallet`, `check_file`) and
+`wallets coverage` (`--check-file` needs `--wallet`);
+`ui.overview.snapshot` embeds each connection's coverage for today (without
+scan-bound warnings, so the hot read skips the per-row balance walk) and derives
+its `status` from it (`synced` only for a current source, `behind`, `error`
+for a failed sync, `idle` otherwise). The legacy Tauri views name, style and filter `behind` like their other statuses. Write: `ui.sources.attest_coverage`
+(`wallet`, `kind`, `date`, `note`, or `clear`) and `wallets attest-coverage`,
+behind the assistant's consent gate like every mutating tool.
+
+### Connections list
+
+The Coverage column replaces "Last activity", and the metric that counted
+wallets with any transaction as "Up to date" now counts current sources.
+
+```
+ Connections                                           [ + Add connection ]
+ ┌───────────────┬───────────────┬────────────────┐
+ │ Total balance │ Current       │ Needs action   │
+ │ 1.2345 BTC    │ 4 of 6        │ 2              │
+ └───────────────┴───────────────┴────────────────┘
+ [Kind ▾] [Status ▾] [ Needs action ]                       6 connections
+ Name            Kind        Coverage                              Balance
+ Cold storage    Descriptor  ● Live · synced 2 h ago               0.80000
+ Kraken          Exchange    ● API + CSV · synced 1 d ago          0.20000
+ Bitpanda CSV    Exchange    ▲ File · covers through 30 Jun 2026   0.10000
+ Old Strike      Exchange    ● File · no activity after 2025       0.00000
+ Lightning node  Lightning   ✕ Sync failed                         0.13450
+ Ledger import   Generic     ○ Manual entries                      0.00000
+```
+
+"Needs action" filters to `behind`, `sync_failed`, and `never_imported`; the
+shell's Needs attention condition "N sources are behind for 2025"
+(`sources.behind`: sources behind for the previous calendar year's end, from
+the local read when the shell mounts, no timer; it clears when a later read
+finds none behind) opens the list with that filter and period.
+
+### Connection detail: Coverage card
+
+The card sits at the top of the facts, in its own component
+(`SourceCoverageCard`).
+
+```
+ ┌ Coverage ─────────────────────────────────────────────────────────────┐
+ │ File snapshot · Bitpanda CSV                         ▲ Behind for 2026 │
+ │ Covers 3 Feb 2024 – 30 Jun 2026 · 3 imports, last 2 Jul 2026          │
+ │ Updated file found — import it?                                       │
+ │ [ Import newer export ]  [ No activity after… ]                       │
+ │ In Bitpanda: History → Export → CSV, all assets, full range.          │
+ └───────────────────────────────────────────────────────────────────────┘
+ ┌ Coverage ─────────────────────────────────────────────────────────────┐
+ │ API + CSV · Kraken                                        ● Current    │
+ │ API keeps recent activity current; CSV covers history before 2023.    │
+ │ Synced 2 h ago (12 new, 340 fetched)                                  │
+ │ [ Sync now ]  [ Import older CSV ]  [ No activity after… ]            │
+ └───────────────────────────────────────────────────────────────────────┘
+```
+
+After an import the card reports "N new rows, M already present, now covers
+through *date*", or "Nothing new — every row in this file is already present"
+when the run added no rows. "No activity after…" defaults to the covered end's
+day; a later date shows which days stay unattested. Scan-bound warnings appear as plain sentences
+("History before the first transaction is unknown", "Never synced").
+"No activity after…" opens a confirmation that says the statement only closes
+the gap from its date on; clearing it asks again.
+
+### Add connection: key or file
+
+Where a provider offers both an API and a CSV (`connectionCatalog.tsx`
+entries with an exchange API and `refreshHint`), the modal asks first:
+
+```
+ Kraken
+ ( ) Connect with a read-only key — keeps itself current        Recommended
+ ( ) Import a file — a snapshot you re-import later
+ Connect for ongoing use; import a CSV for older history the API cannot
+ return. You can add the other one later to the same source.
+```
+
+A provider only needs catalog fields to get this choice. When a CSV wallet of
+the same exchange already exists, adding a key offers to attach it to that
+wallet (`ui.connections.exchange.create` with `wallet`), which makes it a
+hybrid source. Rows deduplicate within one wallet by external ID and
+fingerprint, so CSV and API rows match only where both carry the same
+transaction ID scheme.
+
+### Refresh all and reports
+
+The title bar refresh (its button, Cmd/Ctrl+R, and the command palette's
+Refresh book set) is an explicit user action: after the book refresh it also
+syncs every exchange wallet with a key, one `ui.connections.exchange.sync`
+each. The sequence belongs to the book the click was made in: each request
+carries that book's `expected_scope`, which the daemon refuses for another
+book, and the sequence stops as soon as the book or daemon session changes. Menu book refreshes, background freshness, startup, and display reads
+never contact an exchange ([privacy](privacy-and-security.md)).
+
+The Reports page reads `ui.sources.coverage` for the selected period's end.
+Sources that are `behind` (or failed, or never imported) for it appear as a
+readiness warning naming each source and its action; the report is marked
+provisional, as missing fiat rates mark it, and export is not blocked. While
+that read is pending or after it failed, the page says "Source coverage
+unknown" and also marks the figures provisional: an unread coverage is not a
+current one. Exports carry the same verdict: the full report (period end: its
+generation time, scoped to its wallet), the summary (its timeframe end and
+wallets) and the Austrian report (its tax year's end, or today for the running
+year) add a provisional note and a table of the lagging sources with their
+action to the issues section of the PDF and XLSX, `source_coverage.csv` plus a
+`source_coverage,notice` row in `summary.csv`, and `source_coverage_notice` in
+the CSV manifest. Export proceeds, no figure changes, and a book whose sources
+all reach the period end exports exactly as before.
+`ui.report.blockers` is unchanged: recorded sessions and the frozen
+Python-derived goldens pin its payload, and it takes no period. The assistant
+reads `ui_sources_coverage` with the report's period end instead
+([AI](ai.md)).
 
 ## Loading and freshness
 

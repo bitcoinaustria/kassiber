@@ -1,0 +1,193 @@
+[
+  {
+    "path": [
+      "wallets",
+      "coverage"
+    ],
+    "command": "wallets coverage",
+    "kind": "wallets.coverage",
+    "help": null,
+    "effect": "read_only",
+    "capability": "read",
+    "needs_database": true,
+    "supports_cursor": false,
+    "supports_dry_run": false,
+    "scope_flags": [
+      "workspace",
+      "profile",
+      "wallet"
+    ],
+    "may_prompt": false,
+    "arguments": [
+      {
+        "name": "workspace",
+        "flags": [
+          "--workspace"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": null
+      },
+      {
+        "name": "profile",
+        "flags": [
+          "--profile"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": null
+      },
+      {
+        "name": "wallet",
+        "flags": [
+          "--wallet"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "Only this wallet (id or label)"
+      },
+      {
+        "name": "period_end",
+        "flags": [
+          "--period-end"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "Period end YYYY-MM-DD (default: today)"
+      },
+      {
+        "name": "check_file",
+        "flags": [
+          "--check-file"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "Hash the remembered file (bounded) and compare it with the last import; needs --wallet"
+      }
+    ]
+  },
+  {
+    "path": [
+      "wallets",
+      "attest-coverage"
+    ],
+    "command": "wallets attest-coverage",
+    "kind": "wallets.attest-coverage",
+    "help": null,
+    "effect": "mutating",
+    "capability": "accounting_decisions",
+    "needs_database": true,
+    "supports_cursor": false,
+    "supports_dry_run": false,
+    "scope_flags": [
+      "workspace",
+      "profile",
+      "wallet"
+    ],
+    "may_prompt": false,
+    "arguments": [
+      {
+        "name": "workspace",
+        "flags": [
+          "--workspace"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": null
+      },
+      {
+        "name": "profile",
+        "flags": [
+          "--profile"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": null
+      },
+      {
+        "name": "wallet",
+        "flags": [
+          "--wallet"
+        ],
+        "positional": false,
+        "required": true,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": null
+      },
+      {
+        "name": "kind",
+        "flags": [
+          "--kind"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": [
+          "closed_on",
+          "no_activity_after"
+        ],
+        "secret_input": false,
+        "help": "What you state: no activity after the date, or the account closed on it"
+      },
+      {
+        "name": "date",
+        "flags": [
+          "--date"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "YYYY-MM-DD, not in the future"
+      },
+      {
+        "name": "note",
+        "flags": [
+          "--note"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "Why you know (kept with the statement)"
+      },
+      {
+        "name": "clear",
+        "flags": [
+          "--clear"
+        ],
+        "positional": false,
+        "required": false,
+        "repeatable": false,
+        "choices": null,
+        "secret_input": false,
+        "help": "Remove the stored statement"
+      }
+    ]
+  }
+]

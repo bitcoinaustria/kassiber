@@ -765,6 +765,7 @@
     "synced": "Synced",
     "syncing": "Sync läuft",
     "idle": "Inaktiv",
+    "behind": "Im Rückstand",
     "error": "Fehler"
   },
   "protocol": {

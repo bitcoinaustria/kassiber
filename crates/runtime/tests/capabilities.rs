@@ -55,6 +55,9 @@ fn tables_match_python() {
         ("wallets.import-bitfinex", "wallets.import-strike"),
         ("wallets.sync-bitcoinde", "wallets.sync-binance"),
         ("wallets.import-bitcoinde", "wallets.import-strike"),
+        // Source coverage (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+        ("wallets.coverage", "wallets.list"),
+        ("wallets.attest-coverage", "loans.mark"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),
@@ -113,6 +116,8 @@ fn tables_match_python() {
             "ui.connections.btcpay.create",
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
+        ("ui.sources.coverage", "ui.wallets.list"),
+        ("ui.sources.attest_coverage", "ui.loans.mark"),
         ("ui.journals.verify", "ui.journals.snapshot"),
         // Backend certificate trust (docs/reference/backends.md#self-signed-certificates):
         // fetching is an explicit connection test, trusting is admin.

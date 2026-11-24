@@ -8,7 +8,7 @@
  * replaced with schema-driven factories.
  */
 
-export type ConnectionStatus = "synced" | "syncing" | "idle" | "error";
+export type ConnectionStatus = "synced" | "syncing" | "idle" | "behind" | "error";
 
 export type ConnectionKind =
   | "xpub"

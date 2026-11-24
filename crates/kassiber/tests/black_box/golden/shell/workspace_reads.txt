@@ -31,11 +31,11 @@ $ daemon
 # unprocessed
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5ed4daf04850dcbb6eb4d10c8ad]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19519 bytes fnv128 480be5e0280c7e42aa9f788077af505c]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5f049af04850dcbb6eb4d12f128]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19519 bytes fnv128 480be5dd2c0c7e42aa9f788077ad27e1]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40502 bytes fnv128 81b8e70146a2f8768c750a07b96a3f3b]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [50772 bytes fnv128 41c6269cf2f63dd4bd217903f13dfa11]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -61,11 +61,11 @@ $ daemon
 # current
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5ed4daf04850dcbb6eb4d10c8ad]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19519 bytes fnv128 480be5e0280c7e42aa9f788077af505c]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15088 bytes fnv128 9d0ad5f049af04850dcbb6eb4d12f128]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19519 bytes fnv128 480be5dd2c0c7e42aa9f788077ad27e1]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40496 bytes fnv128 8a8c61df44171b0c5168fbbfb3e377c8]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [50766 bytes fnv128 8567f39e1a49cd1bbe99fa97b54167d2]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -91,11 +91,11 @@ $ daemon
 # semantics_built
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15019 bytes fnv128 6a6a752fce1089eb3bb1c5c2f47edc9f]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19450 bytes fnv128 5bf96a9685d50ff7bd18c5ddb72fd320]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15019 bytes fnv128 6a6a7531d21089eb3bb1c5c2f47fd3f2]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19450 bytes fnv128 5bf96a9389d50ff7bd18c5ddb72daaa5]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40286 bytes fnv128 32b22fa8d3f69d6c9e633f291d1b206b]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [50556 bytes fnv128 b435e266abe9cfe01e027657a3233565]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -121,11 +121,11 @@ $ daemon
 # cycle
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15288 bytes fnv128 2e756558cbef13c1b6db01b99c8ea5a8]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19719 bytes fnv128 2dd15a387e93e55ab50702d05b35bad1]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15288 bytes fnv128 2e756555cfef13c1b6db01b99c8c7d2d]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19719 bytes fnv128 2dd15a3a7a93e55ab50702d05b36a84c]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40896 bytes fnv128 b05ce83bc41fbaa60f1fefb423145675]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [51166 bytes fnv128 970b2b127c9f39922a0651830e5c8af5]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -151,11 +151,11 @@ $ daemon
 # ov_journal_rates
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15504 bytes fnv128 77b9224053272a547d3ffbc4ae6fe235]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19935 bytes fnv128 15e8f105f46d7c42dcefab7f5b4628ca]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15504 bytes fnv128 77b922424f272a547d3ffbc4ae70cfb0]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19935 bytes fnv128 15e8f103f06d7c42dcefab7f5b453177]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40862 bytes fnv128 a2f494cd14f63ceac2ca6f0a6ab52eaa]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [51132 bytes fnv128 eff705779459043e39c80c7741df7754]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -181,11 +181,11 @@ $ daemon
 # ov_canonical_issues
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15525 bytes fnv128 ecf9bb0fbb03cb77e261c18cea956b50]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19956 bytes fnv128 b57301c633e4fe83f90693bdbc2434e5]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15525 bytes fnv128 ecf9bb0cbf03cb77e261c18cea9342d5]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19956 bytes fnv128 b57301c82fe4fe83f90693bdbc252260]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40987 bytes fnv128 b7de9b0f938e34c87d7c971dc4183e53]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [51257 bytes fnv128 8a7836b8c8d6532f9902522a275ee7d9]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -211,11 +211,11 @@ $ daemon
 # ov_inventory_current
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15586 bytes fnv128 62b71a3962d71d910d072506988f1127]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [20052 bytes fnv128 31085b9c622e9a57d959a3fdb528f543]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [15586 bytes fnv128 62b71a3c66d71d910d0725069891437a]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [20052 bytes fnv128 31085b9f662e9a57d959a3fdb52b2796]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40985 bytes fnv128 a85824607f691c169c9cf0963a3148ca]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [51325 bytes fnv128 6a871d5f78a0ea63b8be04007890bc14]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -241,11 +241,11 @@ $ daemon
 # ov_pairs
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15338 bytes fnv128 84d5c755f32ea8f97e424260cba4dc46]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19784 bytes fnv128 6abaebb6323ed7ef6b0f7d58b5f8bf51]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15338 bytes fnv128 84d5c752ef2ea8f97e424260cba2a9f3]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19784 bytes fnv128 6abaebb82e3ed7ef6b0f7d58b5f9accc]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [40863 bytes fnv128 fe3f68a6829f82aee3495e0628f97dbb]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [51163 bytes fnv128 1903cc0996061ccf77e02ff6e69c9203]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -271,11 +271,11 @@ $ daemon
 # ov_books_current
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15404 bytes fnv128 dfbb03c8e51f6835636bc0d159b4142c]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19870 bytes fnv128 d6fb805b7610e1d381e3784bf61c1e6c]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [15404 bytes fnv128 dfbb03c5e91f6835636bc0d159b1ebb1]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":0.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":null,"timestamp":null,"source":null,"fetchedAt":null,"granularity":null,"meth… [19870 bytes fnv128 d6fb80597a10e1d381e3784bf61b30f1]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [50232 bytes fnv128 38599b35fae7c9e0809c2784ab6f1f60]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"at",… [62024 bytes fnv128 3fefede34cd51231d89243aa6002eba2]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
@@ -301,11 +301,11 @@ $ daemon
 # ov_generic
 $ daemon
 > {"args":{},"kind":"ui.overview.snapshot","request_id":0}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [14637 bytes fnv128 d1cdf10efc607c97cb6331a02f726a7c]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19068 bytes fnv128 dfcdc09504e6d28f4339d9a6713b2935]
 > {"args":[1],"kind":"ui.overview.snapshot","request_id":1}
-< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [14637 bytes fnv128 d1cdf10d00607c97cb6331a02f717d01]
+< {"kind":"ui.overview.snapshot","schema_version":1,"data":{"priceEur":3.0,"priceUsd":100000.0,"marketRate":{"asset":"BTC","fiatCurrency":"EUR","pair":"BTC-EUR","rate":0.0,"timestamp":"2025-02-15T00:00:00Z","source":"coinbase","fetchedAt":"… [19068 bytes fnv128 dfcdc09700e6d28f4339d9a6713c16b0]
 > {"args":{"workspace_id":" w "},"kind":"ui.workspace.overview.snapshot","request_id":2}
-< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"gene… [39982 bytes fnv128 a4c93e8629dd844417a5d98479c886ef]
+< {"kind":"ui.workspace.overview.snapshot","schema_version":1,"data":{"workspace":{"id":"w","label":"Main"},"scope":{"kind":"workspace","label":"Book set"},"books":[{"profile":{"id":"p","label":"Book","fiatCurrency":"EUR","taxCountry":"gene… [50252 bytes fnv128 626370df2fc02cc16eed980094713285]
 > {"args":{"workspace_id":"missing"},"kind":"ui.workspace.overview.snapshot","request_id":3}
 < {"kind":"error","schema_version":1,"error":{"code":"not_found","message":"Book set 'missing' was not found","hint":null,"details":null,"retryable":false,"debug":null},"request_id":3}
 > {"args":{"another":2,"extra":1,"workspace_id":"w"},"kind":"ui.workspace.overview.snapshot","request_id":4}
