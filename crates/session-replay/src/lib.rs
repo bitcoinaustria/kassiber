@@ -28,6 +28,23 @@ pub mod replay;
 
 pub const SESSION_FORMAT: &str = "kassiber-process-session/1";
 
+/// The test-build switch that sets the version the `kassiber` binary reports
+/// (`crates/store/src/version.rs`). A recording keeps it in the session's
+/// environment, so the session replays with the version it was recorded at,
+/// whatever version the replaying checkout has.
+pub const VERSION_OVERRIDE: &str = "KASSIBER_RUST_TEST_VERSION";
+
+/// The version of a session whose environment does not name one: the
+/// recordings made before sessions carried their version were all made at
+/// 0.22.78, the only version the Rust binary had until 1.0.0.
+pub const UNRECORDED_VERSION: &str = "0.22.78";
+
+/// The version of the `kassiber` package in this checkout, which a new
+/// recording pins.
+pub fn package_version() -> &'static str {
+    kassiber_store::version::package()
+}
+
 /// One stdin chunk, with how many stdout lines the process had printed when
 /// it arrived; `data` is base64, `None` marks the end of stdin.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

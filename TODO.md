@@ -1911,6 +1911,62 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Quarantine follow-ups
 
+- [ ] Resolve outbound collaborative rows without excluding them. A received
+  Payjoin now clears through its acquisition kind
+  ([a Payjoin you received](docs/reference/custody-resolution.md#a-payjoin-you-received)),
+  but its outbound counterparts stay `privacy_hop_unresolved` and every later
+  spend of the wallet waits behind `custody_basis_barrier`: a collaborative
+  payment whose fee the outside party paid (the wallet's net delta is the
+  payment) and a CoinJoin in which the wallet pays only a fee share (the
+  delta is that share). No review path exists: `kind_override` is inbound
+  only, and a custody component refuses a source without an owned
+  destination (`missing_owned_destination`) or a fee-only source. Proposed
+  operation: an owner attestation on the held row, `external_payment` or
+  `fee_share`, accepted under the same conditions as the receipt (current
+  authoritative observation, `implicit_wallet_delta`, no other row of the
+  txid) and booked as a disposal or a fee of the net delta at market value.
+  Risks: an output to an unconnected own wallet must not become a disposal
+  without the owner saying so, and a fee share must not absorb a payment.
+  Callers: `review_operations`, `review_cases` (`supported_operations`), the
+  quarantine catalog's actions, the AI review tools and their catalog
+  description, and the desktop Review card. Done when the regtest probes
+  P2 and P3 of the 2026-11-21 Clams comparison book on review without an
+  exclusion.
+- [ ] Teach the assistant's static texts the received-Payjoin path. The
+  `kind_override` bullet in `crates/ai/skill_references/journal-processing.md`
+  and the AI tool catalog's `kind` description still say "non-quarantined";
+  the review case's `supported_operations` and the `classify` action already
+  lead to it. Recorded sessions pin the skill-reference text and the MCP
+  registry golden pins the catalog, so the wording changes with a reviewed
+  re-record of the affected sessions and a test-data lock bump.
+- [ ] Bump calculation semantics to 11 for settled replaced spends. Journals
+  an older build processed keep a stale `conflicting_spend` quarantine for a
+  transaction a confirmed spend replaced until the next input change or
+  `kassiber journals process` ([quarantines](docs/reference/tax.md#quarantines));
+  it fails closed, so it was left out of #807. Done per
+  [database compatibility](docs/reference/database-compatibility.md): the
+  version moves to 11 and a one-shot migration requires 11 for books with a
+  persisted `conflicting_spend` quarantine. Measured blast radius (2026-11-22):
+  the new audit row lands in ~126 checked-in routing-ports and black-box
+  transcripts, the v10 stamp is pinned in ~16 checked-in test books and ~30
+  frozen test-data vector sets (journals, transfers, reports, wallets,
+  workspace) without a write mode, plus recorded sessions.
+- [ ] Let the compatibility Electrum route retract replaced transactions as
+  the Esplora route does. Journals and readiness now settle a transaction a
+  confirmed conflicting spend replaced ([quarantines](docs/reference/tax.md#quarantines)),
+  but the row stays stored at `1970-01-01T00:00:00Z` because the observer keeps
+  no history membership to withdraw it from (regtest RBF probe, 2026-11-21).
+  Its Liquid counterpart still writes `confirmed` from a server time without a
+  positive height; custody does not trust that (it reads the stored history
+  height), but the stored status is wrong. The overview's
+  `fiat.completeness.missingPriceCount` (`crates/workspace/src/overview.rs`)
+  still counts the replaced row; report readiness and rate coverage do not.
+  Readiness also derives the replacement only from the missing-price row's own
+  status: when an older confirmed observation of a txid lacks a price and a
+  newer unconfirmed one is priced, rate coverage still asks for a price the
+  journals never book. Derive the replaced set from the full observation
+  chronology, as the hold stage does, before filtering missing-price
+  candidates (`crates/journals/src/loader/direct.rs`; Codex on #807).
 - [ ] Offer a user-triggered "reprice from market rates" for
   `price_currency_mismatch` rows. A book whose currency changed holds every
   row priced in the old currency ([quarantines](docs/reference/tax.md#quarantines));
@@ -2010,12 +2066,13 @@ See [tax countries](docs/reference/tax-countries.md) and
   absent (two such transfers on one day and amount refuse today as
   `bank_statement_line_conflict` when imported apart); an explicit CSV
   delimiter for positional column maps (punctuation in a description can pick
-  the wrong one, which refuses the file); and an accepted-decision filter for
-  `bank-lines list`, so the desktop's accepted evidence does not rest on the
-  newest 5000 outgoing lines. A durable stale-decision marker (or the
-  review-bound facts kept on the decision), so a keep-decisions reset no longer
-  has to refuse (`book_reset_withheld_bank_decisions`) while a `changed`
-  reservation withholds an accepted bank decision (Codex #788).
+  the wrong one, which refuses the file as `bank_csv_ambiguous_delimiter`);
+  and an accepted-decision filter for `bank-lines list`, so the desktop's
+  accepted evidence does not rest on the newest 5000 outgoing lines. A durable
+  stale-decision marker (or the review-bound facts kept on the decision), so a
+  keep-decisions reset no longer has to refuse
+  (`book_reset_withheld_bank_decisions`) while a `changed` reservation
+  withholds an accepted bank decision (Codex #788).
 - [ ] Bank statement cases now refused, to build only on demand (dropped in
   the 2026-11-14 size pass): MT940 files; splitting CAMT batch entries into
   their `TxDtls`; fee-tolerant (within 3 %) and split/merge (one transfer for
@@ -2042,7 +2099,8 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Bisq refusals that could become reviewed flows if real users hit them
   (the slim importer refuses by trade id instead): redating stored legs whose
   escrow dates moved or were read in another `--timezone`; network partitions
-  of a book with held trades; revising or grouping a pair with a
+  of a book with held or cleared trades (carrying the holds into the
+  partition); revising or grouping a pair with a
   provider-stated miner fee; fiat markets outside the shared fiat list;
   altcoin-market trades as crypto-scope swap legs once the multi-asset
   foundation lands.
@@ -2085,11 +2143,54 @@ See [tax countries](docs/reference/tax-countries.md) and
 
 ## Desktop and handoffs
 
+- [ ] Finish hiding the stored placeholder transaction time
+  (`1970-01-01T00:00:00Z`) on the remaining surfaces. The CLI table/plain
+  output, the desktop transactions table, overview recent activity, wallet
+  transaction list, transaction header, search, review case rows, the assistant
+  focus label and the activity chart already say "Unconfirmed"/"Unknown"
+  (`kassiber_envelope::occurred_at`, desktop `format::tx_date`). Still dated
+  1970: the tax narrative and missing-fiat banner sentences in tx detail (they
+  need sentence variants without "on {date}"), custody link/unlink cards, held
+  and linked-move lists and the 1970 year chip (`custody/`), transfer
+  suggestions in review (`out_occurred_at`), SoF target/bank/disclosure rows,
+  assistant transaction visuals, flagged-transaction lists in report and export
+  views, journal entry lists, and minutes-apart/relative times computed from the
+  placeholder. AI tool results still carry the raw value with `conf`/
+  `confirmed_at`; recorded sessions pin those reads and the skill references, so
+  a model-facing hint needs the opt-in projection route.
+  Also from the #813 desktop review:
+  - **Portfolio chart:** it still starts in 1970 in a book without cached
+    daily prices. The overview series fallback emits a placeholder-day point
+    (`crates/workspace/src/overview.rs`), and `history_bounds` takes it as the
+    lower bound, so the 4Y/10Y chips appear. With prices, an unconfirmed
+    spend lowers the balance from the first price day. The backend should skip
+    placeholder days, or the chart's `build`/`history_bounds` should ignore
+    them.
+  - **Unconfirmed rows sort as the oldest:**
+    - the transactions table's client date sort (`transactions/model.rs`);
+    - overview recent activity, where `ORDER BY occurred_at DESC LIMIT 40`
+      drops them in books with more than 40 rows;
+    - the transactions period chips' `earliest`.
+  - **Drift check:** the desktop copies the placeholder constant
+    (`format.rs`). Add a test that it matches `crates/envelope/src/occurred_at.rs`.
+  - **Labels that ignore confirmation:** the assistant focus label and the
+    review root label always say "Unconfirmed". They should pass or receive
+    the row's confirmation state, so settled untimed rows say "Unknown".
+  - **Wiring tests:** `recent_rows` and review `row_meta` have none.
+
 - [x] Adopt the Rune desktop as the desktop app: moved to
   `crates/kassiber-desktop` (own workspace and lockfile, excluded from the root
   workspace), translations and integration logos shared with `ui-tauri/` from
   `assets/`, Rune built without its default features (no MPL audio decoders),
   `fmt`/clippy/tests in the gate and a macOS/Linux/Windows CI job.
+- [ ] Assistant change cards (PR #810 follow-ups): refresh the book after a
+  successful Undo even when its conversation was cleared while it ran (the reply
+  finds no card and skips `refresh_reads`); resolve each leg's own row before
+  rendering an applied pair named by external txids (the reverse-pair view can
+  otherwise show the already-linked counterpart); a "Change" action on proposal cards;
+  native cards for unpair, dismissal delete, component applies, source-of-funds
+  and the chain-analysis consents (quarantine resolve and custody applies have
+  theirs).
 - [ ] Make the desktop scene check (`packaging/ci/rune-checks.sh --scenes-only`,
   `src/checks.rs`) finish and pass, then run it in CI's "Desktop app" job. On an
   empty `kassiber init` book each Transactions scene waits out

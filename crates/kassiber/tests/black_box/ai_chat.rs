@@ -518,3 +518,213 @@ fn test_writes_ask_apply_and_undo_through_the_executor() {
         .any(|r| r["kind"] == "ai.chat.tool_consent_required"));
     t.finish();
 }
+
+/// A single-network book for the pinned read (two of the desktop fixture's
+/// rows on its regtest wallet).
+const PINNED_BOOK: &str = "\
+INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025');
+INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) VALUES('p','w','Book','EUR','at','2025');
+INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('cold','w','p','Cold','address','{\"network\":\"regtest\"}','2025');
+INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,occurred_at,confirmed_at,created_at,kind,kind_override,fiat_rate,fiat_value,review_status,note,description,counterparty,fiat_currency) VALUES
+ ('b','w','p','cold','b','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','BTC','inbound',100001000,0,'2025-02-01T00:00:00Z','2025','2025-02-02','deposit',NULL,2,3,'completed','','','','EUR'),
+ ('g','w','p','cold','g','external-g','BTC','outbound',100001,3,'2025-01-02T00:00:00Z',NULL,'2025-02-01','deposit',NULL,1,1,'review','','','',NULL);
+INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p');
+";
+
+/// The automatic reads of request `rid`: (tool, arguments, needs_consent).
+fn auto_reads(records: &BTreeMap<String, Vec<Value>>, rid: &str) -> Vec<(String, Value, Value)> {
+    records[rid]
+        .iter()
+        .filter(|r| {
+            r["kind"] == "ai.chat.tool_call"
+                && r["data"]["call_id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("auto_read_"))
+        })
+        .map(|r| {
+            (
+                r["data"]["name"].as_str().unwrap().to_owned(),
+                r["data"]["arguments"].clone(),
+                r["data"]["needs_consent"].clone(),
+            )
+        })
+        .collect()
+}
+
+/// "Ask about this": with `read_pinned_entity`, the pinned transaction's
+/// local review packet is read before the provider is called and reaches the
+/// model; without the flag, or for an id the open book does not have, the
+/// turn reads exactly as before.
+#[test]
+fn test_pinned_transaction_is_read_for_the_model() {
+    // One regtest wallet: journal-backed reads refuse a book that mixes
+    // network histories, as the desktop fixture's Liquid testnet wallet does.
+    let mut sandbox = crate::desktop::book_with(PINNED_BOOK);
+    sandbox
+        .set("KASSIBER_RUST_TEST_AI_TIME", TIME)
+        .set("KASSIBER_RUST_TEST_AI_CHECKED_AT", CHECKED_AT);
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![answer("One."), answer("Two."), answer("Three.")],
+    );
+    // The records are asserted below; this scenario keeps no golden.
+    let mut t = Transcript::new("ai_chat/pinned_transaction_read");
+    let pinned = |id: &str, read: bool| {
+        let mut args = json!({"model": "test-model", "tools_enabled": true,
+            "tool_profile": "full", "system_prompt_kind": "kassiber",
+            "messages": [{"role": "user", "content": "Explain this transaction."}],
+            "screen_context": {"route": "/transactions", "entity_type": "transaction",
+                "entity_id": id}});
+        if read {
+            args["read_pinned_entity"] = json!(true);
+        }
+        step(chat(args))
+    };
+    let records = session(
+        &mut t,
+        &sandbox,
+        vec![
+            step(
+                json!({"kind": "ai.providers.create", "args": {"name": "tool-local",
+                "base_url": provider.base_url(), "kind": "local", "default_model": "test-model"}}),
+            ),
+            step(json!({"kind": "ai.providers.set_default", "args": {"name": "tool-local"}})),
+            pinned("b", true),
+            pinned("b", false),
+            pinned("not-in-this-book", true),
+        ],
+    );
+    let auto_reads = |rid: &str| auto_reads(&records, rid);
+    let review = "ui.transactions.review_context";
+    let first = auto_reads("r2");
+    assert_eq!(
+        first.first(),
+        Some(&(review.to_owned(), json!({"transaction": "b"}), json!(false))),
+        "{first:?}"
+    );
+    let packet = records["r2"]
+        .iter()
+        .find(|r| r["kind"] == "ai.chat.tool_result" && r["data"]["call_id"] == "auto_read_1")
+        .unwrap();
+    assert_eq!(packet["data"]["ok"], true, "{packet}");
+    assert_eq!(
+        packet["data"]["envelope"]["data"]["safety"]["network_contacted"],
+        false
+    );
+    assert!(auto_reads("r3").iter().all(|(name, _, _)| name != review));
+    assert!(auto_reads("r4").iter().all(|(name, _, _)| name != review));
+    // One provider request per turn, and only the pinned turn carries the
+    // packet (its `local_reference` names no tool schema).
+    let bodies: Vec<String> = provider
+        .requests()
+        .iter()
+        .map(|request| String::from_utf8_lossy(&request.body).into_owned())
+        .collect();
+    assert_eq!(bodies.len(), 3);
+    assert!(bodies[0].contains("local_reference"));
+    assert!(!bodies[1].contains("local_reference"));
+    assert!(!bodies[2].contains("local_reference"));
+}
+
+/// A single-network book with one custody gap: 10 BTC leave the old wallet
+/// and 9.9 BTC arrive in the new one a year later.
+const GAP_BOOK: &str = "\
+INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2025');
+INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) VALUES('p','w','Book','EUR','at','2025');
+INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+ ('old','w','p','Old','address','{\"network\":\"regtest\"}','2025'),
+ ('new','w','p','New','address','{\"network\":\"regtest\"}','2025');
+INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,asset,direction,amount,fee,occurred_at,confirmed_at,created_at,kind,kind_override,fiat_rate,fiat_value,review_status,note,description,counterparty,fiat_currency) VALUES
+ ('out','w','p','old','out','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','BTC','outbound',1000000000000,0,'2024-01-01T00:00:00Z','2024','2024-01-02','withdrawal',NULL,20000,200000,'completed','','','','EUR'),
+ ('return','w','p','new','return','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','BTC','inbound',990000000000,0,'2025-01-01T00:00:00Z','2025','2025-01-02','deposit',NULL,20000,198000,'completed','','','','EUR');
+INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p');
+";
+
+/// `cg_` and the first 24 hex digits of the SHA-256 of the gap's identity
+/// (profile, asset, sources, `->`, returns).
+const GAP_ID: &str = "cg_e0a0c61895569958efc21027";
+
+/// "Ask about this" on a custody gap: with `read_pinned_entity`, the gap's
+/// local review packet is read first and reaches the model. Without the flag
+/// nothing is read and the gap stays in the context as before; a gap the
+/// book's gap search does not find is unbound and not read.
+#[test]
+fn test_pinned_custody_gap_is_read_for_the_model() {
+    let mut sandbox = crate::desktop::book_with(GAP_BOOK);
+    sandbox
+        .set("KASSIBER_RUST_TEST_AI_TIME", TIME)
+        .set("KASSIBER_RUST_TEST_AI_CHECKED_AT", CHECKED_AT);
+    let provider = ScriptedProvider::new().unwrap();
+    provider.queue(
+        "POST",
+        "responses",
+        vec![answer("One."), answer("Two."), answer("Three.")],
+    );
+    // The records are asserted below; this scenario keeps no golden.
+    let mut t = Transcript::new("ai_chat/pinned_custody_gap_read");
+    let pinned = |id: &str, read: bool| {
+        let mut args = json!({"model": "test-model", "tools_enabled": true,
+            "tool_profile": "full", "system_prompt_kind": "kassiber",
+            "messages": [{"role": "user", "content": "Explain this."}],
+            "screen_context": {"route": "/transfers", "entity_type": "custody_gap",
+                "entity_id": id, "filters": {"tab": "gaps"}}});
+        if read {
+            args["read_pinned_entity"] = json!(true);
+        }
+        step(chat(args))
+    };
+    let records = session(
+        &mut t,
+        &sandbox,
+        vec![
+            step(json!({"kind": "ui.custody.gaps.list", "args": {}})),
+            step(
+                json!({"kind": "ai.providers.create", "args": {"name": "tool-local",
+                "base_url": provider.base_url(), "kind": "local", "default_model": "test-model"}}),
+            ),
+            step(json!({"kind": "ai.providers.set_default", "args": {"name": "tool-local"}})),
+            pinned(GAP_ID, true),
+            pinned(GAP_ID, false),
+            pinned("cg_000000000000000000000000", true),
+        ],
+    );
+    let listed = records["r0"].last().unwrap();
+    assert_eq!(listed["data"]["gaps"][0]["gap_id"], GAP_ID, "{listed}");
+    let review = "ui.custody.gaps.review_context";
+    let first = auto_reads(&records, "r3");
+    assert_eq!(
+        first.first(),
+        Some(&(review.to_owned(), json!({"gap_id": GAP_ID}), json!(false))),
+        "{first:?}"
+    );
+    let packet = records["r3"]
+        .iter()
+        .find(|r| r["kind"] == "ai.chat.tool_result" && r["data"]["call_id"] == "auto_read_1")
+        .unwrap();
+    assert_eq!(packet["data"]["ok"], true, "{packet}");
+    assert_eq!(
+        packet["data"]["envelope"]["data"]["gaps"][0]["gap_id"], GAP_ID,
+        "{packet}"
+    );
+    assert!(auto_reads(&records, "r4")
+        .iter()
+        .all(|(name, _, _)| name != review));
+    assert!(auto_reads(&records, "r5")
+        .iter()
+        .all(|(name, _, _)| name != review));
+    let bodies: Vec<String> = provider
+        .requests()
+        .iter()
+        .map(|request| String::from_utf8_lossy(&request.body).into_owned())
+        .collect();
+    assert_eq!(bodies.len(), 3);
+    // The packet reaches the model only on the pinned turn; the unpinned
+    // turn still names the gap in its context, the unbound one does not.
+    assert!(bodies[0].contains("990000000000"), "{}", bodies[0]);
+    assert!(!bodies[1].contains("990000000000"));
+    assert!(bodies[1].contains(GAP_ID));
+    assert!(!bodies[2].contains("990000000000"));
+    assert!(!bodies[2].contains("cg_000000000000000000000000"));
+}

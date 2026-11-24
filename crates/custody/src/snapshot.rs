@@ -76,6 +76,11 @@ pub struct StageSnapshot {
     /// records; present only while a book holds one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_hold_quarantines: Option<Vec<Record>>,
+    /// Transaction ids of the book's excluded rows that an included inbound
+    /// row with a privacy boundary shares, so a collaborative receipt is not
+    /// read as its transaction's only row; present only while there are some.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excluded_txids: Option<Vec<String>>,
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,

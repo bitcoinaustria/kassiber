@@ -116,7 +116,7 @@ mod mac {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
-    use objc2::rc::Retained;
+    use objc2::rc::{Retained, autoreleasepool};
     use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject};
     use objc2::{AllocAnyThread, DefinedClass, define_class, msg_send};
     use objc2_foundation::{NSRect, NSString};
@@ -184,28 +184,32 @@ mod mac {
     impl Shared {
         /// One captured frame: shown, and every 125 ms decoded.
         fn frame(&self, sample: *const c_void) {
-            if sample.is_null() {
-                return;
-            }
-            let pixels = unsafe { CMSampleBufferGetImageBuffer(sample) };
-            if pixels.is_null() {
-                return;
-            }
-            let id = self.frame.fetch_add(1, Ordering::Relaxed);
-            if let Ok(buf) = unsafe { rune::native_surface::macos::PixelBuffer::from_raw(pixels) } {
-                let _ = self.surface.push(buf, id);
-            }
-            let now = Instant::now();
-            {
-                let mut last = self.last_scan.lock().unwrap();
-                if last.is_some_and(|l| now.duration_since(l) < SCAN_EVERY) {
+            autoreleasepool(|_| {
+                if sample.is_null() {
                     return;
                 }
-                *last = Some(now);
-            }
-            for text in self.decode(pixels) {
-                self.inbox.push(Event::Decoded(text));
-            }
+                let pixels = unsafe { CMSampleBufferGetImageBuffer(sample) };
+                if pixels.is_null() {
+                    return;
+                }
+                let id = self.frame.fetch_add(1, Ordering::Relaxed);
+                if let Ok(buf) =
+                    unsafe { rune::native_surface::macos::PixelBuffer::from_raw(pixels) }
+                {
+                    let _ = self.surface.push(buf, id);
+                }
+                let now = Instant::now();
+                {
+                    let mut last = self.last_scan.lock().unwrap();
+                    if last.is_some_and(|l| now.duration_since(l) < SCAN_EVERY) {
+                        return;
+                    }
+                    *last = Some(now);
+                }
+                for text in self.decode(pixels) {
+                    self.inbox.push(Event::Decoded(text));
+                }
+            });
         }
 
         /// The QR texts in the frame's scan region.
@@ -262,10 +266,12 @@ mod mac {
     /// `stopRunning` blocks until capture stops; off the UI thread.
     fn stop(s: Objc) {
         std::thread::spawn(move || {
-            let s: Objc = s;
-            unsafe {
-                let _: () = msg_send![&*s.0, stopRunning];
-            }
+            autoreleasepool(|_| {
+                let s: Objc = s;
+                unsafe {
+                    let _: () = msg_send![&*s.0, stopRunning];
+                }
+            });
         });
     }
 
@@ -339,18 +345,20 @@ mod mac {
             };
             let frames = SendFrames(frames);
             let begin = move || {
-                if dropped.load(Ordering::SeqCst) {
-                    return;
-                }
-                if let Err(e) = configure(device, &shared, frames, &session) {
-                    shared.inbox.push(Event::Failed(e));
-                }
-                // The dialog closed while the session started: stop it now.
-                if dropped.load(Ordering::SeqCst)
-                    && let Some(s) = session.lock().unwrap().take()
-                {
-                    stop(s);
-                }
+                autoreleasepool(|_| {
+                    if dropped.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    if let Err(e) = configure(device, &shared, frames, &session) {
+                        shared.inbox.push(Event::Failed(e));
+                    }
+                    // The dialog closed while the session started: stop it now.
+                    if dropped.load(Ordering::SeqCst)
+                        && let Some(s) = session.lock().unwrap().take()
+                    {
+                        stop(s);
+                    }
+                });
             };
             let Some(av) = AnyClass::get(c"AVCaptureDevice") else {
                 inbox.push(Event::Failed(NOT_FOUND.into()));

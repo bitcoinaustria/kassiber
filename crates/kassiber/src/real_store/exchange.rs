@@ -238,7 +238,7 @@ impl RealBook {
             conn,
             &backend,
             &self.lightning_gate,
-            env!("CARGO_PKG_VERSION"),
+            crate::version::current(),
             &mut |route| {
                 let consent = kassiber_net::Consent::explicit_trigger(route.request());
                 minted = Some(consent.clone());

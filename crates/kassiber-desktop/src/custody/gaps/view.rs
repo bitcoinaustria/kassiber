@@ -106,7 +106,9 @@ fn textarea(
 ) -> El {
     let input = text_input(edit, tk.tsm(400.0))
         .key(format!("{key}-input"))
+        .wrap_anywhere()
         .w_full()
+        .min_w(0.0)
         .color(tk.fg)
         .placeholder(placeholder, tk.muted_fg)
         .caret(tk.fg, tk.primary.alpha(0.3))
@@ -726,6 +728,25 @@ fn details(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         .border(1.0, tk.border)
         .border_layout()
         .fill(tk.muted.alpha(0.25));
+    // "Ask about this": the gap becomes the assistant's pinned item (`assistant::ask_about_gap`).
+    if app.prefs.ai_features {
+        let (id, started) = (g.gap_id.clone(), g.started_at.clone());
+        c = c.child(
+            row().w_full().justify_end().child(
+                kit::btn(
+                    tk,
+                    "cg-ask",
+                    Var::Ghost,
+                    Some(&I::SPARKLES),
+                    &t("assistant:panel.askAbout"),
+                    true,
+                )
+                .on_press(move |a: &mut App| {
+                    crate::assistant::ask_about_gap(a, &id, started.as_deref())
+                }),
+            ),
+        );
+    }
     // Why.
     let mut why = col().w_full().gap(tk.r(0.25)).mt(tk.r(0.5));
     for r in &g.reason_codes {

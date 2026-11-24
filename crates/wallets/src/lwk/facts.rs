@@ -16,7 +16,7 @@ use lwk_wollet::{
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) const UNKNOWN_OCCURRED_AT: &str = "1970-01-01T00:00:00Z";
+pub(crate) const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 
 /// Request-constant inputs of the projection.
 pub(crate) struct Source<'a> {

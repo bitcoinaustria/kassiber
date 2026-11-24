@@ -433,6 +433,29 @@ pub fn short_date(s: Option<&str>) -> String {
     }
 }
 
+/// The time the backend stores for a transaction whose source reported none (unconfirmed,
+/// replaced, or an untimed Lightning or import row), `kassiber_envelope::occurred_at::UNKNOWN`.
+const UNKNOWN_TIME: &str = "1970-01-01T00:00:00Z";
+
+/// Whether a transaction time (`occurredAt`, the `date` "YYYY-MM-DD HH:MM" cut, or its first ten
+/// characters) is the stored placeholder rather than a real time.
+pub fn is_unknown_time(s: &str) -> bool {
+    let s = s.trim().replace(' ', "T");
+    s.len() >= 10 && UNKNOWN_TIME.starts_with(&s)
+}
+
+/// A transaction's date text, or its wording when the backend stored the placeholder:
+/// "Unconfirmed", or "Unknown" when the row says it is confirmed (`conf > 0`).
+pub fn tx_date(s: &str, confirmed: bool) -> String {
+    if !is_unknown_time(s) {
+        s.to_owned()
+    } else if confirmed {
+        crate::i18n::t("journals:review.unknownDate")
+    } else {
+        crate::i18n::t("common:state.unconfirmed")
+    }
+}
+
 /// `first8…last6` for ids longer than 18 characters.
 pub fn compact_id(id: &str) -> String {
     if id.chars().count() > 18 {
@@ -515,6 +538,23 @@ mod tests {
         );
         crate::i18n::set_lang(crate::i18n::Lang::En);
         assert_eq!(d.long_ui(), "Jan 5, 2024");
+    }
+
+    /// The stored placeholder time reads "Unconfirmed" (or "Unknown" when confirmed) in every
+    /// cut the views use; real times, including others on 1970-01-01, pass through.
+    #[test]
+    fn placeholder_transaction_time_is_named_not_dated() {
+        use crate::i18n::t;
+        for cut in ["1970-01-01T00:00:00Z", "1970-01-01 00:00", "1970-01-01"] {
+            assert!(is_unknown_time(cut), "{cut}");
+            assert_eq!(tx_date(cut, false), t("common:state.unconfirmed"));
+            assert_eq!(tx_date(cut, true), t("journals:review.unknownDate"));
+        }
+        for real in ["1970-01-01 00:01", "2026-11-21 20:11", "1970", ""] {
+            assert!(!is_unknown_time(real), "{real}");
+        }
+        assert_eq!(tx_date("2026-11-21 20:11", false), "2026-11-21 20:11");
+        assert_ne!(t("common:state.unconfirmed"), "common:state.unconfirmed");
     }
 
     #[test]

@@ -158,6 +158,12 @@ Stream records add `approval` to `ai.chat.tool_call` and `reversible`,
 `egresses` and `can_allow_session` to `ai.chat.tool_consent_required`. See
 [permission modes](ai.md#permission-modes).
 
+`ai.chat` also accepts `read_pinned_entity` (boolean, `false` when omitted):
+the desktop sets it when the turn's `screen_context` is an item pinned with
+"Ask about this", and the daemon then reads that item's local review packet
+before the provider is called. See the
+[pre-read router](ai.md#tool-use).
+
 `ui.transfers.dismissals.delete` takes `dismissal_id`, or `tx_out` and `tx_in`,
 removes that dismissal, invalidates journals and returns `deleted` plus the
 removed `dismissal` (legs, reason, expiry). The desktop's Review screen calls it
@@ -1128,7 +1134,11 @@ daemon-owned queue with `rates=false`; when a wallet is supplied it is
 source-scoped to that wallet, while a book/global refresh can enqueue the
 remaining wallet, rate, and journal jobs without duplicating the already queued
 source. `ui.freshness.cancel`, `ui.freshness.pause`, and `ui.freshness.resume`
-mutate the job/source state.
+mutate the job/source state. `ui.freshness.cancel` also accepts
+`target_request_id` to cancel an active or queued freshness request (including
+prefetch and direct-sync stages before a queue `job_id` exists), and when both
+`target_request_id` and `job_id` are passed it cancels the active worker token
+and best-effort marks the queued job row cancelled.
 Their entire response, including `result`, uses the shared freshness UI
 projection. Private source checkpoints stay in SQLite and are omitted from
 cancel, pause, and resume results as well as status snapshots.

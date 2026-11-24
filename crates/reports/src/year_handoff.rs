@@ -1156,16 +1156,7 @@ pub(super) fn build(
         ("period_start", s(period.start)),
         ("period_end", s(period.end)),
         ("generated_at", s(sources.now(conn)?)),
-        (
-            "kassiber_version",
-            s(include_str!("../../kassiber/Cargo.toml")
-                .lines()
-                .find_map(|line| {
-                    line.strip_prefix("version = \"")
-                        .and_then(|v| v.strip_suffix('"'))
-                })
-                .unwrap()),
-        ),
+        ("kassiber_version", s(kassiber_store::version::current())),
         ("wallets", Value::List(wallet_rows)),
         ("transactions", Value::List(transactions)),
         ("journal", Value::List(journal_rows)),

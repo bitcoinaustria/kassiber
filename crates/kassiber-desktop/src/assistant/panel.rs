@@ -829,9 +829,7 @@ fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, sheet: bool, layer: &mut Vec<El>) 
                 ),
         );
     }
-    if let Some(chip) = composer::focus_chip(app, tk, false) {
-        foot = foot.child(chip);
-    }
+    foot = foot.child(composer::context_tray(app, tk, false));
     foot = foot.child(composer::view(
         app,
         cx,

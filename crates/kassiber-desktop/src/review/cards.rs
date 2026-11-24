@@ -425,6 +425,13 @@ fn run_action(app: &mut App, g: &Group, a: &model::Action) {
                 state::link_back(app, id);
             }
         }
+        // A held collaborative receipt is classified in the Tax tab's
+        // acquisition review.
+        "classify" if model::classifiable_receipt(&g.reason, &g.actions) => {
+            if let Some(id) = a.transaction_id.clone().or(root) {
+                open_root(app, g, &id, Some("tax"));
+            }
+        }
         _ => {
             if let Some(id) = a.transaction_id.clone().or(root) {
                 open_root(app, g, &id, None);

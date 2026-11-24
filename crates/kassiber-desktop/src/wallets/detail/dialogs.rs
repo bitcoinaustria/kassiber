@@ -155,9 +155,22 @@ pub fn mount(app: &App, tk: &Tk, layer: &mut Vec<El>, c: &Conn) {
     crate::settings::certtrust::mount(app, tk, layer, &super::CERT_HOST);
 }
 
-fn close_edit(a: &mut App) {
+pub(super) fn close_edit(a: &mut App) {
     a.wallets.detail.edit = None;
     a.wallets.detail.select = None;
+    a.wallets.detail.date_picker = None;
+}
+
+const EDIT_DATE_PICKER: crate::ui::date_picker::Access = crate::ui::date_picker::Access {
+    get: |a| a.wallets.detail.date_picker.as_ref(),
+    get_mut: |a| &mut a.wallets.detail.date_picker,
+};
+
+fn set_edit_birthday(a: &mut App, iso: String) {
+    if let Some(f) = a.wallets.detail.edit.as_mut() {
+        f.birthday = rune::TextEdit::new(&iso);
+        f.error = None;
+    }
 }
 
 fn helper_tone(tk: &Tk, s: String, warn: bool) -> El {
@@ -371,25 +384,17 @@ fn edit(app: &App, tk: &Tk, layer: &mut Vec<El>, c: &Conn) {
             tk,
             vec![
                 ui::label(tk, &name),
-                ui::input(
+                crate::ui::date_picker::render(
+                    app,
                     tk,
+                    &mut popups,
+                    EDIT_DATE_PICKER,
                     "wd-edit-birthday",
-                    &e.birthday,
                     &name,
-                    if crate::i18n::lang() == crate::i18n::Lang::De {
-                        "tt.mm.jjjj"
-                    } else {
-                        "yyyy-mm-dd"
-                    },
-                    |a| {
-                        &mut a
-                            .wallets
-                            .detail
-                            .edit
-                            .get_or_insert_with(Default::default)
-                            .birthday
-                    },
-                    false,
+                    &e.birthday.text,
+                    !e.pending,
+                    true,
+                    set_edit_birthday,
                 ),
                 ui::helper(
                     tk,

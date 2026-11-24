@@ -20,6 +20,7 @@ crates/kassiber/tests/routing_ports/replay.rs|run_process|let mut command = Comm
 crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/binary.rs|every_leaf_but_gated_chat_and_mcp_runs_natively|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/bisq_escrow.rs|cli|let output = Command::new(env!("CARGO_BIN_EXE_kassiber"))
+crates/kassiber/tests/collaborative_receipt.rs|cli|let output = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/operator_broker.rs|binary|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/operator_broker.rs|interrupt|let status = Command::new("/bin/kill")
 crates/setup/src/network_partition.rs|export|let status = std::process::Command::new(&binary)

@@ -1019,3 +1019,24 @@ fn a_reset_withheld_decision_is_suggested_again() {
     conn.execute_batch("INSERT INTO book_reset_transactions(transaction_id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,state,changed_fields_json,created_at) VALUES('buy1','w','p','kraken','f0','2025-03-05T10:00:00Z','inbound','BTC',1000000000,0,0,'changed','[\"amount\"]','2025-05-01T00:00:00Z')").unwrap();
     assert_eq!(suggested(conn), 1);
 }
+
+/// A map of column numbers can't tell a header from a data row: a comma file
+/// whose descriptions hold semicolons would split on ';', take the first
+/// transaction as the header and read a description suffix as an amount.
+/// Refused instead of guessed; the same map reads an unambiguous file.
+#[test]
+fn a_positional_map_refuses_an_ambiguous_delimiter() {
+    let options = ParseOptions {
+        currency: Some("EUR".into()),
+        ..mapped(kassiber_pytext::loads(r#"{"booking_date":1,"amount":2}"#).unwrap())
+    };
+    let comma = "Date,Amount,Description\n2025-01-01 12:00,10,payment;reference\n2025-01-02 12:00,20,payment;100\n";
+    assert!(
+        refused(comma, &options).contains("delimiter is ambiguous"),
+        "{}",
+        refused(comma, &options)
+    );
+    let plain =
+        "Date,Amount,Description\n2025-01-01 12:00,10,payment\n2025-01-02 12:00,20,payment\n";
+    assert_eq!(amounts(&read(plain, &options)), ["10.00", "20.00"]);
+}

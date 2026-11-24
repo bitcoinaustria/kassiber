@@ -319,20 +319,34 @@ pub fn search_input(
         .child(f)
 }
 
-/// shadcn `Textarea` (`min-h-16 px-3 py-2`).
+/// shadcn `Textarea` (`min-h-16 px-3 py-2`), with hard-wrap, full-box click targeting,
+/// Enter newlines, and bounded vertical scrolling.
 pub fn textarea(tk: &Tk, key: &str, edit: &TextEdit, l: &str, access: EditFn) -> El {
+    let inner_min_h = (tk.r(4.0) - 2.0).max(tk.r(2.0));
     let f = text_input(edit, tk.tsm(400.0))
         .key(format!("{key}-field"))
+        .wrap_anywhere()
+        .w_full()
+        .min_w(0.0)
+        .px(tk.r(0.75))
+        .py(tk.r(0.5))
+        .min_h(inner_min_h)
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(l.to_owned())
         .on_edit(access)
-        .w_full();
-    frame(tk, key)
-        .min_h(tk.r(4.0))
-        .px(tk.r(0.75))
-        .py(tk.r(0.5))
-        .items_start()
-        .child(f)
+        .on_submit(move |a: &mut App, _| access(a).insert("\n"));
+    let scroll = col()
+        .key(format!("{key}-scroll"))
+        .w_full()
+        .min_w(0.0)
+        .shrink()
+        .min_h(inner_min_h)
+        .max_h(tk.r(12.0))
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(f);
+    frame(tk, key).clip_rounded(tk.r(0.375)).child(scroll)
 }
 
 /// shadcn `Checkbox` with its label as one control (`flex items-center gap-2 text-sm`).

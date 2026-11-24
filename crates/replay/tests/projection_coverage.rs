@@ -277,6 +277,8 @@ fn every_field_the_interpreters_read_in_documents_is_classified() {
         "_kassiber_verified_chain_observation": true, "custody_native_fee_normalized": true,
         "observer_owned_scripts": ["0014"],
         "status": {"confirmed": true, "block_height": 1, "block_time": 1},
+        "history": {"height": 1},
+        "_kassiber_electrum_graph": {"kind": "bitcoin_electrum", "version": 2},
         "vin": [{"txid": txid, "vout": 0, "prevout": {"scriptpubkey": "0014", "scriptpubkey_address": "bc1q", "value": 1}}],
         "vout": [{"n": 0, "index": 0, "scriptpubkey": "0014", "script_pubkey": "0014", "address": "bc1q", "value": 1, "value_sats": 1}],
         "inputs": [{"outpoint": format!("{txid}:0"), "script": "0014", "amount": 1}],

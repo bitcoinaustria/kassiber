@@ -12,6 +12,7 @@
 //! `envelope.py` and `cli/command_registry.py`, and [`redaction`] ports the
 //! rules the daemon applies to error messages, hints, and details.
 
+pub mod occurred_at;
 pub mod redaction;
 pub mod remediation;
 

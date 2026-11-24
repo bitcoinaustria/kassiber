@@ -1048,7 +1048,14 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
     } else {
         "tool"
     };
+    // The common changes as the app's own card: what changes in plain terms, Apply / Decline.
+    let native = if kind == "tool" && !r.egresses {
+        super::action::parse(&r.name, &r.arguments_preview)
+    } else {
+        None
+    };
     let glyph: &'static rune::Icon = match kind {
+        _ if native.is_some() => native.as_ref().map_or(&I::SQUARE_PEN, |n| n.glyph()),
         "tool" if r.egresses => &I::GLOBE,
         "review" => &I::LIST_CHECKS,
         "import" => &I::FILE_UP,
@@ -1064,6 +1071,7 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
         "review" => "assistant:consent.apply.confirm",
         "import" => "assistant:consent.plan.confirmImport",
         "rollback" => "assistant:consent.plan.confirmRollback",
+        _ if native.is_some() => "assistant:action.apply",
         _ => "assistant:consent.approve",
     });
     let reason = match kind {
@@ -1094,17 +1102,24 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
                 .min_w(0.0)
                 .pt(2.0)
                 .child(
-                    text(r.summary.clone())
-                        .font(tk.tsm(500.0).lh(tk.r(0.875) * 1.625))
-                        .color(tk.fg)
-                        .wrap(),
+                    text(
+                        native
+                            .as_ref()
+                            .map_or_else(|| r.summary.clone(), |n| n.title()),
+                    )
+                    .font(tk.tsm(500.0).lh(tk.r(0.875) * 1.625))
+                    .color(tk.fg)
+                    .wrap(),
                 )
-                .child(
-                    text(r.name.clone())
+                .child(match &native {
+                    Some(_) => text(t("assistant:action.proposed"))
+                        .font(tk.txs(400.0))
+                        .color(tk.muted_fg),
+                    None => text(r.name.clone())
                         .font(tk.t2xs(400.0).mono())
                         .color(tk.muted_fg)
                         .truncate(),
-                ),
+                }),
         );
     let mut body = col()
         .w_full()
@@ -1213,6 +1228,27 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
             );
         }
         body = body.child(coll);
+    } else if let Some(n) = &native {
+        body = body.child(
+            col()
+                .w_full()
+                .min_w(0.0)
+                .gap(tk.r(0.5))
+                .radius(tk.r(0.375))
+                .border(1.0, tk.border.alpha(tk.border.a * 0.6))
+                .border_layout()
+                .fill(tk.background.alpha(0.6))
+                .padding(tk.r(0.75))
+                .role("group")
+                .label(t("assistant:action.changes"))
+                .child(super::action::body(app, tk, n, true))
+                .child(raw_json(
+                    app,
+                    tk,
+                    format!("{key}-raw"),
+                    &r.arguments_preview,
+                )),
+        );
     } else if r
         .arguments_preview
         .as_object()
@@ -1353,19 +1389,31 @@ pub fn pending_row(app: &App, tk: &Tk, r: &Consent, layer: &mut Vec<El>) -> El {
             .child(approve_btn)
             .child(more),
     );
-    col()
+    let frame = col()
         .key(key)
         .w_full()
         .min_w(0.0)
         .mb(tk.r(0.5))
-        .radius(tk.r(0.375))
-        .px(2.0)
-        .py(2.0)
+        .radius(tk.r(0.375));
+    // A native card sits in the proposal's primary border (`ReviewProposalCard`).
+    let frame = if native.is_some() {
+        frame
+            .radius(tk.r(0.5))
+            .border(1.0, tk.primary.alpha(0.4))
+            .border_layout()
+            .fill(tk.card)
+            .padding(tk.r(0.75))
+    } else {
+        frame.px(2.0).py(2.0)
+    };
+    frame
         .role("group")
         .label(format!(
             "{}: {}",
             t("assistant:consent.rowLabel"),
-            r.summary
+            native
+                .as_ref()
+                .map_or_else(|| r.summary.clone(), |n| n.title())
         ))
         // `tabIndex={-1}`: focus moves here when the row appears (`closed::poll`), Tab skips it.
         .focusable(true)
