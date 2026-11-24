@@ -6,6 +6,7 @@ pub mod checkpoints;
 pub mod completeness;
 pub mod config;
 pub mod connections;
+pub mod coverage;
 pub mod file_import;
 mod progress;
 mod silent_payments;

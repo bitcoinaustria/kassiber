@@ -57,6 +57,9 @@ crates/cli/src/chat/client.rs|the_daemon_child_leads_its_own_process_group|let m
 # Report CSV writer test: `mkfifo` makes a named pipe in its own temporary directory, as
 # the Python vectors write to one; no network, local path argument only.
 crates/reports/src/export.rs|csv_exports_follow_the_python_report_writer|assert!(std::process::Command::new("mkfifo")
+# Source coverage test: a named pipe in place of a remembered import file must
+# not block a display read; `mkfifo` in the temporary directory, no network.
+crates/wallets/src/coverage/tests.rs|a_fifo_in_place_of_the_remembered_file_never_blocks_a_read|assert!(std::process::Command::new("mkfifo")
 # Development tools that never ship: the mutation runner (git ls-files, cargo
 # test in its scratch tree, killing its own timed-out child), the repository
 # contract test's git ls-files, and the session recorder and replay (the real

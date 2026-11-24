@@ -267,6 +267,16 @@ fn scan_bounds(kind: &str, config: &Value, rows: &[Value], klass: &str) -> Resul
     ]))
 }
 
+/// A wallet's class and declared scan start without reading its rows: what
+/// source coverage needs on hot reads such as the overview.
+pub fn classify(kind: &Value, config_json: &Value) -> Result<(&'static str, Value), AppError> {
+    let config = config(config_json)?;
+    let kind = kind_text(kind);
+    let klass = class(&kind, &config);
+    let (declared_at, _) = declared_start(&kind, &config)?;
+    Ok((klass, declared_at))
+}
+
 /// One wallet to describe: its id, `kind` and stored `config_json`.
 pub struct Wallet {
     pub id: String,
