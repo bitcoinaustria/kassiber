@@ -154,12 +154,13 @@ pub fn submit(app: &mut App, label: &str) -> Result<Value, String> {
         return Err(t("connections:exchange.issue.test_first"));
     }
     let mut args = model::credential_args(&c);
-    args.insert("label".into(), json!(label));
     // Building the request never consumes the target: validation builds it once before the
-    // request does. A save (or another choice) clears it (`clear_attach`).
-    if let Some(wallet) = st(app).attach_wallet.clone() {
-        args.insert("wallet".into(), json!(wallet));
-    }
+    // request does. A save (or another choice) clears it (`clear_attach`). The existing wallet
+    // keeps its label and asset scope, so the request names neither (Codex 4682769616).
+    match st(app).attach_wallet.clone() {
+        Some(wallet) => args.insert("wallet".into(), json!(wallet)),
+        None => args.insert("label".into(), json!(label)),
+    };
     Ok(Value::Object(args))
 }
 
@@ -1333,6 +1334,35 @@ mod test_reply_tests {
         assert!(st(&app).sync.row.is_none());
     }
 
+    /// Codex 4682769616: "Add key to …" with Sync after sends the key for the existing wallet
+    /// alone. The daemon refuses a new label, a preview token or an asset scope beside the
+    /// wallet it attaches to, so the dialog asks nothing and syncs that wallet after the save.
+    #[test]
+    fn adding_a_key_to_an_existing_wallet_asks_nothing_and_sends_no_new_wallet_fields() {
+        let mut app = crate::app::tests::quiet_app();
+        crate::wallets::add::select_source_for_setup(&mut app, "kraken");
+        app.wallets.add.form.label = rune::TextEdit::new("Kraken");
+        app.wallets.add.form.sync_after = true;
+        let s = stm(&mut app);
+        s.api_key.text = "K".into();
+        s.api_secret.text = "S".into();
+        let c = credentials(st(&app));
+        stm(&mut app).outcome = Some(Outcome {
+            credentials: c,
+            result: Some((true, Some(true))),
+            error: None,
+        });
+        stm(&mut app).attach_wallet = Some("csv-wallet".into());
+        crate::wallets::add::submit_setup(&mut app);
+        let job = app.wallets.add.job.as_ref().expect("the save");
+        let (kind, args) = job.sent.clone().expect("a request");
+        assert_eq!(kind, "ui.connections.exchange.create");
+        assert_eq!(args["wallet"], "csv-wallet");
+        for field in ["label", "preview_token", "asset_scope"] {
+            assert!(args.get(field).is_none(), "{field} is not sent");
+        }
+    }
+
     /// Codex 4660315083: "Add key to …" submits through validation, which builds the request
     /// once before the real build. The attachment target survives that first build, so the
     /// request sent names the wallet; only a save or another choice clears it.
@@ -1354,6 +1384,8 @@ mod test_reply_tests {
         let sent = submit(&mut app, "Kraken").unwrap();
         assert_eq!(validated["wallet"], json!("csv-wallet"));
         assert_eq!(sent["wallet"], json!("csv-wallet"));
+        // The daemon refuses a label beside the wallet it attaches to.
+        assert!(sent.get("label").is_none());
         // A refused save ends the attempt; a save or another choice clears it too.
         on_create_error(&mut app, &json!({"details": {}}));
         assert!(submit(&mut app, "Kraken").unwrap().get("wallet").is_none());
