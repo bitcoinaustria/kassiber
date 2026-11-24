@@ -30,10 +30,12 @@ fn err(app: &App, key: &str) -> Option<String> {
     st(app).errors.get(key).cloned()
 }
 
-/// Clears a field's error when it changes (`updateForm`).
+/// Clears a field's error (and any constraint-validation bubble) when it changes (`updateForm`).
 fn clear(key: &'static str) -> impl Fn(&mut App) + 'static {
     move |a: &mut App| {
-        stm(a).errors.remove(key);
+        let s = stm(a);
+        s.errors.remove(key);
+        s.required_hint = None;
     }
 }
 
@@ -63,7 +65,9 @@ fn field_input(
     )
 }
 
-/// shadcn `Textarea` (`min-h-N rounded-md border border-input px-3 py-2`, `font-mono text-xs`).
+/// shadcn `Textarea` (`min-h-N rounded-md border border-input px-3 py-2`, `font-mono text-xs`),
+/// with hard-wrap for spaceless descriptors/exports, full-box click targeting, Enter newlines,
+/// and bounded vertical scrolling inside the field.
 #[allow(clippy::too_many_arguments)]
 fn textarea(
     app: &App,
@@ -78,19 +82,34 @@ fn textarea(
     on_change: Option<fn(&mut App)>,
 ) -> El {
     let _ = app;
-    let ck = clear(err_key);
+    let ck_change = clear(err_key);
+    let ck_submit = clear(err_key);
+    let inner_min_h = (min_h - 2.0).max(tk.r(2.0));
+    let max_h = (min_h * 1.75).max(tk.r(12.0)).min(tk.r(16.0));
     let mut f = text_input(edit, tk.txs(400.0).mono())
         .key(key.to_owned())
+        .wrap_anywhere()
+        .w_full()
+        .min_w(0.0)
+        .px(tk.r(0.75))
+        .py(tk.r(0.5))
+        .min_h(inner_min_h)
         .caret(tk.fg, tk.primary.alpha(0.3))
         .label(name.to_owned())
         .on_edit(access)
-        .on_input_change(move |a: &mut App, _tx: &mut Tx| {
-            ck(a);
+        .on_submit(move |a: &mut App, _| {
+            access(a).insert("\n");
+            ck_submit(a);
             if let Some(c) = on_change {
                 c(a);
             }
         })
-        .w_full();
+        .on_input_change(move |a: &mut App, _tx: &mut Tx| {
+            ck_change(a);
+            if let Some(c) = on_change {
+                c(a);
+            }
+        });
     if let Some(p) = placeholder {
         f = f.placeholder(p.to_owned(), tk.muted_fg);
     }
@@ -99,26 +118,34 @@ fn textarea(
     } else {
         Color::TRANSPARENT
     };
-    row()
+    let scroll = col()
+        .key(format!("{key}-scroll"))
+        .w_full()
+        .min_w(0.0)
+        .shrink()
+        .min_h(inner_min_h)
+        .max_h(max_h)
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(f);
+    col()
         // The box the validation bubble hangs under (`<key>-box`).
         .key(format!("{key}-box"))
         .w_full()
         .min_w(0.0)
-        .min_h(min_h)
-        .px(tk.r(0.75))
-        .py(tk.r(0.5))
-        .items_start()
         .radius(tk.r(0.375))
         .border(1.0, if edit.focused { tk.ring } else { tk.input })
         .border_layout()
         .fill(fill)
+        .clip_rounded(tk.r(0.375))
         .box_shadow(rune::Shadow {
             y: 1.0,
             blur: 2.0,
             color: Color::BLACK.alpha(0.05),
             ..rune::Shadow::default()
         })
-        .child(f)
+        .child(scroll)
 }
 
 /// shadcn `Checkbox` box.
@@ -769,38 +796,50 @@ fn grid2(tk: &Tk, a: El, b: El) -> El {
         .child(col().grow(1.0).min_w(0.0).child(b))
 }
 
-fn date_placeholder() -> &'static str {
-    if crate::i18n::lang() == crate::i18n::Lang::De {
-        "TT.MM.JJJJ"
-    } else {
-        "mm/dd/yyyy"
-    }
+const DATE_PICKER_ACCESS: crate::ui::date_picker::Access = crate::ui::date_picker::Access {
+    get: |a| st(a).date_picker.as_ref(),
+    get_mut: |a| &mut stm(a).date_picker,
+};
+
+fn set_birthday(a: &mut App, iso: String) {
+    let s = stm(a);
+    s.form.birthday = TextEdit::new(&iso);
+    s.errors.remove("birthday");
+    s.required_hint = None;
+    submit::coverage_inputs_changed(a);
 }
 
-/// A `type="date"` input (typed, `mm/dd/yyyy` or ISO; normalised on submit).
-fn date_input(
+fn set_sp_start_date(a: &mut App, iso: String) {
+    let s = stm(a);
+    s.form.sp_start_date = TextEdit::new(&iso);
+    s.errors.remove("spScanStartDate");
+    s.errors.remove("spScanStartHeight");
+    s.required_hint = None;
+}
+
+/// Date + year picker control mounted into the dialog's overlay `layer`.
+#[allow(clippy::too_many_arguments)]
+fn date_picker_field(
     app: &App,
     tk: &Tk,
+    layer: &mut Vec<El>,
     key: &'static str,
-    err_key: &'static str,
     name: &str,
-    edit: &TextEdit,
-    access: Access,
+    value: &str,
+    enabled: bool,
+    on_select: fn(&mut App, String),
 ) -> El {
-    let _ = app;
-    let ck = clear(err_key);
-    input(
+    crate::ui::date_picker::render(
+        app,
         tk,
+        layer,
+        DATE_PICKER_ACCESS,
         key,
-        edit,
-        access,
         name,
-        Some(date_placeholder()),
-        false,
-        move |a: &mut App| {
-            ck(a);
-            submit::coverage_inputs_changed(a);
-        },
+        value,
+        enabled,
+        true,
+        on_select,
     )
 }
 
@@ -1119,7 +1158,7 @@ fn descriptor_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             tk,
             layer,
             &t("connections:add.field.backend"),
-            submit::address_options(app),
+            submit::descriptor_options(app),
             None,
         ),
     ];
@@ -1172,6 +1211,9 @@ fn descriptor_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                 s.form.script_type.clear();
                 s.preview_addresses = None;
                 s.preview_error = None;
+                s.preview_pending = false;
+                s.preview_gen += 1;
+                s.preview_req = None;
             }),
         ));
     if let Some(fb) = material_feedback(app, tk) {
@@ -1203,7 +1245,15 @@ fn descriptor_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             opts,
             &f.script_type,
             true,
-            |a: &mut App, v: &str| stm(a).form.script_type = v.to_owned(),
+            |a: &mut App, v: &str| {
+                let s = stm(a);
+                s.form.script_type = v.to_owned();
+                s.preview_addresses = None;
+                s.preview_error = None;
+                s.preview_pending = false;
+                s.preview_gen += 1;
+                s.preview_req = None;
+            },
         );
         out.push(setup_field(
             tk,
@@ -1237,14 +1287,15 @@ fn descriptor_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
     out.push(setup_field(
         tk,
         &bd_name,
-        date_input(
+        date_picker_field(
             app,
             tk,
+            layer,
             "connection-birthday",
-            "birthday",
             &bd_name,
-            &st(app).form.birthday,
-            |a| &mut stm(a).form.birthday,
+            &st(app).form.birthday.text,
+            true,
+            set_birthday,
         ),
         err(app, "birthday"),
         Some(t(if core {
@@ -1311,7 +1362,7 @@ fn address_list_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             tk,
             layer,
             &t("connections:add.field.backend"),
-            submit::descriptor_options(app),
+            submit::address_options(app),
             None,
         ),
     ];
@@ -1322,14 +1373,15 @@ fn address_list_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
         out.push(setup_field(
             tk,
             &bd_name,
-            date_input(
+            date_picker_field(
                 app,
                 tk,
+                layer,
                 "connection-address-birthday",
-                "birthday",
                 &bd_name,
-                &st(app).form.birthday,
-                |a| &mut stm(a).form.birthday,
+                &st(app).form.birthday.text,
+                true,
+                set_birthday,
             ),
             err(app, "birthday"),
             Some(t("connections:add.descriptor.birthdayHelperCore")),
@@ -1560,22 +1612,20 @@ fn silent_payment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
         None,
         false,
     );
-    let date = date_input(
+    let date = date_picker_field(
         app,
         tk,
+        layer,
         "connection-sp-start-date",
-        "spScanStartDate",
         &dn,
-        &st(app).form.sp_start_date,
-        |a| &mut stm(a).form.sp_start_date,
+        &st(app).form.sp_start_date.text,
+        !full,
+        set_sp_start_date,
     );
-    let (height, date) = if full {
-        (
-            height.opacity(0.5).disabled(true),
-            date.opacity(0.5).disabled(true),
-        )
+    let height = if full {
+        height.opacity(0.5).disabled(true)
     } else {
-        (height, date)
+        height
     };
     out.push(grid2(
         tk,
@@ -1595,8 +1645,17 @@ fn silent_payment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
         &t("connections:add.silentPayments.fullHistory"),
         true,
         |a: &mut App| {
-            let f = &mut stm(a).form;
-            f.sp_full_history = !f.sp_full_history;
+            let s = stm(a);
+            s.form.sp_full_history = !s.form.sp_full_history;
+            if s.form.sp_full_history {
+                s.errors.remove("spScanStartDate");
+                if s.date_picker
+                    .as_ref()
+                    .is_some_and(|p| p.key == "connection-sp-start-date")
+                {
+                    s.date_picker = None;
+                }
+            }
         },
     )];
     if full {
@@ -3759,49 +3818,104 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         form = form.child(f);
     }
     let s = st(app);
-    if let Some((wallet, processed, total)) = &s.progress {
-        let pct = if *total > 0 {
-            (*processed as f32 / *total as f32).min(1.0)
+    let cancelling = s.job.as_ref().is_some_and(|j| j.cancelling);
+    let progress_banner = s.progress.as_ref().map(|p| {
+        let pct = (p.percent as f32 / 100.0).clamp(0.0, 1.0);
+        let headline = if cancelling {
+            tr(
+                "connections:add.progress.cancelling",
+                &[("wallet", &p.wallet)],
+            )
         } else {
-            0.0
-        };
-        form = form.child(plain_box(
-            tk,
-            tk.r(0.25),
-            vec![
-                row()
-                    .w_full()
-                    .justify_between()
-                    .child(
-                        text(tr(
-                            "connections:add.progress.importing",
-                            &[("wallet", wallet)],
-                        ))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg),
-                    )
-                    .child(
-                        text(tr(
-                            "connections:add.progress.rows",
-                            &[
-                                ("processed", &crate::format::count(*processed as usize)),
-                                ("total", &crate::format::count(*total as usize)),
-                            ],
-                        ))
-                        .font(tk.txs(500.0).features("'tnum' 1"))
-                        .color(tk.fg),
+            match p.phase.as_deref() {
+                Some(ph) => format!(
+                    "{} · {}",
+                    tr(
+                        "connections:add.progress.scanning",
+                        &[("wallet", &p.wallet)]
                     ),
-                row()
-                    .w_full()
-                    .h(tk.r(0.375))
-                    .radius(tk.r(0.1875))
-                    .fill(tk.muted)
-                    .clip_rounded(tk.r(0.1875))
-                    .child(el().grow(pct.max(0.0001)).h_full().fill(tk.primary))
-                    .child(el().grow((1.0 - pct).max(0.0001)).h_full()),
-            ],
-        ));
-    }
+                    crate::shell::maint::phase_label(ph)
+                ),
+                None => tr(
+                    "connections:add.progress.importing",
+                    &[("wallet", &p.wallet)],
+                ),
+            }
+        };
+        let detail = if p.total > 0 {
+            tr(
+                "connections:add.progress.rows",
+                &[
+                    ("processed", &crate::format::count(p.processed as usize)),
+                    ("total", &crate::format::count(p.total as usize)),
+                ],
+            )
+        } else if p.processed > 0 {
+            crate::format::count(p.processed as usize)
+        } else {
+            format!("{}%", (pct * 100.0).round() as u32)
+        };
+        let stop_label = t(if cancelling {
+            "connections:add.progress.cancellingButton"
+        } else {
+            "connections:add.progress.cancelScan"
+        });
+        let mut stop_btn = button(
+            tk,
+            "add-cancel-scan",
+            Variant::Outline,
+            true,
+            None,
+            &stop_label,
+            !cancelling,
+        );
+        if !cancelling {
+            stop_btn = stop_btn.on_press(submit::stop_scan);
+        }
+        col()
+            .w_full()
+            .px(tk.r(1.25))
+            .py(tk.r(0.75))
+            .items_center()
+            .border_sides([0.0, 0.0, 1.0, 0.0], tk.border)
+            .border_layout()
+            .child(
+                plain_box(
+                    tk,
+                    tk.r(0.5),
+                    vec![
+                        row()
+                            .w_full()
+                            .gap(tk.r(0.5))
+                            .center_y()
+                            .justify_between()
+                            .child(
+                                text(headline)
+                                    .font(tk.txs(400.0))
+                                    .color(tk.muted_fg)
+                                    .wrap()
+                                    .grow(1.0)
+                                    .min_w(0.0),
+                            )
+                            .child(
+                                text(detail)
+                                    .font(tk.txs(500.0).features("'tnum' 1"))
+                                    .color(tk.fg),
+                            ),
+                        row()
+                            .w_full()
+                            .h(tk.r(0.375))
+                            .radius(tk.r(0.1875))
+                            .fill(tk.muted)
+                            .clip_rounded(tk.r(0.1875))
+                            .child(el().grow(pct.max(0.0001)).h_full().fill(tk.primary))
+                            .child(el().grow((1.0 - pct).max(0.0001)).h_full()),
+                        row().w_full().justify_end().child(stop_btn),
+                    ],
+                )
+                .max_w(tk.r(if wide { 48.0 } else { 36.0 })),
+            )
+    });
     if let Some(e) = &s.setup_error {
         form = form.child(
             row()
@@ -3824,6 +3938,28 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         form = form.child(import_summary(tk, r));
     }
     let _ = notice(tk, Tone::Neutral, "");
+    let mut right = col().grow(1.0).min_w(0.0).h_full();
+    if let Some(banner) = progress_banner {
+        right = right.child(banner);
+    }
+    right = right.child(
+        col()
+            .key("add-setup-scroll")
+            .w_full()
+            .grow(1.0)
+            .min_w(0.0)
+            .min_h(0.0)
+            .scroll(rune::ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(
+                col()
+                    .w_full()
+                    .padding(tk.r(1.25))
+                    .items_center()
+                    .child(form),
+            ),
+    );
     row()
         .w_full()
         .h_full()
@@ -3844,23 +3980,7 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                         .child(super::picker::summary_of(app, cx, tk, src)),
                 ),
         )
-        .child(
-            col()
-                .key("add-setup-scroll")
-                .grow(1.0)
-                .min_w(0.0)
-                .h_full()
-                .scroll(rune::ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(
-                    col()
-                        .w_full()
-                        .padding(tk.r(1.25))
-                        .items_center()
-                        .child(form),
-                ),
-        )
+        .child(right)
 }
 
 /// Selects mount their menus while the body is built; nothing else to add.

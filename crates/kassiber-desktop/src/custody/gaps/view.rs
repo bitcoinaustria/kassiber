@@ -106,7 +106,9 @@ fn textarea(
 ) -> El {
     let input = text_input(edit, tk.tsm(400.0))
         .key(format!("{key}-input"))
+        .wrap_anywhere()
         .w_full()
+        .min_w(0.0)
         .color(tk.fg)
         .placeholder(placeholder, tk.muted_fg)
         .caret(tk.fg, tk.primary.alpha(0.3))

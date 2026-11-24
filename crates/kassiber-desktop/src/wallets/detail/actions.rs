@@ -454,13 +454,18 @@ pub fn submit_edit(app: &mut App) {
         }
     }
     let backend_kind = effective_backend_kind(app, &c, e);
-    if (kind == Some("descriptor") || backend_kind.as_deref() == Some("bitcoinrpc"))
-        && birthday != current_birthday
-    {
+    if kind == Some("descriptor") || backend_kind.as_deref() == Some("bitcoinrpc") {
         if birthday.is_empty() {
-            clear.push("birthday");
+            if !current_birthday.is_empty() {
+                clear.push("birthday");
+            }
         } else {
-            changes.insert("birthday".into(), json!(birthday));
+            let Some(iso) = crate::ui::date_picker::normalize_date(&birthday) else {
+                return edit_error(app, t("connections:add.validation.birthdayInvalid"));
+            };
+            if iso != current_birthday {
+                changes.insert("birthday".into(), json!(iso));
+            }
         }
     }
     if kind == Some("btcpay") {
@@ -541,6 +546,8 @@ pub fn submit_edit(app: &mut App) {
         .is_some()
     {
         asked(app, "wallets.detail.update", &c, next, serial);
+        app.wallets.detail.date_picker = None;
+        app.wallets.detail.select = None;
         if let Some(e) = app.wallets.detail.edit.as_mut() {
             e.error = None;
             e.pending = true;
@@ -886,7 +893,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                         Some("connection-edit"),
                     );
                     if mine(app) {
-                        app.wallets.detail.edit = None;
+                        super::dialogs::close_edit(app);
                     }
                     // The wallet changed whichever page is open now.
                     if app.wallets.detail.wallet == asked.wallet {
@@ -1250,5 +1257,139 @@ mod reveal_tests {
         assert!(PENDING_COPY.with(|p| p.borrow().is_none()));
         let rv = app.wallets.detail.reveal.as_ref().unwrap();
         assert!(!rv.copied && rv.pending);
+    }
+
+    #[test]
+    fn edit_birthday_validates_and_normalizes_to_iso() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/connections/w1".into());
+        app.reads.insert(
+            "ui.overview.snapshot".into(),
+            Reply {
+                kind: "ui.overview.snapshot".into(),
+                data: json!({"connections": [{"id": "w1", "label": "Cold", "kind": "descriptor"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        app.wallets.detail.wallet = "w1".into();
+        app.wallets.detail.wallets = crate::wallets::detail::Read::Ready(vec![json!({
+            "id": "w1",
+            "label": "Cold",
+            "kind": "descriptor",
+            "birthday": null
+        })]);
+
+        // Invalid calendar date is rejected locally with an error message.
+        app.wallets.detail.edit = Some(crate::wallets::detail::EditForm {
+            serial: 1,
+            label: rune::TextEdit::new("Cold"),
+            ack: rune::TextEdit::new(crate::wallets::detail::CHANGE_ACK),
+            birthday: rune::TextEdit::new("2024-02-30"),
+            ..Default::default()
+        });
+        submit_edit(&mut app);
+        assert!(
+            app.wallets
+                .detail
+                .edit
+                .as_ref()
+                .and_then(|e| e.error.as_ref())
+                .is_some(),
+            "impossible birthday date must be rejected"
+        );
+        assert!(
+            !app.wallets.detail.edit.as_ref().unwrap().pending,
+            "invalid birthday must not dispatch ui.wallets.update"
+        );
+
+        // Austrian/German date format normalizes and dispatches cleanly.
+        app.wallets.detail.edit = Some(crate::wallets::detail::EditForm {
+            serial: 2,
+            label: rune::TextEdit::new("Cold"),
+            ack: rune::TextEdit::new(crate::wallets::detail::CHANGE_ACK),
+            birthday: rune::TextEdit::new("05.03.2024"),
+            ..Default::default()
+        });
+        submit_edit(&mut app);
+        assert!(
+            app.wallets.detail.edit.as_ref().unwrap().error.is_none(),
+            "valid DD.MM.YYYY birthday must be accepted"
+        );
+        assert!(app.wallets.detail.edit.as_ref().unwrap().pending);
+    }
+
+    #[test]
+    fn edit_save_clears_date_picker_on_pending_and_success() {
+        let mut app = crate::app::tests::quiet_app();
+        app.route = crate::app::Route("/connections/w1".into());
+        app.reads.insert(
+            "ui.overview.snapshot".into(),
+            Reply {
+                kind: "ui.overview.snapshot".into(),
+                data: json!({"connections": [{"id": "w1", "label": "Cold", "kind": "descriptor"}]}),
+                error: None,
+                error_detail: Value::Null,
+                elapsed: std::time::Duration::ZERO,
+            },
+        );
+        app.wallets.detail.wallet = "w1".into();
+        app.wallets.detail.wallets = crate::wallets::detail::Read::Ready(vec![json!({
+            "id": "w1",
+            "label": "Cold",
+            "kind": "descriptor",
+            "birthday": null
+        })]);
+        app.wallets.detail.edit = Some(crate::wallets::detail::EditForm {
+            serial: 1,
+            label: rune::TextEdit::new("Cold"),
+            ack: rune::TextEdit::new(crate::wallets::detail::CHANGE_ACK),
+            birthday: rune::TextEdit::new("2024-03-05"),
+            ..Default::default()
+        });
+        app.wallets.detail.date_picker = Some(crate::ui::date_picker::PickerState {
+            key: "wd-edit-birthday".into(),
+            year: 2024,
+            month: 2,
+            year_page_start: 2015,
+            view: crate::ui::date_picker::View::Days,
+        });
+        app.wallets.detail.select = Some(crate::wallets::detail::Select::Backend);
+
+        submit_edit(&mut app);
+        assert!(app.wallets.detail.edit.as_ref().unwrap().pending);
+        assert!(
+            app.wallets.detail.date_picker.is_none(),
+            "starting Save must close any open date picker"
+        );
+        assert!(
+            app.wallets.detail.select.is_none(),
+            "starting Save must close any open select"
+        );
+
+        // Even if a stale picker state were present before the reply lands, edit success clears it
+        // through the shared close_edit handler.
+        app.wallets.detail.date_picker = Some(crate::ui::date_picker::PickerState {
+            key: "wd-edit-birthday".into(),
+            year: 2024,
+            month: 2,
+            year_page_start: 2015,
+            view: crate::ui::date_picker::View::Days,
+        });
+        let reply = Reply {
+            kind: "ui.wallets.update".into(),
+            data: json!({"wallet": {"id": "w1", "label": "Cold"}}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: std::time::Duration::ZERO,
+        };
+        on_reply(&mut app, "wallets.detail.update", &reply);
+        assert!(app.wallets.detail.edit.is_none());
+        assert!(
+            app.wallets.detail.date_picker.is_none(),
+            "edit success must clear date_picker so reopening starts clean"
+        );
+        assert!(app.wallets.detail.select.is_none());
     }
 }
