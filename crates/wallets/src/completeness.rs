@@ -12,8 +12,17 @@ use std::collections::BTreeMap;
 const UNKNOWN_OCCURRED_AT: &str = kassiber_envelope::occurred_at::UNKNOWN;
 const DESCRIPTOR_KINDS: [&str; 4] = ["descriptor", "xpub", "silent-payment", "samourai"];
 const LIGHTNING_NODE_KINDS: [&str; 2] = ["coreln", "lnd"];
-const EXCHANGE_API_KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
-const CUSTODIAL_EXPORT_KINDS: [&str; 11] = [
+const EXCHANGE_API_KINDS: [&str; 8] = [
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
+];
+const CUSTODIAL_EXPORT_KINDS: [&str; 15] = [
     "river",
     "bullbitcoin",
     "coinfinity",
@@ -25,6 +34,10 @@ const CUSTODIAL_EXPORT_KINDS: [&str; 11] = [
     "coinbase",
     "binance",
     "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
 ];
 /// Classes Kassiber scans itself, so a missing sync time means nothing was
 /// observed yet.
@@ -381,6 +394,33 @@ mod tests {
             // Rust only (docs/reference/bitpanda.md): an exchange API wallet.
             ("bitpanda", r#"{"backend":"b"}"#, "provider-api"),
             ("bitpanda", "{}", "exchange-export"),
+            // Rust only (docs/reference/bitvavo.md): an API connection, a CSV
+            // export, or both.
+            ("bitvavo", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitvavo",
+                r#"{"source_format":"bitvavo_csv"}"#,
+                "exchange-export",
+            ),
+            ("bitstamp", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitstamp",
+                r#"{"source_format":"bitstamp_csv"}"#,
+                "exchange-export",
+            ),
+            ("bitfinex", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitfinex",
+                r#"{"backend":"b","source_file":"f"}"#,
+                "exchange-export",
+            ),
+            // Rust only (docs/reference/bitcoinde.md): API and statement CSV.
+            ("bitcoinde", r#"{"backend":"b"}"#, "provider-api"),
+            (
+                "bitcoinde",
+                r#"{"source_format":"bitcoinde_csv"}"#,
+                "exchange-export",
+            ),
             ("custom", r#"{"source_format":"generic_ledger"}"#, "manual"),
             ("custom", r#"{"source_format":" "}"#, "manual"),
             ("custom", r#"{"source_format":"bisq"}"#, "file-import"),

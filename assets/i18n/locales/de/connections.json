@@ -758,6 +758,7 @@
       "importingSamourai": "Samourai wird importiert…",
       "importing": "Wird importiert…",
       "previewingLabels": "Labels werden geprüft…",
+      "checkingAssets": "Assets werden geprüft…",
       "previewLabels": "Labels prüfen",
       "importingLabels": "Labels werden importiert…",
       "saving": "Wird gespeichert…",
@@ -966,10 +967,13 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "bitstampCsv": "Bitstamp CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "cointrackingCsv": "CoinTracking-Transaktionen (CSV)",
       "blockpitCsv": "Blockpit-Transaktionen (CSV)",
       "binanceSupplementalCsv": "Binance Supplemental CSV",
+      "binanceHistoryCsv": "Binance-Transaktionsverlauf (CSV)",
+      "bitfinexReports": "Bitfinex-Reports-ZIP oder -CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
@@ -1434,9 +1438,9 @@
       },
       "metric": {
         "rowsRead": "Gelesene Zeilen",
-        "inserted": "Eingefügt",
+        "inserted": "Neu",
         "updated": "Aktualisiert",
-        "unchanged": "Unverändert",
+        "unchanged": "Bereits im Buch",
         "matched": "Zugeordnet",
         "coinsObserved": "Beobachtete Coins",
         "activeCoins": "Aktive Coins",
@@ -1495,6 +1499,10 @@
       "coinbase": "Öffne in Coinbase Einstellungen → API und erstelle einen Key für deine BTC-Wallet. Kopiere den API-Key und sein Secret. Kassiber signiert mit diesem Key und Secret; Key-Dateien der Coinbase Developer Platform werden noch nicht unterstützt.",
       "binance": "Öffne in Binance Konto → API-Verwaltung, erstelle einen systemgenerierten Key und bearbeite seine Beschränkungen. Kopiere den API-Key und den Secret Key; Binance zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "bitpanda": "Öffne in Bitpanda Kontoeinstellungen → API-Keys → Neuer API-Key. Bitpanda zeigt den Key nur einmal an, und er läuft spätestens nach einem Jahr ab. Kassiber lehnt einen Key ab, der handeln darf.",
+      "bitvavo": "Öffne in Bitvavo Einstellungen → API → Neuen API-Key hinzufügen. Aktiviere nur View access, trage bei Bedarf die IP-Adresse dieses Computers in die IP-Whitelist ein und bestätige mit deinem 2FA-Code. Kopiere den API-Key und das Secret; Bitvavo zeigt beide nur einmal an. Bitvavo verrät Kassiber nicht, was ein Key darf, also lass Handel und Auszahlungen selbst ausgeschaltet.",
+      "bitstamp": "Öffne in Bitstamp Einstellungen → API-Zugang und erstelle einen neuen Key. Schalte nur die unten genannten Leseberechtigungen ein, bestätige mit deinem Zwei-Faktor-Code, kopiere den API-Key und das Secret (Bitstamp zeigt das Secret nur einmal an) und aktiviere den Key über die Bestätigungs-E-Mail. Bitstamp verrät Kassiber nicht, was ein Key sonst noch darf, also lass alle Berechtigungen für Handel, Auszahlungen, Einzahlungen und Überträge ausgeschaltet.",
+      "bitfinex": "Öffne in Bitfinex Konto → API Keys → Create New Key und wähle nur Leserechte. Bitfinex schickt einen Bestätigungslink per E-Mail; danach kopierst du den API-Key und das API-Key-Secret, das Bitfinex nur einmal anzeigt. Optional beschränkst du den Key auf deine IP-Adresse. Kassiber lehnt einen Key mit Schreibrechten ab.",
+      "bitcoinde": "Öffne in Bitcoin.de mein Bitcoin.de → Trading-API und erstelle einen neuen Key. Hake nur die unten genannten Methoden an und lass alle Order-, Handels- und Auszahlungsmethoden aus; optional beschränkst du den Key auf deine IP-Adresse. Kopiere den API-Key und das API-Secret; Bitcoin.de zeigt das Secret nur einmal an. Kassiber lehnt einen Key ab, der mehr als lesen darf.",
       "grant": "Nur einschalten",
       "deny": "Ausgeschaltet lassen",
       "open": "API-Key-Seite von {{provider}} öffnen"
@@ -1504,7 +1512,10 @@
       "secret": {
         "kraken": "Private Key",
         "coinbase": "API-Secret",
-        "binance": "Secret Key"
+        "binance": "Secret Key",
+        "bitstamp": "API-Secret",
+        "bitfinex": "API-Key-Secret",
+        "bitcoinde": "API-Secret"
       },
       "stored": "Kassiber speichert den Key mit diesem Buch (verschlüsselt, wenn das Buch es ist) und zeigt ihn nie wieder an."
     },
@@ -1557,6 +1568,12 @@
       "never": "Seit dem Start von Kassiber nicht synced",
       "ok": "{{time}} · {{imported}} neu von {{fetched}} gelesen",
       "failed": "{{time}} · fehlgeschlagen",
+      "balance": "Saldo laut {{provider}}",
+      "balanceMatches": "{{amount}} · stimmt mit dem Buch überein",
+      "balanceMismatch": "{{amount}} · das Buch zeigt {{book}}",
+      "balanceUnavailable": "Aus dem Verlauf nicht eindeutig ablesbar",
+      "binanceSpotTrades": "Die Binance-API listet keine Spot-Trades. Für ein vollständiges Konto importiere stattdessen den CSV-Export des Binance-Transaktionsverlaufs in eine eigene Wallet.",
+      "balanceMismatchNote": "Buch und {{provider}} weichen ab. Prüfe ausgeschlossene Transaktionen, Transaktionen aus anderen Quellen in dieser Wallet oder {{provider}}-Verlauf, den die API nicht geliefert hat.",
       "skipped_one": "{{count}} Eintrag wurde übersprungen, weil er kein BTC ist oder nur Fiat bewegt.",
       "skipped_other": "{{count}} Einträge wurden übersprungen, weil sie kein BTC sind oder nur Fiat bewegen.",
       "sessionNote": "Sync-Ergebnisse bleiben bis zum Neustart von Kassiber erhalten; das Buch speichert nur die importierten Transaktionen."
@@ -1900,11 +1917,21 @@
         "description": "BTC-Käufe, Übertragungen und Einkünfte von Binance über einen API-Key, der nur lesen darf.",
         "details": [
           "Braucht einen Key nur mit Enable Reading; ein Key, der handeln, übertragen oder abheben kann, wird abgelehnt",
-          "BTC-Käufe mit Fiat behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+          "BTC-Käufe mit Fiat und Converts behalten ihren exakten Ausführungswert; Ein- und Auszahlungen sowie BTC-Einkünfte werden ebenfalls importiert",
+        "Die Binance-API listet keine Spot-Trades: Für ein vollständiges Konto importiere den CSV-Export des Transaktionsverlaufs",
           "Kassiber kontaktiert Binance nur, wenn du den Key testest oder auf „Sync starten“ drückst"
         ]
       },
-      "binance": {
+      "binance-history": {
+      "title": "Binance-Transaktionsverlauf",
+      "description": "Das vollständige Binance-Konto, Spot-Trades eingeschlossen, aus dem Export des Transaktionsverlaufs.",
+      "details": [
+        "Exportiere unter Orders → Transaction History alle Kontoauszüge und importiere jede Datei unverändert",
+        "Spot-Trades, Converts, Ein- und Auszahlungen und Earn-Erträge werden importiert; andere Krypto-Assets folgen dem Asset-Umfang der Wallet",
+        "Nutze ihn statt der Binance-API-Verbindung, nicht daneben: Der Export hat keine IDs, die zu den Zeilen der API passen"
+      ]
+    },
+    "binance": {
         "title": "Binance-CSV",
         "description": "Ergänzende BTC-Zeilen aus Binance-Exporten.",
         "details": [
@@ -1969,7 +1996,163 @@
         "details": [
           "Labels werden lokal gespeichert und passenden Transaktionen zugeordnet"
         ]
+      },
+      "bitvavo": {
+        "description": "Import des Bitvavo-Transaktionsverlaufs (CSV) mit exakten Handelspreisen.",
+        "details": [
+          "Exportiere in Bitvavo den Transaktionsverlauf und importiere ihn unverändert",
+          "BTC-Käufe und -Verkäufe gegen EUR behalten den exakten Ausführungspreis; Ein- und Auszahlungen sowie Staking werden als BTC-Bewegungen importiert",
+          "Trades gegen Altcoins oder Stablecoins (USDC) werden unter Nennung des Assets abgelehnt; reine Fiat-Zeilen werden übersprungen",
+          "Nutzt dieselben Transaktions-IDs wie die Bitvavo-API-Verbindung, daher bleibt bei beiden Importen jeder Eintrag nur einmal erhalten"
+        ]
+      },
+      "bitcoinde": {
+        "description": "Import des Bitcoin.de-BTC-Kontoauszugs (CSV).",
+        "details": [
+          "Lade den BTC-Kontoauszug für den gesamten Zeitraum herunter und importiere ihn unverändert; spätere Importe dürfen nur neuere Buchungen hinzufügen",
+          "Käufe und Verkäufe speichern die exakten Euro-Beträge, die tatsächlich geflossen sind; Auszahlungen tragen ihre Netzwerkgebühr",
+          "Kontoauszüge anderer Coins werden abgelehnt; Buchungen, die auch die API liefert, werden nur einmal gespeichert"
+        ]
+      },
+      "bitvavo-api": {
+        "description": "Bitvavo-Verlauf über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit View access; Bitvavo verrät nicht, was ein Key darf, also lass Handel und Auszahlungen ausgeschaltet",
+          "BTC-Käufe und -Verkäufe gegen EUR, Ein- und Auszahlungen sowie Staking werden importiert; Altcoin- und Stablecoin-Trades werden unter Nennung des Assets abgelehnt",
+          "Kassiber kontaktiert Bitvavo nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitstamp-api": {
+        "title": "Bitstamp-API",
+        "description": "Bitstamp-Verlauf und BTC-Guthaben über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Account balance und User transactions; Bitstamp kann Kassiber nicht sagen, ob ein Key handeln darf, also lass alle anderen Berechtigungen ausgeschaltet",
+          "BTC-Trades gegen Fiat behalten ihren exakten Wert; Ein- und Auszahlungen, Kontoüberträge und Empfehlungsprämien werden ebenfalls importiert",
+          "Liest den gesamten Transaktionsverlauf, älteste Einträge zuerst; der CSV-Export lässt sich ohne Duplikate in dieselbe Wallet importieren",
+          "Kassiber kontaktiert Bitstamp nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitstamp": {
+        "title": "Bitstamp-CSV",
+        "description": "Export des Bitstamp-Transaktionsverlaufs als aktives verwahrtes Konto.",
+        "details": [
+          "Importiere den im RFC-4180-Format exportierten Transaktionsverlauf; der alte Export hat keine Transaktions-IDs und wird abgelehnt",
+          "Die Zeilen haben dieselben IDs wie in der API, daher werden Export und API-Sync in einer Wallet dedupliziert",
+          "Reine Fiat-Zeilen und Zeilen anderer Assets werden übersprungen; BTC, das gegen einen anderen Coin gehandelt wurde, wird abgelehnt"
+        ]
+      },
+      "bitfinex": {
+        "description": "Bitfinex-BTC-Spot-Trades und -Bewegungen über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit Leserechten (Account History und Wallets); ein Key mit irgendeinem Schreibrecht wird abgelehnt",
+          "BTC-Trades gegen USD, EUR, GBP oder JPY behalten ihren exakten Ausführungswert; BTC-Ein- und -Auszahlungen sowie Funding-Zinsen werden ebenfalls importiert",
+          "Margin, Derivate und BTC, das gegen einen anderen Coin gehandelt wurde, lassen den Sync unter Nennung des Assets scheitern",
+          "Kassiber kontaktiert Bitfinex nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
+      },
+      "bitfinex-csv": {
+        "title": "Bitfinex-CSV",
+        "description": "Exporte von Trades, Movements und Ledgers aus Bitfinex Reports.",
+        "details": [
+          "Exportiere Trades, Movements und Ledgers aus Bitfinex Reports mit dem Datumsformat YYYY-MM-DD und UTC",
+          "Nutzt dieselben IDs wie die API, daher verdoppeln ein CSV-Import und ein API-Sync nie Zeilen",
+          "Importiere die Reports-ZIP mit allen drei Exporten: Ein Trade wird nur angenommen, wenn das Ledger ihn in der Exchange-Wallet zeigt (nicht Margin)"
+        ]
+      },
+      "bitcoinde-api": {
+        "description": "Bitcoin.de-BTC-Kontoauszug und BTC/EUR-Trades über einen API-Key, der nur lesen darf.",
+        "details": [
+          "Braucht einen Key nur mit showPermissions, showAccountLedger und showMyTrades; ein Key, der handeln oder auszahlen kann, wird abgelehnt",
+          "BTC/EUR-Trades behalten die exakten Euro-Beträge, die tatsächlich geflossen sind; Einzahlungen, Auszahlungen mit ihrer Netzwerkgebühr und Gutschriften werden ebenfalls importiert",
+          "Der Kontoauszug listet Buchungen bis zum Vortag; die Buchungen von heute kommen mit dem nächsten Sync",
+          "Kassiber kontaktiert Bitcoin.de nur, wenn du den Key testest oder auf „Sync starten“ drückst"
+        ]
       }
+    }
+  },
+  "assets": {
+    "found_one": "Außerdem gefunden: {{tickers}}: {{rows}} Eintrag",
+    "found_other": "Außerdem gefunden: {{tickers}}: {{rows}} Einträge",
+    "foundBody": "Diese Wallet importiert nur Bitcoin, deshalb wurden diese Kryptowährungen übersprungen.",
+    "tickersMore": "{{list}} und {{count}} weitere",
+    "track": "Diese Assets auch erfassen",
+    "tracked": "Andere Kryptowährungen werden für diese Wallet erfasst.",
+    "untrack": "Nur Bitcoin erfassen",
+    "pickAgain": "Andere Kryptowährungen werden jetzt erfasst. Wähle dieselbe Datei noch einmal und importiere sie, um sie hinzuzufügen; bereits importierte Einträge werden nicht verdoppelt.",
+    "excluded_one": "Nicht importiert: {{tickers}} ({{rows}} Eintrag). Aktien, ETFs und Edelmetalle bleiben außerhalb des Buchs.",
+    "excluded_other": "Nicht importiert: {{tickers}} ({{rows}} Einträge). Aktien, ETFs und Edelmetalle bleiben außerhalb des Buchs.",
+    "unread_one": "Nicht importiert: {{tickers}} ({{rows}} Eintrag). Kassiber liest von dieser Börse nur Bitcoin; andere Coins erfasst du selbst mit einem allgemeinen CSV- oder JSON-Import.",
+    "unread_other": "Nicht importiert: {{tickers}} ({{rows}} Einträge). Kassiber liest von dieser Börse nur Bitcoin; andere Coins erfasst du selbst mit einem allgemeinen CSV- oder JSON-Import.",
+    "swapPairs_one": "Krypto-zu-Krypto-Tausch: {{pairs}} Paar verknüpft",
+    "swapPairs_other": "Krypto-zu-Krypto-Tausch: {{pairs}} Paare verknüpft",
+    "confirm": {
+      "trackTitle": "Andere Kryptowährungen für diese Wallet erfassen?",
+      "trackBody": {
+        "sync": "Kassiber startet dann noch einmal einen Sync dieser Börse und übernimmt auch die anderen Kryptowährungen. Bereits importierte Einträge werden nicht verdoppelt.",
+        "import": "Kassiber importiert dieselbe Datei dann noch einmal und übernimmt auch die anderen Kryptowährungen. Bereits importierte Einträge werden nicht verdoppelt.",
+        "pick_file": "Kassiber übernimmt andere Kryptowährungen ab dem nächsten Import. Kassiber hat sich den Speicherort der Datei nicht gemerkt, wähle danach also dieselbe Datei noch einmal. Bereits importierte Einträge werden nicht verdoppelt."
+      },
+      "trackButton": {
+        "sync": "Erfassen und Sync starten",
+        "import": "Erfassen und neu importieren",
+        "pick_file": "Andere Assets erfassen"
+      },
+      "untrackTitle": "Wieder nur Bitcoin erfassen?",
+      "untrackBody": "Spätere Syncs und Importe überspringen andere Kryptowährungen wieder. Bereits importierte Einträge bleiben im Buch; schließe sie auf der Seite Transaktionen aus, wenn du sie nicht in deinen Berichten haben willst.",
+      "untrackButton": "Nur Bitcoin erfassen",
+      "passphrase": "Datenbank-Passphrase",
+      "ack": "Tippe {{ack}}, um die Änderung zu bestätigen",
+      "errorPassphrase": "Gib die Datenbank-Passphrase ein.",
+      "errorAck": "Tippe {{ack}}, um die Änderung zu bestätigen.",
+      "errorDenied": "Die Passphrase wurde nicht akzeptiert.",
+      "cancel": "Abbrechen"
+    }
+  },
+  "reimport": {
+    "new_one": "{{count}} neu",
+    "new_other": "{{count}} neu",
+    "known_one": "{{count}} bereits im Buch",
+    "known_other": "{{count}} bereits im Buch",
+    "updated_one": "{{count}} aktualisiert",
+    "updated_other": "{{count}} aktualisiert",
+    "corrections_one": "{{count}} Wert im Export weicht vom Buch ab; der Wert im Buch wurde behalten.",
+    "corrections_other": "{{count}} Werte im Export weichen vom Buch ab; die Werte im Buch wurden behalten.",
+    "keptRows_one": "{{count}} Zeile so behalten, wie sie im Buch steht.",
+    "keptRows_other": "{{count}} Zeilen so behalten, wie sie im Buch stehen.",
+    "importedRows_one": "{{count}} Zeile, die wie eine Zeile im Buch aussah, als neue Transaktion importiert.",
+    "importedRows_other": "{{count}} Zeilen, die wie Zeilen im Buch aussahen, als neue Transaktionen importiert.",
+    "toast": "{{label}}: {{counts}}",
+    "refusal": {
+      "title": "Einige Zeilen sehen aus wie Zeilen, die schon im Buch stehen",
+      "reidentified_one": "Dieser Export führt {{count}} Zeile, die schon im Buch steht, unter einer anderen ID.",
+      "reidentified_other": "Dieser Export führt {{count}} Zeilen, die schon im Buch stehen, unter anderen IDs.",
+      "corrected_one": "{{count}} Zeile hat die ID einer Zeile im Buch, aber einen anderen Betrag oder eine andere Gebühr.",
+      "corrected_other": "{{count}} Zeilen haben die ID einer Zeile im Buch, aber einen anderen Betrag oder eine andere Gebühr.",
+      "body": "Es wurde nichts importiert. Kassiber entscheidet das nicht auf Verdacht. Um stattdessen die Werte des Exports zu übernehmen, nimm den früheren Import auf der Seite der Verbindung zurück und importiere diese Datei erneut.",
+      "skip": "Zeilen im Buch behalten",
+      "import": "Als neue Transaktionen importieren",
+      "bodySync": "Es wurde nichts importiert. Kassiber entscheidet das nicht auf Verdacht. Um stattdessen die Werte der Börse zu übernehmen, nimm den früheren Sync auf der Seite der Verbindung zurück und synchronisiere erneut.",
+      "syncToastTitle": "Sync angehalten",
+      "syncToastBody": "{{label}}: Einige Zeilen sehen aus wie Zeilen, die schon im Buch stehen. Antworte auf der Seite der Verbindung."
+    },
+    "choice": {
+      "title": "Welche Assets soll diese Wallet erfassen?",
+      "found_one": "Der Export enthält außerdem {{tickers}}: {{rows}} Eintrag.",
+      "found_other": "Der Export enthält außerdem {{tickers}}: {{rows}} Einträge.",
+      "crypto": "Bitcoin und andere Kryptowährungen",
+      "cryptoBody": "Importiert auch diese Assets.",
+      "bitcoin": "Nur Bitcoin",
+      "bitcoinBody": "Überspringt die anderen Kryptowährungen. Du kannst sie später auf der Seite der Verbindung erfassen.",
+      "bitcoinRefused": "Für diesen Export nicht möglich: Darin wird Bitcoin gegen andere Kryptowährungen getauscht.",
+      "stocks": "Aktien, ETFs und Edelmetalle bleiben in jedem Fall außerhalb des Buchs.",
+      "checking": "Kassiber prüft, welche Assets der Export enthält…",
+      "bitcoinRefusedHistory": "Für dieses Konto nicht möglich: In seinem Verlauf wird Bitcoin gegen andere Kryptowährungen getauscht.",
+      "foundHistory_one": "Der Verlauf des Kontos enthält außerdem {{tickers}}: {{rows}} Eintrag.",
+      "foundHistory_other": "Der Verlauf des Kontos enthält außerdem {{tickers}}: {{rows}} Einträge.",
+      "checkingHistory": "Kassiber prüft, welche Assets das Konto enthält…",
+      "cryptoRefused": "Diese Assets lassen sich aus diesem Export nicht erfassen, daher wird nur Bitcoin importiert: {{reason}}",
+      "stale": "Die Quelle hat sich nach der Prüfung geändert. Kassiber hat sie erneut geprüft; antworte für das, was sie jetzt enthält.",
+      "staleImport": "Die Datei hat sich nach der Prüfung geändert und wurde nicht importiert. Wähle sie auf der Seite der Verbindung erneut, um sie zu importieren."
     }
   }
 }

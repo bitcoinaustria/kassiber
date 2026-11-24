@@ -79,7 +79,7 @@ fn u32le(bytes: &[u8], at: usize) -> Result<usize, AppError> {
         .map(|s| u32::from_le_bytes(s.try_into().unwrap()) as usize)
         .ok_or_else(|| error("Truncated central directory"))
 }
-fn archive(file: &str) -> Result<BTreeMap<String, Vec<u8>>, AppError> {
+pub(in crate::file_import) fn archive(file: &str) -> Result<BTreeMap<String, Vec<u8>>, AppError> {
     let input = std::fs::File::open(file).map_err(error)?;
     if input.metadata().map_err(error)?.len() > MAX_TOTAL as u64 {
         return Err(bounded());

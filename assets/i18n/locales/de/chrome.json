@@ -809,5 +809,15 @@
     "opened": "Du bist im Demo-Buch: Beispieldaten, getrennt von deinen eigenen Büchern. Zum Verlassen auf den Buchnamen klicken.",
     "tryEntry": "Demo-Buch ausprobieren",
     "mcpHint": "In der Demo öffnet der Agent-Befehl nur das Demo-Buch und nutzt die eigenen Agent-Einstellungen der Demo."
+  },
+  "maintProgress": {
+    "sourceOf": "Quelle {{index}} von {{total}}",
+    "rateLimited": "Rate-Limit — {{retry}}{{wait}}",
+    "retry": "Versuch {{attempt}}/{{max}}",
+    "retrying": "neuer Versuch",
+    "waitIn": " in {{seconds}} s",
+    "retained": "{{count}} Ziele bisher ausgewählt",
+    "imported": "{{count}} importiert",
+    "known": "{{count}} bereits im Buch"
   }
 }

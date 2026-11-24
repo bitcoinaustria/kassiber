@@ -11,6 +11,7 @@ backend serves them. The Python reference lives in
 coordination). The Rust port is `crates/wallets/src/file_import/exchange_api.rs`
 with one module per exchange. The user-facing behavior is described under
 [DALI/RP2-inspired exchange imports](imports.md#dalirp2-inspired-exchange-imports).
+Every exchange now follows the shared [exchange contract](exchange-contract.md).
 
 ## Where exchange sync runs
 
@@ -28,8 +29,11 @@ kind, desktop action or AI tool calls an exchange API:
   backend addresses configured"}` without I/O.
 
 The Rust backend keeps these boundaries. The three CLI commands run natively.
-A fourth, `wallets sync-bitpanda`, exists only in Rust and follows the same
-framework; [Bitpanda](bitpanda.md) records its API, mapping and refusals.
+Five more, `wallets sync-bitpanda`, `wallets sync-bitvavo`,
+`wallets sync-bitstamp`, `wallets sync-bitfinex` and `wallets sync-bitcoinde`,
+exist only in Rust and follow the same framework; [Bitpanda](bitpanda.md),
+[Bitvavo](bitvavo.md), [Bitstamp](bitstamp.md), [Bitfinex](bitfinex.md) and
+[Bitcoin.de](bitcoinde.md) record their APIs, mappings and refusals.
 `ui.wallets.sync` and the AI tool now answer the direct path natively when
 every selected wallet is sourceless (exchange API wallets and empty manual
 wallets). They still return `native_fallback_required` for any other direct-path
@@ -41,6 +45,38 @@ kinds, `ui.connections.exchange.{status,test,create,sync}`, documented in
 the CLI command for the wallet's own backend, so its rows are the CLI's.
 `ui.wallets.sync`, freshness and the assistant still leave exchange wallets
 sourceless.
+
+## Echoed credentials and shared helpers
+
+Every exchange read goes through `HttpClient::authenticated_json` or
+`authenticated_response` (`StatusPolicy::Exchange`), which keeps every
+credential each request carried (key, secret, computed signature, URL and
+proxy userinfo) at any length (`HttpClient::display_credentials`).
+
+- A successful body is data and is never rewritten. If it carries a request
+  credential of at least 16 characters, exactly or behind JSON escapes, the
+  client notes it (`HttpClient::echoed`) and `execute` refuses the sync with
+  `credential_echo` before anything is stored. Shorter values are ordinary
+  data and never match. After such a page, an error a read or the mapping
+  returns (sync and desktop key check alike) that still holds eight or more
+  consecutive characters of a credential once whole values are withheld is
+  replaced by that refusal: an adapter error may quote a truncated field,
+  and no whole-value scrub finds a prefix.
+- Error bodies (accepted 401/403 or raised) are display text: every request
+  credential is withheld at any length on their decoded JSON strings, so an
+  escape cannot hide one; numbers stay, so error codes survive.
+- Adapters show a provider's error code only from their own table
+  (`known_code`, `known_number`), never the provider's text.
+- Every error a sync or desktop key check returns is withheld once more with
+  every request credential (`scrub_error`); a numeric detail equal to one is
+  dropped.
+
+`exchange_api.rs` also holds the helpers the adapters share:
+`exact_msat`/`btc_decimal` (whole msat by the amount's own digits, never
+rounded), `strict_decimal`, `canonical`, `asset_code`, the `malformed` and
+`refusal` error builders, and `tag_same_second` (tags rows whose order
+within one second across imports is uncertain). See
+[credential echoes](credential-echo.md).
 
 ## Request sequences
 
@@ -71,19 +107,39 @@ All three share these rules:
 | Exchange | Requests | Paging | Signature |
 | --- | --- | --- | --- |
 | Kraken | `POST /0/private/TradesHistory`, then `POST /0/private/Ledgers`, form body `nonce=<ns>&ofs=<offset>` | `ofs` advances by the page's entry count until a page is empty or the merged row count reaches `result.count`; a non-integer `count` falls back to the row count | `API-Key`, `API-Sign` = base64 HMAC-SHA512(base64-decoded secret, path ‖ SHA-256(nonce ‖ body)) |
-| Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each BTC/LBTC account with an id | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
-| Binance | `GET /sapi/v1/fiat/payments` (`transactionType=0`), `/sapi/v1/capital/deposit/hisrec` (`coin=BTC`), `/sapi/v1/capital/withdraw/history` (`coin=BTC`), `/sapi/v1/asset/assetDividend` (`asset=BTC`, `limit=500`), all from `1498867200000` to now | none (single request each) | `X-MBX-APIKEY`, query `...&timestamp=<ms>&signature=` hex HMAC-SHA256(secret, query) |
+| Coinbase | `GET /v2/accounts`, then `GET /v2/accounts/<quoted id>/transactions` for each crypto account (BTC/LBTC and, in either asset scope, every other crypto asset; Python read only BTC accounts) | follows `pagination.next_uri` until absent | `CB-ACCESS-KEY`, `CB-ACCESS-SIGN` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path), `CB-ACCESS-TIMESTAMP`, `CB-VERSION: 2017-11-27` |
+| Binance | `GET /sapi/v1/fiat/payments` (`transactionType=0`) from `1498867200000` to now; `/sapi/v1/capital/deposit/hisrec` and `/sapi/v1/capital/withdraw/history` (`coin=BTC`), `/sapi/v1/asset/assetDividend` (`asset=BTC`), `/sapi/v1/convert/tradeFlow`, each in time windows from `1498867200000` to now; then `/api/v3/account` (Python sent one request each for the first four, and no Convert or balance read) | deposits and withdrawals by `offset`; dividends and converts by halving a full window ([imports](imports.md#binance-api-and-supplemental-csv)) | `X-MBX-APIKEY`, query `...&timestamp=<ms>&signature=` hex HMAC-SHA256(secret, query) |
+| Bitvavo (Rust only) | `GET /v2/account/history?fromDate=0&toDate=<ms>&page=<n>&maxItems=100`, then `GET /v2/balance?symbol=BTC` for the reported balance | `page` from 1 to the first page's `totalPages`; a page that is not the one asked for, or a moving count, fails closed | `Bitvavo-Access-Key`, `Bitvavo-Access-Signature` = hex HMAC-SHA256(secret, timestamp ‖ `GET` ‖ path with `/v2` and query), `Bitvavo-Access-Timestamp` (ms), `Bitvavo-Access-Window: 10000`; re-signed on each retry |
+| Bitstamp (Rust only) | `POST /api/v2/user_transactions/` with `limit=1000&since_id=<n>&sort=asc`, then `POST /api/v2/account_balances/btc/` for the reported balance | `since_id` from 1, then one past the last id, until a page holds fewer than 1,000 rows; ids out of cursor order fail closed | `X-Auth: BITSTAMP <key>`, `X-Auth-Signature` = hex HMAC-SHA256(secret, `BITSTAMP <key>` ‖ method ‖ host ‖ path ‖ content type ‖ nonce ‖ timestamp ‖ `v2` ‖ body), `X-Auth-Nonce` (random UUID per attempt), `X-Auth-Timestamp`, `X-Auth-Version: v2` |
+| Bitfinex (Rust only; [reference](bitfinex.md)) | `POST /v2/auth/r/permissions`, `/ledgers/BTC/hist`, `/trades/hist`, `/movements/BTC/hist`, `/wallets`, JSON bodies | `end` = the oldest millisecond of the last page (inclusive) until a page is shorter than its limit (2,500; movements 1,000) | `bfx-apikey`, `bfx-nonce` (rising microseconds, one request of the process at a time), `bfx-signature` = hex HMAC-SHA384(secret, `/api/` ‖ path ‖ nonce ‖ body) |
+| Bitcoin.de (Rust only) | `GET /v4/permissions` (refuses a key that can write), then `GET /v4/btc/account/ledger?datetime_start=2011-01-01T00:00:00+01:00` and `GET /v4/btceur/trades?state=1` | `page` from 1 until `page.current` reaches `page.last`; another page than asked for fails closed; waits for `credits` up to 120 s | `X-API-KEY`, `X-API-NONCE` (ms, rising per process), `X-API-SIGNATURE` = hex HMAC-SHA256(secret, `GET#URL#KEY#NONCE#` MD5 of the empty body); re-signed with a new nonce on each retry |
 
 Kraken API errors (`error` truthy) fail as `auth_error` when any entry mentions
 `permission`, otherwise `protocol_error`, with `details.kraken_errors`.
 
+The table is the `bitcoin` asset scope, the default and Python's behaviour.
+A wallet whose `asset_scope` is `crypto` ([plan 24](../plan/24-crypto-assets.md))
+changes the following, which Python never had:
+
+- **Kraken** sends the same requests in both scopes and maps the ledger
+  grouped by `refid`; the scope only filters which events are kept
+  ([mapping](imports.md#kraken-api)). Its BTC rows keep the reading above.
+
+In both scopes the envelope gains `assets` (`scope`, `skipped` and `excluded`
+by ticker, and `next_step`) and `swap_pairs`. A Kraken sync sets `skipped` to
+`{"fiat_only_entries", "other_asset_entries", "internal_moves"}` counts.
+
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,
-`direction`, `asset` (BTC or LBTC only), absolute `amount` and `fee`, the ten
+`direction`, `asset` (BTC or LBTC only in `bitcoin` scope; any crypto asset,
+stored exactly to 11 decimals, in `crypto` scope), absolute `amount` and `fee`, the ten
 pricing fields (exact `exchange_execution` pricing for fiat-quoted trades and
 Binance fiat buys, otherwise null), `kind`, `description`, `counterparty` and
-`raw_json` (the provider row, sorted keys). The coordinator writes the same
+`raw_json` (the provider row, sorted keys). Before a record is built, its
+amount and fee in an asset other than Bitcoin are checked as the provider
+gave them: finer than 11 decimals or too large to store refuses the sync,
+naming the transaction, before any rounding. The coordinator writes the same
 `transactions` rows, import runs, journal invalidation and update reports as
 a JSON file import with those dicts. Re-syncs deduplicate by external id and
 fingerprint. Changed pricing updates the existing row. Reviewed exclusions and

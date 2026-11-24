@@ -238,11 +238,29 @@ pub fn import_document_for_ai(
     }
 }
 
+/// The message an `import_changed_rows` blocker carries to a restricted
+/// provider: the refusal names a row's id and its stored and file amounts.
+pub const CHANGED_ROWS_WITHHELD: &str = "Some rows look like rows the wallet already holds, under another id or with another amount or fee; their ids and values are withheld from this provider.";
+
 /// `core.attachment_import.withhold_cell_values(payload)`: counts, the column
 /// plan, warnings and blockers stay; dates, amounts and the filename are
-/// values from the file and do not cross to the model.
+/// values from the file and do not cross to the model, nor does a
+/// changed-rows refusal's example row.
 pub fn withhold_cell_values(payload: &Value) -> Value {
     let mut projected = payload.clone();
+    if let Some(Value::List(blockers)) = get(payload, "blockers") {
+        let blockers = blockers
+            .iter()
+            .map(|blocker| {
+                let mut blocker = blocker.clone();
+                if get(&blocker, "code") == Some(&s("import_changed_rows")) {
+                    set(&mut blocker, "message", s(CHANGED_ROWS_WITHHELD));
+                }
+                blocker
+            })
+            .collect();
+        set(&mut projected, "blockers", Value::List(blockers));
+    }
     if let Some(Value::Dict(attachment)) = get(payload, "attachment") {
         let kept: Vec<(Key, Value)> = attachment
             .iter()
@@ -314,6 +332,36 @@ pub fn withhold_values(payload: &Value) -> Value {
 mod tests {
     use super::*;
     use crate::executor::Maintenance;
+
+    /// A changed-rows refusal names a row's id and amounts: a restricted
+    /// provider gets the blocker's code with a value-free message.
+    #[test]
+    fn a_changed_rows_blocker_reaches_a_restricted_provider_without_values() {
+        let payload = dict([(
+            "blockers",
+            Value::List(vec![
+                dict([
+                    ("code", s("import_changed_rows")),
+                    ("message", s("1 row has the id of a stored row with another amount or fee; first 'ledger:abc': amount 0.005 in the book, 0.006 in the file")),
+                ]),
+                dict([
+                    ("code", s("nothing_to_import")),
+                    ("message", s("No new rows: every row is already in this wallet.")),
+                ]),
+            ]),
+        )]);
+        let projected = withhold_cell_values(&payload);
+        let shown = kassiber_pyjson::dumps(&projected, &Default::default()).unwrap();
+        assert!(
+            !shown.contains("ledger:abc") && !shown.contains("0.005"),
+            "{shown}"
+        );
+        assert!(shown.contains(CHANGED_ROWS_WITHHELD), "{shown}");
+        assert!(
+            shown.contains("No new rows: every row is already in this wallet."),
+            "{shown}"
+        );
+    }
 
     /// A book that answers the reader's two request-loop steps.
     #[derive(Default)]

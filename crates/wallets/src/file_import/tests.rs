@@ -38,6 +38,25 @@ fn import_format(conn: &Connection, content: &str, phoenix: bool) -> Result<Py, 
     )
 }
 fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, AppError> {
+    import_into(conn, content, format, "Source")
+}
+/// One file import of `content` into `wallet` (empty: the provider default).
+pub(super) fn import_into(
+    conn: &Connection,
+    content: &str,
+    format: Format,
+    wallet: &str,
+) -> Result<Py, AppError> {
+    import_with(conn, content, format, wallet, None)
+}
+/// [`import_into`] with the user's answer to changed rows.
+pub(super) fn import_with(
+    conn: &Connection,
+    content: &str,
+    format: Format,
+    wallet: &str,
+    changed_rows: Option<ChangedRows>,
+) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "kassiber-import-{}-{:?}.csv",
         std::process::id(),
@@ -48,12 +67,13 @@ fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, A
         conn,
         Request {
             profile_id: "p".into(),
-            wallet: "Source".into(),
+            wallet: wallet.into(),
             file: file.to_str().unwrap().into(),
             format,
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows,
         },
         None,
     );
@@ -246,7 +266,7 @@ fn csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_link
     import(&conn, &content("chain_script", "1")).unwrap();
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE payment_hash_source='chain_script_unique_outpoint' AND swap_refund_funding_vout=0"),1);
     let content = |kind: &str, source: &str| {
-        format!("date,txid,amount,kind,raw_json\n2025-01-01,wasabi,1,{kind},\"{{\"\"source\"\":\"\"{source}\"\"}}\"\n")
+        format!("date,txid,amount,kind,raw_json\n2025-01-04,wasabi,1,{kind},\"{{\"\"source\"\":\"\"{source}\"\"}}\"\n")
     };
     import(&conn, &content("deposit", "wasabi_gethistory")).unwrap();
     import(&conn, &content("withdrawal", "other")).unwrap();
@@ -274,11 +294,13 @@ fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
     let result = import(&conn, content).unwrap();
     assert_eq!(
         kassiber_envelope::get(&result, "imported"),
-        Some(&Py::from(2))
+        Some(&Py::from(3))
     );
+    // Identical ID-less rows stay two rows; only the second `same` row
+    // matches the first.
     assert_eq!(
         kassiber_envelope::get(&result, "skipped"),
-        Some(&Py::from(2))
+        Some(&Py::from(1))
     );
     assert_eq!(
         scalar(
@@ -299,15 +321,15 @@ fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
             &conn,
             "SELECT count(*) FROM transactions WHERE external_id IS NULL"
         ),
-        1
+        2
     );
     assert_eq!(
         scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
-        2
+        3
     );
-    assert_eq!(scalar(&conn, "SELECT rows_inserted FROM import_batches"), 2);
+    assert_eq!(scalar(&conn, "SELECT rows_inserted FROM import_batches"), 3);
     assert_eq!(scalar(&conn, "SELECT rows_updated FROM import_batches"), 0);
-    assert_eq!(scalar(&conn, "SELECT rows_skipped FROM import_batches"), 2);
+    assert_eq!(scalar(&conn, "SELECT rows_skipped FROM import_batches"), 1);
     assert_eq!(
         scalar(
             &conn,
@@ -723,7 +745,16 @@ fn parsed_rows(text: &str) -> Result<Vec<Json>, AppError> {
 #[test]
 fn json_import_identity_fee_relaxation_routing_and_atomicity() {
     let conn = fixture();
-    let run = |value: Json| import_kind(&conn, &value.to_string(), Format::Json);
+    // These rows share dates and amounts on purpose; each is its own row.
+    let run = |value: Json| {
+        import_with(
+            &conn,
+            &value.to_string(),
+            Format::Json,
+            "Source",
+            Some(ChangedRows::Import),
+        )
+    };
     let idless = json!([
         {"date":"2025-01-01","amount":1},
         {"date":"2025-01-02","amount":1},
@@ -732,11 +763,11 @@ fn json_import_identity_fee_relaxation_routing_and_atomicity() {
     let result = run(idless.clone()).unwrap();
     assert_eq!(
         kassiber_envelope::get(&result, "imported"),
-        Some(&Py::from(2))
+        Some(&Py::from(3))
     );
     assert_eq!(
         scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
-        2
+        3
     );
     let result = run(idless).unwrap();
     assert_eq!(
@@ -1119,7 +1150,7 @@ fn python_twentyone_import_vectors() {
 }
 
 fn bull(conn: &Connection, mode: &str) -> Py {
-    let rows = bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let rows = bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let records = rows
         .iter()
         .map(normalize)
@@ -1133,6 +1164,7 @@ fn bull(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1171,7 +1203,7 @@ fn bull_profile_matching_fee_precedence_ambiguity_and_scope() {
     assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 1000000);
     assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE kind='buy' AND fiat_value_exact='100' AND occurred_at='2025-01-01T00:00:00Z'"),1);
     conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('other','ws','p','Other','custom','{}','2025-01-01'),('foreign','ws','q','Foreign','custom','{}','2025-01-01');").unwrap();
-    let row=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let row=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let r = normalize(&row[0]).unwrap();
     let mut fields = r.fields.clone();
     for (k, v) in [
@@ -1348,6 +1380,7 @@ fn bull_coordinator_failure_rolls_back_transactions_flags_run_and_invalidation()
                 mode: Some("full".into()),
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         );
@@ -1419,7 +1452,7 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
     );
     assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
     import(&conn, "date,txid,amount\n2025-01-01,match,0.002\n").unwrap();
-    let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap()).unwrap();
+    let rows=bull::parse(csv::rows("ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\ncompleted,100,EUR,0.002,BTC,2025-01-02,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let request = Request {
         profile_id: "p".into(),
         wallet: "Source".into(),
@@ -1428,6 +1461,7 @@ fn bull_relevant_validates_only_matched_prices_and_preserves_committed_raw() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = exchange::enrich(&conn, &request, &rows).unwrap_err();
     assert_eq!(error.code, "validation");
@@ -1495,6 +1529,7 @@ fn bull_default_wallet_admission_precedes_entropy_and_commits_before_file_read()
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -1556,6 +1591,7 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
             mode: Some("relevant".into()),
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -1577,8 +1613,103 @@ fn bull_relevant_preserves_reference_error_order_and_rollback() {
     assert!(conn.is_autocommit());
 }
 
+/// Kassiber reads only BTC from Bull Bitcoin (docs/plan/24-crypto-assets.md):
+/// another crypto asset's order is counted as `unread` in the `bitcoin`
+/// scope and refused by name in the `crypto` scope; BTC traded against
+/// another crypto asset is refused instead of being booked as
+/// a fiat-priced trade. Other ISO 4217 currencies keep pricing the order.
+#[test]
+fn bull_reads_only_btc_and_names_other_crypto_orders() {
+    const HEAD: &str = "ORDER_STATUS,PAYIN_AMOUNT,PAYIN_CURRENCY,PAYOUT_AMOUNT,PAYOUT_CURRENCY,COMPLETED_AT (UTC),TRANSACTION_ID\n";
+    let buy = "completed,100,USD,0.002,BTC,2025-01-02,buy\n";
+    let usdt = "completed,100,USD,100,USDT,2025-01-03,usdt\n";
+    let full = |conn: &Connection, content: String| {
+        let file = std::env::temp_dir().join(format!(
+            "bull-scope-{}-{:?}.csv",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&file, content).unwrap();
+        let result = execute(
+            conn,
+            Request {
+                profile_id: "p".into(),
+                wallet: "Source".into(),
+                file: file.to_string_lossy().into_owned(),
+                format: Format::Bull,
+                mode: Some("full".into()),
+                companion: None,
+                timezone: None,
+                changed_rows: None,
+            },
+            None,
+        );
+        std::fs::remove_file(file).unwrap();
+        result
+    };
+    let conn = fixture();
+    let result = full(&conn, format!("{HEAD}{buy}{usdt}{usdt}")).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_pyjson::dumps(
+            kassiber_envelope::get(&result, "assets").unwrap(),
+            &Default::default()
+        )
+        .unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {}, "excluded": {}, "unread": {"USDT": 2}, "next_step": "Kassiber reads only BTC from Bull Bitcoin, in either asset scope, and left out entries in USDT (2); record them yourself (generic CSV/JSON import)"}"#
+    );
+    // A wallet that tracks other crypto assets cannot get them from here.
+    let conn = fixture();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let error = full(&conn, format!("{HEAD}{buy}{usdt}")).unwrap_err();
+    assert_eq!(
+        error.message,
+        "Bull Bitcoin CSV line 3 books USDT; Kassiber reads only BTC from Bull Bitcoin"
+    );
+    assert!(error
+        .hint
+        .unwrap()
+        .contains("Set this wallet's asset_scope to bitcoin"));
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    // BTC paid with or for another crypto asset has no fiat price to keep.
+    for row in [
+        "completed,0.002,BTC,100,USDT,2025-01-04,swap\n",
+        "completed,100,ETH,0.002,LBTC,2025-01-04,swap\n",
+    ] {
+        let coin = if row.contains("ETH") { "ETH" } else { "USDT" };
+        let message = format!(
+            "Bull Bitcoin CSV line 3 trades BTC against {coin}, which is not a fiat currency"
+        );
+        let conn = fixture();
+        assert_eq!(
+            full(&conn, format!("{HEAD}{buy}{row}"))
+                .unwrap_err()
+                .message,
+            message
+        );
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+    // Without a target wallet, the reference's reading: another coin's order
+    // is left out; a currency outside the priced fiat list still prices a BTC
+    // order.
+    let rows = bull::parse(
+        csv::rows(&format!(
+            "{HEAD}{usdt}completed,0.002,BTC,95000,CRC,2025-01-05,crc\n"
+        ))
+        .unwrap(),
+        None,
+        &mut Default::default(),
+    )
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].data["fiat_currency"], json!("CRC"));
+}
+
 fn coinfinity(conn: &Connection, mode: &str) -> Py {
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,match\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,0,match\n").unwrap(), None, &mut Default::default()).unwrap();
     let records = rows
         .iter()
         .map(normalize)
@@ -1592,6 +1723,7 @@ fn coinfinity(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -1711,6 +1843,7 @@ fn coinfinity_coordinator_failure_rolls_back_transactions_flags_run_and_invalida
                 mode: Some("full".into()),
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         );
@@ -1751,7 +1884,7 @@ fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
         "date,txid,amount,fee\n2025-01-02,observed,0.002,0.00001\n",
     )
     .unwrap();
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let record = normalize(&rows[0]).unwrap();
     let find = |exclude| exchange::find_profile(&conn, "p", &record, exclude).unwrap();
     assert_eq!(find(None).1, "matched");
@@ -1806,6 +1939,7 @@ fn coinfinity_economic_matching_window_scope_exclusion_and_ambiguity() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -1847,6 +1981,7 @@ fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec![],
@@ -1891,7 +2026,7 @@ fn coinfinity_default_wallet_admission_precedes_entropy_and_commits_before_file_
 #[test]
 fn coinfinity_economic_window_preserves_datetime_overflow() {
     let conn = fixture();
-    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows = coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let mut r = normalize(&rows[0]).unwrap();
     for date in ["0001-01-01T00:00:00Z", "9999-12-31T23:59:59Z"] {
         r.fields
@@ -1922,7 +2057,8 @@ fn coinfinity_declared_references_disable_economic_matching() {
         ("declared", "lnbc1declared"),
     ] {
         let input=format!("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction,LN Invoice\norder,sell,2025-01-02,100,0.002,BTC,,0,1,{transaction},{invoice}\n");
-        let rows = coinfinity::parse(csv::rows(&input).unwrap()).unwrap();
+        let rows =
+            coinfinity::parse(csv::rows(&input).unwrap(), None, &mut Default::default()).unwrap();
         let r = normalize(&rows[0]).unwrap();
         assert!(!r.economics);
         assert_eq!(
@@ -1953,7 +2089,7 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         .0;
     let quantity = kassiber_custody::evidence::observed_hash(&value).unwrap().0;
     conn.execute("INSERT INTO chain_observation_provenance(transaction_id,workspace_id,profile_id,wallet_id,authority_version,observer_ids_json,observer_kinds_json,chain,network,application_revision,graph_hash,quantity_hash,fee_attribution,observed_at,updated_at) VALUES(?,'ws','p','wallet',1,'[]','[]','bitcoin','main','r',?,?,'exact','2025-01-01','2025-01-01')",params![id,graph,quantity]).unwrap();
-    let rows=coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap()).unwrap();
+    let rows=coinfinity::parse(csv::rows("Order ID,Type,Date,Amount EUR,Amount Crypto,Crypto,Rate EUR,Mining Fee Crypto,Total Fee EUR,Transaction\norder,sell,2025-01-02,100,0.002,BTC,,0,1,\n").unwrap(), None, &mut Default::default()).unwrap();
     let request = Request {
         profile_id: "p".into(),
         wallet: String::new(),
@@ -1962,6 +2098,7 @@ fn coinfinity_economic_matching_preserves_closed_observation() {
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = exchange::enrich(&conn, &request, &rows).unwrap();
     assert_eq!(
@@ -2067,6 +2204,7 @@ fn twentyone_refusal_precedes_wallet_and_file_and_default_wallet_commits_before_
         mode,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = execute(
         &conn,
@@ -2171,6 +2309,7 @@ fn twentyone_legacy_fallback_preserves_scope_identity_and_unrelated_exclusions()
         mode: None,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let wallet = resolve(&conn, "p", "Source").unwrap();
     let mut outcome = Vec::new();
@@ -2249,6 +2388,7 @@ fn pocket(conn: &Connection, mode: &str) -> Py {
         mode: Some(mode.into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     if mode == "relevant" {
         exchange::enrich(conn, &request, &rows).unwrap()
@@ -2358,6 +2498,7 @@ fn pocket_default_wallet_admission_precedes_entropy_and_file_access() {
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let identity = Identity {
         ids: vec!["provider".into()],
@@ -2398,6 +2539,7 @@ fn pocket_late_coordinator_failure_rolls_back_flags_run_and_invalidation() {
             mode: Some("full".into()),
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     );
@@ -2452,6 +2594,7 @@ fn pocket_reimport_matches_provider_identity_when_fee_changes() {
         mode: Some("full".into()),
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let result = apply(
         &conn,
@@ -2576,6 +2719,7 @@ fn ledgerlive_refusals_and_late_failure_leave_the_book_unchanged() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -2698,6 +2842,7 @@ fn strike_refusal_precedes_wallet_and_file_and_default_wallet_reuses() {
         mode,
         companion: None,
         timezone: None,
+        changed_rows: None,
     };
     let error = execute(&conn, request(Some("relevant".into())), None).unwrap_err();
     assert_eq!(
@@ -2987,6 +3132,7 @@ fn cointracking_admission_and_late_failure_leave_every_write_uncommitted() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -3218,6 +3364,7 @@ fn blockpit_admission_and_late_failure_leave_every_write_uncommitted() {
             mode: None,
             companion: None,
             timezone: None,
+            changed_rows: None,
         },
         None,
     )
@@ -3408,6 +3555,16 @@ fn binance_import(
     mode: &str,
     wallet: &str,
 ) -> Result<Py, AppError> {
+    binance_import_with(conn, content, mode, wallet, None)
+}
+
+fn binance_import_with(
+    conn: &Connection,
+    content: &str,
+    mode: &str,
+    wallet: &str,
+    changed_rows: Option<ChangedRows>,
+) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "binance-coordinator-{}-{:?}.csv",
         std::process::id(),
@@ -3424,12 +3581,44 @@ fn binance_import(
             mode: Some(mode.into()),
             companion: None,
             timezone: None,
+            changed_rows,
         },
         None,
     );
     std::fs::remove_file(file).unwrap();
     result
 }
+/// A BTC autoinvest row keeps the identity the Python reference gave it now
+/// that the identity reads every row in the `crypto` scope: the current id
+/// and a legacy file-position id resolve to the frozen economic key.
+#[test]
+fn binance_autoinvest_identity_stays_byte_identical_for_btc_rows() {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR' WHERE id='p'", [])
+        .unwrap();
+    binance_import(&conn, BINANCE_AUTO, "full", "Source").unwrap();
+    let (external, raw): (String, String) = conn
+        .query_row(
+            "SELECT external_id,raw_json FROM transactions WHERE wallet_id='wallet'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(external, BINANCE_REF);
+    let economic = BINANCE_REF.strip_suffix(":1").unwrap().to_owned();
+    assert_eq!(
+        synthetic_csv_identity(&external, &raw),
+        Some((economic.clone(), 1, false))
+    );
+    assert_eq!(
+        synthetic_csv_identity(
+            "binance-supplemental:2025-01-02 03:04:05:autoinvest:BTC:0.002:3",
+            &raw
+        ),
+        Some((economic, 3, true))
+    );
+}
+
 #[test]
 fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimports() {
     for encrypted in [false, true] {
@@ -3462,15 +3651,27 @@ fn binance_full_coordinator_preserves_overlap_reference_ids_enrichment_and_reimp
             Some(&Py::from(0))
         );
         assert_eq!(scalar(&conn,"SELECT count(*) FROM import_batches WHERE source_format='binance_supplemental_csv'"),1);
-        let enriched = binance_import(
+        // The quote amount is part of an ID-less row's economic identity, so
+        // a changed price is a different trade, not an enrichment: the same
+        // second, amount and fee under another id waits for the user.
+        let repriced = BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR");
+        let error = binance_import(&conn, &repriced, "full", "Source").unwrap_err();
+        assert_eq!(error.code, "import_changed_rows");
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|d| kassiber_envelope::get(d, "reidentified")),
+            Some(&Py::from(1))
+        );
+        let enriched = binance_import_with(
             &conn,
-            &BINANCE_AUTO.replace("100.00 EUR", "200.00 EUR"),
+            &repriced,
             "full",
             "Source",
+            Some(ChangedRows::Import),
         )
         .unwrap();
-        // The quote amount is part of an ID-less row's economic identity, so
-        // a changed price is a different trade, not an enrichment.
         assert_eq!(
             kassiber_envelope::get(&enriched, "imported"),
             Some(&Py::from(1))
@@ -3785,6 +3986,7 @@ fn ledger_coordinator_keeps_supplied_maps_scope_dedupe_and_atomic_batches() {
                     mode: None,
                     companion: None,
                     timezone: None,
+                    changed_rows: None,
                 },
                 Some(&mapping),
                 None,
@@ -3881,7 +4083,13 @@ fn btcpay_metadata_binds_to_the_stored_text_identity() {
             "['one', {'text': 'two'}, None, False]",
         ),
     ] {
-        let body = json!([{"TransactionId":identity,"Timestamp":"2025-01-02","Amount":"0.001 BTC","Comment":"receipt"}]).to_string();
+        // A day each, so the second is not a re-identified copy of the first.
+        let day = if stored == "True" {
+            "2025-01-02"
+        } else {
+            "2025-01-03"
+        };
+        let body = json!([{"TransactionId":identity,"Timestamp":day,"Amount":"0.001 BTC","Comment":"receipt"}]).to_string();
         let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
         assert_eq!(
             kassiber_envelope::get(&result, "btcpay_notes_set"),
@@ -4098,7 +4306,7 @@ fn btcpay_metadata_lookup_is_the_untrimmed_string_identity_and_scoped() {
         );
         // A list id is no binding error: the row is stored and its metadata
         // found under the same str() identity.
-        let body = json!([{"TransactionId":["invalid"],"Timestamp":"2025-01-02","Amount":"1 BTC","Comment":"note"}]).to_string();
+        let body = json!([{"TransactionId":["invalid"],"Timestamp":"2025-01-04","Amount":"1 BTC","Comment":"note"}]).to_string();
         let result = import_kind(&conn, &body, Format::BtcpayJson).unwrap();
         assert_eq!(
             kassiber_envelope::get(&result, "btcpay_notes_set"),
@@ -4494,6 +4702,7 @@ fn wasabi_missing_file_refusal_is_atomic() {
                 mode: None,
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         )
@@ -5345,6 +5554,7 @@ fn import_bisq_in(
         mode: None,
         companion: transactions.map(|_| companion.to_str().unwrap().into()),
         timezone: timezone.map(str::to_owned),
+        changed_rows: None,
     };
     let result = execute(conn, request, None);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -6000,6 +6210,7 @@ fn bisq_checks_the_book_under_the_write_lock() {
                 mode: None,
                 companion: Some(companion.to_str().unwrap().into()),
                 timezone: Some("UTC".into()),
+                changed_rows: None,
             },
             None,
         )
@@ -6045,6 +6256,7 @@ fn bisq_imports_only_into_a_bisq_wallet() {
         mode: None,
         companion: Some(transactions.to_str().unwrap().into()),
         timezone: Some("UTC".into()),
+        changed_rows: None,
     };
     let error = execute(&conn, request("Source"), None).unwrap_err();
     let refusal = "Bisq trades import into a bisq wallet; 'Source' is a custom wallet";
@@ -6055,3 +6267,552 @@ fn bisq_imports_only_into_a_bisq_wallet() {
     assert_eq!(bisq_get(&result, "wallet"), "\"My escrow\"");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// docs/plan/24-crypto-assets.md: a provider-reported swap is paired once,
+/// with the country's policy, and other assets are stored exactly or refused.
+#[test]
+fn provider_swaps_pair_once_and_other_assets_store_exactly() {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET tax_country='at', fiat_currency='EUR' WHERE id='p'")
+        .unwrap();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let leg = |txid: &str, direction: &str, asset: &str, amount: &str, swap: Option<&str>| {
+        let mut row = json!({"txid": txid, "occurred_at": "2025-04-01T10:00:00Z", "direction": direction,
+            "asset": asset, "amount": amount, "kind": "swap", "fiat_value": "4000", "fiat_currency": "EUR"});
+        if let Some(swap) = swap {
+            row["swap_ref"] = json!(swap);
+        }
+        row
+    };
+    let rows = json!([
+        {"txid": "b", "occurred_at": "2025-01-02T10:00:00Z", "direction": "inbound", "asset": "BTC",
+         "amount": "0.1", "kind": "buy", "fiat_value": "9000", "fiat_currency": "EUR"},
+        leg("s-out", "outbound", "BTC", "0.05", Some("trade-1")),
+        leg("s-in", "inbound", "ETH", "1.12345678901", Some("trade-1")),
+    ]);
+    let first = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&first, "swap_pairs"),
+        Some(&Py::from(1))
+    );
+    // 11 decimals are stored exactly, in the same unit as msat.
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT amount FROM transactions WHERE external_id='s-in'"
+        ),
+        112_345_678_901
+    );
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pairs = kassiber_transfers::execute(
+        &conn,
+        &scope,
+        "transfers.list",
+        &dict(Vec::<(&str, Py)>::new()),
+    )
+    .unwrap();
+    let listed = kassiber_pyjson::dumps(&pairs, &Default::default()).unwrap();
+    assert!(listed.contains(r#""policy": "carrying-value""#), "{listed}");
+    assert!(listed.contains(r#""pair_source": "provider""#), "{listed}");
+    // A re-run keeps the pair and authors no second one.
+    let again = import_kind(&conn, &rows.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "swap_pairs"),
+        Some(&Py::from(0))
+    );
+    // An import without swaps reports none.
+    let plain = json!([{"txid": "c", "occurred_at": "2025-05-01T10:00:00Z", "direction": "inbound",
+        "asset": "BTC", "amount": "0.01", "kind": "deposit"}]);
+    let plain = import_kind(&conn, &plain.to_string(), Format::Json).unwrap();
+    assert_eq!(kassiber_envelope::get(&plain, "swap_pairs"), None);
+
+    // Finer than 11 decimals, or too large: refused, never rounded.
+    for amount in ["0.000000000001", "100000000"] {
+        let finer = json!([leg("x", "inbound", "ETH", amount, None)]);
+        let error = import_kind(&conn, &finer.to_string(), Format::Json).unwrap_err();
+        assert_eq!(error.code, "validation", "{amount}: {error:?}");
+    }
+    // A swap needs exactly one leg each way.
+    let lopsided = json!([
+        leg("y-1", "outbound", "BTC", "0.01", Some("trade-2")),
+        leg("y-2", "outbound", "BTC", "0.01", Some("trade-2")),
+    ]);
+    let error = import_kind(&conn, &lopsided.to_string(), Format::Json).unwrap_err();
+    assert_eq!(error.code, "protocol_error", "{error:?}");
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT COUNT(*) FROM transactions WHERE external_id LIKE 'y-%'"
+        ),
+        0
+    );
+}
+
+/// A provider swap whose leg is already paired elsewhere is refused and the
+/// whole import rolls back; only the exact pair already present is a re-run.
+#[test]
+fn provider_swap_with_a_leg_paired_elsewhere_is_refused_and_the_exact_pair_is_kept() {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET tax_country='at', fiat_currency='EUR' WHERE id='p'")
+        .unwrap();
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    let leg = |txid: &str, direction: &str, asset: &str, swap: Option<&str>| {
+        let mut row = json!({"txid": txid, "occurred_at": "2025-04-01T10:00:00Z", "direction": direction,
+            "asset": asset, "amount": "0.05", "kind": "swap", "fiat_value": "4000", "fiat_currency": "EUR"});
+        if let Some(swap) = swap {
+            row["swap_ref"] = json!(swap);
+        }
+        row
+    };
+    let id = |external: &str| -> String {
+        conn.query_row(
+            "SELECT id FROM transactions WHERE external_id=?",
+            [external],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pair = |out: &str, into: &str| {
+        kassiber_transfers::execute(
+            &conn,
+            &scope,
+            "transfers.pair",
+            &dict([("tx_out", s(id(out))), ("tx_in", s(id(into)))]),
+        )
+        .unwrap();
+    };
+    // The outbound leg is already paired with another inbound by hand.
+    let first = json!([
+        leg("s-out", "outbound", "BTC", None),
+        leg("other-in", "inbound", "BTC", None),
+    ]);
+    import_kind(&conn, &first.to_string(), Format::Json).unwrap();
+    pair("s-out", "other-in");
+    let transactions = scalar(&conn, "SELECT count(*) FROM transactions");
+    let swap = json!([
+        leg("s-out", "outbound", "BTC", Some("trade-1")),
+        leg("s-in", "inbound", "ETH", Some("trade-1")),
+    ]);
+    let error = import_kind(&conn, &swap.to_string(), Format::Json).unwrap_err();
+    assert_eq!(error.code, "conflict", "{error:?}");
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM transactions"),
+        transactions
+    );
+    assert_eq!(
+        kassiber_transfers::transaction_pairs(&conn, &scope).unwrap(),
+        vec![(id("s-out"), id("other-in"))]
+    );
+
+    // The exact pair, already authored, is kept and not authored again. A
+    // month later, so these legs do not look like the stored ones above.
+    let later = |mut row: Json| {
+        row["occurred_at"] = json!("2025-05-01T10:00:00Z");
+        row
+    };
+    let exact = json!([
+        later(leg("t-out", "outbound", "BTC", None)),
+        later(leg("t-in", "inbound", "ETH", None)),
+    ]);
+    import_kind(&conn, &exact.to_string(), Format::Json).unwrap();
+    pair("t-out", "t-in");
+    let swap = json!([
+        later(leg("t-out", "outbound", "BTC", Some("trade-2"))),
+        later(leg("t-in", "inbound", "ETH", Some("trade-2"))),
+    ]);
+    let again = import_kind(&conn, &swap.to_string(), Format::Json).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "swap_pairs"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        kassiber_transfers::transaction_pairs(&conn, &scope)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn asset_scope_is_validated_and_defaults_to_bitcoin() {
+    let conn = fixture();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Bitcoin
+    );
+    assets::Scope::Crypto.store(&conn, "p", "wallet").unwrap();
+    assert_eq!(
+        assets::Scope::of_wallet(&conn, "wallet").unwrap(),
+        assets::Scope::Crypto
+    );
+    let error = lifecycle::execute(
+        &conn,
+        lifecycle::Operation::Update {
+            profile_id: "p".into(),
+            wallet: "wallet".into(),
+            label: None,
+            account: None,
+            config: json!({"asset_scope": "stocks"}),
+            clear: vec![],
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "validation");
+    let mut tally = assets::Tally::default();
+    assert!(tally.admit(assets::Scope::Bitcoin, "BTC", assets::Class::Bitcoin));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "ETH", assets::Class::Crypto));
+    assert!(!tally.admit(assets::Scope::Crypto, "AAPL", assets::Class::Excluded));
+    assert!(!tally.admit(assets::Scope::Bitcoin, "EUR", assets::Class::Fiat));
+    assert!(tally.admit(assets::Scope::Crypto, "SOL", assets::Class::Crypto));
+    assert_eq!(
+        kassiber_pyjson::dumps(
+            &tally.envelope(assets::Scope::Bitcoin, "Tom's Ex"),
+            &Default::default()
+        )
+        .unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {"ETH": 2}, "excluded": {"AAPL": 1}, "next_step": "kassiber wallets update --wallet 'Tom'\\''s Ex' --config '{\"asset_scope\": \"crypto\"}', then sync or import again to keep ETH"}"#
+    );
+}
+
+mod binance_history;
+mod reimport;
+mod supplemental_assets;
+mod tax_platform_assets;
+
+/// The Bitvavo API fixture's transactions (exchange_api/tests/bitvavo_api.rs)
+/// as the transaction-history export writes them: wall time in
+/// Europe/Amsterdam, a signed Amount, the buy's paid amount after the fee,
+/// the withdrawal's Amount including it, and an altcoin withdrawal finer than
+/// msat (skipped). Synthetic; the layout follows public sample exports.
+pub(super) const BITVAVO_CSV: &str = "\u{feff}Timezone,Date,Time,Type,Currency,Amount,Quote Currency,Quote Price,Received / Paid Currency,Received / Paid Amount,Fee currency,Fee amount,Status,Transaction ID,Address
+Europe/Amsterdam,2024-01-01,09:00:00,deposit,EUR,1000,,,,,EUR,0,Completed,dep-eur,NL00BANK*****
+Europe/Amsterdam,2024-01-02,10:00:00.250,buy,BTC,0.01,EUR,40000,EUR,-401.00,EUR,1.00,Completed,buy-gross,
+Europe/Amsterdam,2024-01-02,11:00:00,buy,BTC,0.0009999,EUR,24940,EUR,-25.00,EUR,0.062494,Completed,buy-net,
+Europe/Amsterdam,2024-01-03,01:00:00,deposit,BTC,0.005,,,,,BTC,0,Completed,dep-btc,bc1qdepositsynthetic
+Europe/Amsterdam,2024-07-05,14:30:45.999,withdrawal,BTC,-0.0041,,,,,BTC,0.0001,Completed,wd-btc,bc1qwithdrawalsynthetic
+Europe/Amsterdam,2024-07-06,02:00:00,sell,BTC,-0.002,EUR,42000,EUR,83.79,EUR,0.21,Completed,sell,
+Europe/Amsterdam,2024-07-07,02:00:00,staking,BTC,0.00001,,,,,,,Distributed,stake,
+Europe/Amsterdam,2024-07-08,02:00:00,affiliate,EUR,1.5,,,,,,,Completed,aff-eur,
+Europe/Amsterdam,2024-07-09,02:00:00,buy,ETH,0.04,EUR,2500,EUR,-100.25,EUR,0.25,Completed,buy-eth,
+Europe/Amsterdam,2024-07-09,03:00:00,withdrawal,ETH,-0.010713949999999999,,,,,ETH,0.000000000000000001,Completed,wd-eth,0xsynthetic
+Europe/Amsterdam,2024-07-10,02:00:00,buy,BTC,0.001,EUR,60000,EUR,-60.15,EUR,0.15,Pending,buy-pending,
+Europe/Amsterdam,2024-07-11,02:00:00,withdrawal,BTC,-0.001,,,,,BTC,0.0001,Canceled,wd-canceled,bc1qcanceledsynthetic
+";
+
+/// A book a provider wallet can be created in: EUR and a BTC account.
+fn bitvavo_book() -> Connection {
+    let conn = fixture();
+    conn.execute_batch("UPDATE profiles SET fiat_currency='EUR';
+        INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
+    conn
+}
+fn bitvavo_csv(lines: &[&str]) -> String {
+    let header = BITVAVO_CSV.lines().next().unwrap();
+    format!("{header}\n{}\n", lines.join("\n"))
+}
+type BitvavoRow = (String, String, i64, i64, Option<String>, String);
+fn bitvavo_rows(conn: &Connection) -> Vec<BitvavoRow> {
+    let sql = "SELECT external_id, kind, amount, fee, fiat_value_exact, occurred_at FROM transactions ORDER BY occurred_at, external_id";
+    let read = |r: &kassiber_store::rusqlite::Row<'_>| {
+        Ok((
+            r.get(0)?,
+            r.get(1)?,
+            r.get(2)?,
+            r.get(3)?,
+            r.get(4)?,
+            r.get(5)?,
+        ))
+    };
+    conn.prepare(sql)
+        .unwrap()
+        .query_map([], read)
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+#[test]
+fn bitvavo_csv_maps_every_documented_btc_row_type_into_its_custodial_wallet() {
+    let conn = bitvavo_book();
+    let result = import_into(&conn, BITVAVO_CSV, Format::Bitvavo, "").unwrap();
+    let get = |key: &str| kassiber_envelope::get(&result, key).cloned();
+    assert_eq!(
+        (get("mode"), get("imported")),
+        (Some(s("full")), Some(Py::from(6)))
+    );
+    assert_eq!(get("source"), Some(s("file:bitvavo_csv")));
+    let row = |id: &str, kind: &str, amount, fee, value: Option<&str>, at: &str| {
+        (
+            format!("bitvavo:{id}"),
+            kind.to_owned(),
+            amount,
+            fee,
+            value.map(Into::into),
+            at.to_owned(),
+        )
+    };
+    assert_eq!(
+        bitvavo_rows(&conn),
+        [
+            // 10:00:00.250 CET is 09:00:00 UTC; the paid amount includes the fee.
+            row(
+                "buy-gross",
+                "buy",
+                1_000_000_000,
+                0,
+                Some("401"),
+                "2024-01-02T09:00:00Z"
+            ),
+            row(
+                "buy-net",
+                "buy",
+                99_990_000,
+                0,
+                Some("25"),
+                "2024-01-02T10:00:00Z"
+            ),
+            row(
+                "dep-btc",
+                "deposit",
+                500_000_000,
+                0,
+                None,
+                "2024-01-03T00:00:00Z"
+            ),
+            // CEST; the Amount 0.0041 included the 0.0001 fee.
+            row(
+                "wd-btc",
+                "withdrawal",
+                400_000_000,
+                10_000_000,
+                None,
+                "2024-07-05T12:30:45Z"
+            ),
+            // The received amount is net of the fee.
+            row(
+                "sell",
+                "sell",
+                200_000_000,
+                0,
+                Some("83.79"),
+                "2024-07-06T00:00:00Z"
+            ),
+            row(
+                "stake",
+                "staking",
+                1_000_000,
+                0,
+                None,
+                "2024-07-07T00:00:00Z"
+            ),
+        ]
+    );
+    let config: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE label='Bitvavo' AND kind='bitvavo'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(config, r#"{"source_format": "bitvavo_csv"}"#);
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE pricing_method='bitvavo_csv' AND pricing_quality='exact' AND pricing_provider='Bitvavo'"), 3);
+    // Importing the same export again adds nothing; a UTC export with an
+    // exponent amount reads its wall time as UTC.
+    let again = import_into(&conn, BITVAVO_CSV, Format::Bitvavo, "").unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    let utc = bitvavo_csv(&["UTC,2024-03-31,02:30:00,staking,BTC,1e-05,,,,,,,Distributed,s1,"]);
+    import_into(&conn, &utc, Format::Bitvavo, "").unwrap();
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE external_id='bitvavo:s1' AND amount=1000000 AND occurred_at='2024-03-31T02:30:00Z'"), 1);
+}
+
+#[test]
+fn bitvavo_csv_refuses_what_it_cannot_map_by_name() {
+    let line = |rest: &str| format!("Europe/Amsterdam,2024-08-01,10:00:00,{rest}");
+    for (row, message) in [
+        (line("buy,BTC,0.001,USDC,60000,USDC,-60.15,USDC,0.15,Completed,usdc,"),
+            "Bitvavo transaction 'usdc' (type 'buy') trades BTC against USDC, which is not a fiat currency"),
+        (line("rebate,BTC,0.00001,,,,,,,Completed,rebate,"), "Bitvavo transaction 'rebate' (type 'rebate') has a type Kassiber does not map"),
+        (line("deposit,BTC,0.001,,,,,,,Reversed,odd,"), "Bitvavo transaction 'odd' has status 'Reversed', which Kassiber does not know"),
+        ("America/New_York,2024-08-01,10:00:00,deposit,BTC,0.001,,,,,,,Completed,ny,".into(), "Bitvavo transaction 'ny' has time zone 'America/New_York'"),
+        ("Europe/Amsterdam,2024-10-27,02:30:00,deposit,BTC,0.001,,,,,,,Completed,twice,".into(),
+            "Bitvavo transaction 'twice' has a wall time the summer-time change skips or repeats"),
+        ("Europe/Amsterdam,2024-03-31,02:30:00,deposit,BTC,0.001,,,,,,,Completed,never,".into(),
+            "Bitvavo transaction 'never' has a wall time the summer-time change skips or repeats"),
+        ("Europe/Amsterdam,2024-02-30,10:00:00,deposit,BTC,0.001,,,,,,,Completed,date,".into(), "Bitvavo transaction 'date' has a Date or Time Kassiber cannot read"),
+        (line("deposit,BTC,0.100000000000000000000000000000000001,,,,,,,Completed,long,"),
+            "Bitvavo transaction 'long' (type 'deposit') has a BTC amount that is not a whole number of millisatoshi"),
+        (line("withdrawal,BTC,-0.1,,,,,BTC,0.000000000001,Completed,wd,"),
+            "Bitvavo transaction 'wd' (type 'withdrawal') has a BTC amount that is not a whole number of millisatoshi"),
+        (line("withdrawal,BTC,-0.0001,,,,,BTC,0.0001,Completed,eaten,"), "Bitvavo transaction 'eaten' (type 'withdrawal') has a withdrawal fee as large as its amount"),
+        (line("buy,BTC,0.001,EUR,60000,EUR,60.15,EUR,0.15,Completed,sign,"), "Bitvavo transaction 'sign' has an Amount and a Received / Paid Amount with the same sign"),
+        // A paid amount that fits only the before-fee reading contradicts the export.
+        (line("buy,BTC,0.01,EUR,40000,EUR,-400.00,EUR,1.00,Completed,before,"),
+            "Bitvavo transaction 'before' (type 'buy') has a cash amount that does not match its amount, price and fee"),
+        (line("deposit,BTC,1.000,,,,,,,Completed,,"), "Bitvavo CSV has a row without a Transaction ID"),
+        (line("deposit,BTC,1;5,,,,,,,Completed,comma,"), "Bitvavo transaction 'comma' has a Amount that is not a plain decimal"),
+    ] {
+        let conn = bitvavo_book();
+        let error = import_into(&conn, &bitvavo_csv(&[&row]), Format::Bitvavo, "").unwrap_err();
+        assert!(error.message.starts_with(message), "{}", error.message);
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+    let partial = "Timezone,Date,Time,Type,Currency,Amount,Status,Transaction ID\nUTC,2024-01-01,00:00:00,deposit,BTC,1,Completed,x\n";
+    let error = import_into(&bitvavo_book(), partial, Format::Bitvavo, "").unwrap_err();
+    assert_eq!(error.message, "Bitvavo CSV is missing required columns: Quote Currency, Quote Price, Received / Paid Currency, Received / Paid Amount, Fee currency, Fee amount");
+}
+
+/// Rows of one import are stored in the order they happened (their
+/// milliseconds, the source position that decides FIFO and LIFO basis);
+/// a row a later import adds into a second an earlier import filled with the
+/// opposite direction is tagged with that row for review.
+#[test]
+fn bitvavo_csv_orders_same_second_rows_and_tags_them_across_imports() {
+    let later = "Europe/Amsterdam,2024-08-01,10:00:00.900,sell,BTC,-0.001,EUR,60000,EUR,59.85,EUR,0.15,Completed,aaa-later,";
+    let earlier = "Europe/Amsterdam,2024-08-01,10:00:00.100,buy,BTC,0.001,EUR,60000,EUR,-60.15,EUR,0.15,Completed,zzz-earlier,";
+    let query = |conn: &Connection, sql: &str| -> Vec<String> {
+        conn.prepare(sql)
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    let tagged = "SELECT t.external_id FROM transactions t JOIN transaction_tags x ON x.transaction_id=t.id JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain' ORDER BY 1";
+    let conn = bitvavo_book();
+    import_into(&conn, &bitvavo_csv(&[later, earlier]), Format::Bitvavo, "").unwrap();
+    let order = "SELECT t.external_id FROM import_batch_transactions b JOIN transactions t ON t.id=b.transaction_id ORDER BY b.source_position";
+    assert_eq!(
+        query(&conn, order),
+        ["bitvavo:zzz-earlier", "bitvavo:aaa-later"]
+    );
+    assert!(query(&conn, tagged).is_empty());
+    let conn = bitvavo_book();
+    import_into(&conn, &bitvavo_csv(&[later]), Format::Bitvavo, "").unwrap();
+    import_into(&conn, &bitvavo_csv(&[later, earlier]), Format::Bitvavo, "").unwrap();
+    assert_eq!(
+        query(&conn, tagged),
+        ["bitvavo:aaa-later", "bitvavo:zzz-earlier"]
+    );
+}
+
+/// Bitstamp's RFC 4180 export (docs/exchanges/samples/bitstamp/example.csv):
+/// the API fixture's transactions as the export writes them.
+pub(super) const BITSTAMP_CSV: &str =
+    include_str!("../../../../docs/exchanges/samples/bitstamp/example.csv");
+const BITSTAMP_HEADER: &str = "ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID\n";
+fn bitstamp_book() -> Connection {
+    let conn = fixture();
+    conn.execute("UPDATE profiles SET fiat_currency='EUR'", [])
+        .unwrap();
+    conn
+}
+
+/// The export maps through the API's rules (exchange_api/tests/bitstamp_api.rs
+/// checks the rows): EUR and ETH rows are skipped, an identical repeated row
+/// is read once, and a re-import adds nothing.
+#[test]
+fn bitstamp_csv_imports_its_btc_rows_into_an_active_wallet() {
+    let conn = bitstamp_book();
+    let twice = format!(
+        "{BITSTAMP_CSV}3,Main Account,Deposit,,2024-01-03T00:00:00Z,0.00500000,BTC,,,,,,,\n"
+    );
+    let result = import_kind(&conn, &twice, Format::Bitstamp).unwrap();
+    let get = |key: &str| kassiber_envelope::get(&result, key).cloned();
+    assert_eq!(
+        (get("mode"), get("bitstamp_rows"), get("imported")),
+        (Some(s("full")), Some(Py::from(5)), Some(Py::from(5)))
+    );
+    let again = import_kind(&conn, BITSTAMP_CSV, Format::Bitstamp).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&again, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions WHERE pricing_method='bitstamp' AND pricing_quality='exact'"), 2);
+}
+
+/// What the export cannot book exactly refuses the whole file by name.
+#[test]
+fn bitstamp_csv_refuses_what_it_cannot_book_by_name() {
+    let line = |row: &str| format!("{BITSTAMP_HEADER}{row}\n");
+    #[rustfmt::skip]
+    let cases = [
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,0.01,BTC,400.00,USDT,40000,USDT,0.4,USDT,1"),
+            "Bitstamp transaction '50' (type 'Market') trades BTC against USDT, which is not a fiat currency"),
+        (line("50,Main Account,Market,Sell,2024-03-01T00:00:00Z,0.5,ETH,0.025,BTC,0.05,BTC,0.0001,BTC,1"),
+            "Bitstamp transaction '50' (type 'Market') trades BTC against ETH, which is not a fiat currency"),
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,0.01,BTC,400.00,EUR,40000,EUR,0.5,BNB,1"),
+            "Bitstamp transaction '50' (type 'Market') charges its fee in BNB, not EUR"),
+        (line("50,Main Account,Market,Buy,2024-03-01T00:00:00Z,1.0,ETH,2000,EUR,2000,EUR,0.0001,BTC,1"),
+            "Bitstamp transaction '50' (type 'Market') has a BTC fee but no single BTC amount"),
+        (line("50,Main Account,Deposit reverted,,2024-03-01T00:00:00Z,-0.01,BTC,,,,,,,"),
+            "Bitstamp transaction '50' (type 'Deposit reverted') has a type Kassiber does not map"),
+        (line("50,Main Account,Staking reward,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"),
+            "Bitstamp transaction '50' (type 'Staking reward') is type 27, which Kassiber does not import"),
+        (line("50,Main Account,Inter Account Transfer,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 (Inter Account Transfer) does not say which way its BTC moved"),
+        (line("50,Main Account,Market,,2024-03-01T00:00:00Z,0.01,BTC,400.00,EUR,40000,EUR,,,1"),
+            "Bitstamp CSV line 2 is a market trade that is neither Buy nor Sell"),
+        (line("50,Main Account,Withdrawal,,2024-03-01T00:00:00Z,-0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 has a Amount that is not a plain unsigned decimal"),
+        (line("50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,400.00,,,,,,"),
+            "Bitstamp CSV line 2 has a value without a currency"),
+        (line("50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,0.1,,"),
+            "Bitstamp CSV line 2 has a fee without a currency"),
+        (line("50,Main Account,Deposit,,Mar. 01 2024,0.01,BTC,,,,,,,"),
+            "Bitstamp CSV line 2 has a date and time Kassiber cannot read"),
+        (line(",Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,"), "Bitstamp CSV line 2 has no transaction ID"),
+        (format!("{BITSTAMP_HEADER}50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,\n50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.02,BTC,,,,,,,\n"),
+            "Bitstamp CSV line 3 repeats transaction ID 50 with different values"),
+        (format!("{BITSTAMP_HEADER}50,Main Account,Deposit,,2024-03-01T00:00:00Z,0.01,BTC,,,,,,,\n51,Savings,Deposit,,2024-03-01T00:00:00Z,0.02,BTC,,,,,,,\n"),
+            "Bitstamp CSV holds several accounts"),
+        ("Type,Datetime,Account,Amount,Value,Rate,Fee,Sub Type\nDeposit,\"Jan. 02, 2024, 10:00 AM\",Main Account,0.01 BTC,,,,\n".to_owned(),
+            "This is Bitstamp's legacy transaction export, which has no transaction IDs"),
+        ("ID,Type,Datetime,Amount\n1,Deposit,2024-03-01T00:00:00Z,0.01\n".to_owned(),
+            "Bitstamp CSV is missing required columns: Account, Subtype, Amount currency, Value, Value currency, Rate, Rate currency, Fee, Fee currency, Order ID"),
+    ];
+    for (content, expected) in cases {
+        let conn = fixture();
+        let error = import_kind(&conn, &content, Format::Bitstamp).unwrap_err();
+        assert_eq!(error.message, expected, "{content}");
+        assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    }
+}
+
+/// A later import's row in a second an earlier import filled with the
+/// opposite direction is tagged for review with it.
+#[test]
+fn bitstamp_csv_tags_same_second_rows_across_imports() {
+    let conn = bitstamp_book();
+    let buy =
+        "60,Main Account,Market,Buy,2024-08-01T10:00:00.9Z,0.001,BTC,60.00,EUR,60000,EUR,0.15,EUR,";
+    let sell = "61,Main Account,Market,Sell,2024-08-01T10:00:00.1Z,0.001,BTC,60.00,EUR,60000,EUR,0.15,EUR,";
+    import_kind(
+        &conn,
+        &format!("{BITSTAMP_HEADER}{buy}\n"),
+        Format::Bitstamp,
+    )
+    .unwrap();
+    import_kind(
+        &conn,
+        &format!("{BITSTAMP_HEADER}{buy}\n{sell}\n"),
+        Format::Bitstamp,
+    )
+    .unwrap();
+    let tagged = "SELECT count(*) FROM transaction_tags x JOIN tags g ON g.id=x.tag_id WHERE g.code='same-second-order-uncertain'";
+    assert_eq!(scalar(&conn, tagged), 2);
+}
+
+#[rustfmt::skip]
+mod bitcoinde_csv;
+pub(super) use bitcoinde_csv::{import_bitcoinde, BITCOINDE_CSV};

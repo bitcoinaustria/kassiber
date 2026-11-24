@@ -611,11 +611,15 @@ preview to confirm a descriptor produces the expected wallet before
 committing.
 
 `ui.wallets.import_file` accepts `wallet`, `source_file`, and `source_format`
-for wallet-scoped CSV/JSON imports. `source_format="bisq_csv"` also requires
-`companion_file` and `timezone`, and imports the [Bisq](../exchanges/bisq.md) escrow ledger in
-full mode, with `wallet` optional. Wallet CSV import results include
-`inserted_records`, `updated_records`, and `unchanged` so the desktop can show
-what changed after an exchange CSV import. For
+for wallet-scoped CSV/JSON imports, and `changed_rows` (`skip` or `import`),
+the answer to an `import_changed_rows` refusal
+([re-importing a newer export](imports.md#re-importing-a-newer-export)).
+`source_format="bisq_csv"` also requires `companion_file` and `timezone`, and
+imports the [Bisq](../exchanges/bisq.md) escrow ledger in full mode, with
+`wallet` optional. Wallet CSV import results include `inserted_records`,
+`updated_records`, and `unchanged` so the desktop can show what changed after
+an exchange CSV import, `updated` when above zero, and `corrections_ignored`
+and `changed_rows` when there is something to report. For
 `source_format="bullbitcoin_csv"` or `source_format="coinfinity_csv"`, `wallet`
 is optional. The default `mode="relevant"` treats the export as book-wide
 exchange evidence and enriches only unique matching transactions in the active
@@ -865,7 +869,9 @@ edits at least one of `label`, the same wallet config fields the create
 endpoint takes (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `wallet_material`, `source_file`, `source_format`,
 `store_id`, `payment_method_id`, `gap_limit`, `addresses`, `policy_asset`),
-or `clear` — a list of config field names to remove. `wallet_material`
+`asset_scope` (`bitcoin` or `crypto`, update only; see
+[plan 24](../plan/24-crypto-assets.md)), or `clear` — a list of config field
+names to remove. `wallet_material`
 overwrites the receive/change descriptors when present so users can paste a
 fresh export to fix a typo. `ui.wallets.delete` accepts
 `{"wallet":"...","confirm":"DELETE","confirm_wallet":"...","cascade":true|false}`.
@@ -1040,6 +1046,16 @@ Book rows in `books[]` also carry `balanceSummary` and `taxFreeBalance`, and
 book-set BTC totals use each book's de-duplicated `balanceSummary.totalBtc`.
 The desktop normalizer maps a missing or unknown block to `state="unavailable"`
 with `costBasisComplete=false`, so it never reads as complete.
+
+A book holding crypto assets other than Bitcoin also has `otherAssets`, one
+row per asset ([plan 24](../plan/24-crypto-assets.md)), never counted in the
+Bitcoin figures above. `quantity`, `quantityUnits` and `walletCount` come from
+the canonical quantity balances of current journals (`source: "books"`),
+priced or not, else from transactions (`source: "transactions"`). `costBasis`
+is what journals booked for the asset, `basisQuantity` how much of the
+quantity that covers, and `basisComplete` whether it covers all of it.
+`marketValue` is `null` without a price in the book, and `unrealized` is
+`null` unless both the price and a complete basis are known.
 
 ## Freshness jobs
 

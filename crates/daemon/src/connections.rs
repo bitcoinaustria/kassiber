@@ -15,6 +15,7 @@ pub const KINDS: &[&str] = &[
     // Rust only (docs/reference/exchange-desktop.md); never AI tools.
     "ui.connections.exchange.status",
     "ui.connections.exchange.test",
+    "ui.connections.exchange.preview",
     "ui.connections.exchange.create",
     "ui.connections.exchange.sync",
 ];

@@ -390,8 +390,8 @@ fn rail_for_connection(kind: &str, label: &str) -> Group {
     match kind.to_lowercase().as_str() {
         "xpub" | "address" | "descriptor" | "btcpay" => return Group::Onchain,
         "core-ln" | "lnd" | "nwc" | "phoenix" => return Group::Lightning,
-        "cashu" | "kraken" | "bitstamp" | "coinbase" | "bitpanda" | "river" | "bullbitcoin"
-        | "coinfinity" | "strike" | "csv" | "bip329" => {
+        "cashu" | "kraken" | "bitstamp" | "coinbase" | "bitpanda" | "bitvavo" | "bitfinex"
+        | "bitcoinde" | "river" | "bullbitcoin" | "coinfinity" | "strike" | "csv" | "bip329" => {
             return Group::Other;
         }
         _ => {}

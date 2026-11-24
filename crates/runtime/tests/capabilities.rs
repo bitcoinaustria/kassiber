@@ -46,6 +46,15 @@ fn tables_match_python() {
     let rust_only = [
         ("wallets.sync-bitpanda", "wallets.sync-binance"),
         ("wallets.import-bisq", "wallets.import-strike"),
+        ("wallets.import-binance-history", "wallets.import-river"),
+        ("wallets.sync-bitvavo", "wallets.sync-binance"),
+        ("wallets.import-bitvavo", "wallets.import-strike"),
+        ("wallets.sync-bitstamp", "wallets.sync-binance"),
+        ("wallets.import-bitstamp", "wallets.import-strike"),
+        ("wallets.sync-bitfinex", "wallets.sync-binance"),
+        ("wallets.import-bitfinex", "wallets.import-strike"),
+        ("wallets.sync-bitcoinde", "wallets.sync-binance"),
+        ("wallets.import-bitcoinde", "wallets.import-strike"),
         ("journals.verify", "journals.list"),
         // Pinning a certificate is a trust decision, admin like revealing a token.
         ("backends.trust-certificate", "backends.reveal-token"),
@@ -92,6 +101,13 @@ fn tables_match_python() {
             "ui.connections.btcpay.key_guide",
         ),
         ("ui.connections.exchange.test", "ui.connections.btcpay.test"),
+        // The asset preview before a new connection is a test-like read.
+        (
+            "ui.connections.exchange.preview",
+            "ui.connections.btcpay.test",
+        ),
+        // The asset preview of a provider file before its wallet exists.
+        ("ui.wallets.import_preview", "ui.wallets.ledger_preview"),
         (
             "ui.connections.exchange.create",
             "ui.connections.btcpay.create",

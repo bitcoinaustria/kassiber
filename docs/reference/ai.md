@@ -320,7 +320,8 @@ file's cell values and name. `restricted` keeps an off-device provider to the
 projected surface: those tools are denied with `agent_access_restricted`,
 chain-analysis results are projected, and an attachment is reduced to headers,
 counts and the column plan (its import plan likewise drops dates, amounts and
-the filename). Attached images and PDFs are not shown to a restricted
+the filename, and a changed-rows refusal keeps its code but not the example
+row's id and amounts). Attached images and PDFs are not shown to a restricted
 provider at all. A provider on this device (kind `local` at a
 loopback URL) always has full access.
 
@@ -1458,7 +1459,10 @@ boundary between read-only information and mutating actions. It also carries
 one hard figure rule: when an overview's `fiat.completeness.costBasisComplete`
 is false, the model must call cost basis and unrealized/realized gains
 incomplete and name the blockers, never state them as exact (see
-[the daemon overview contract](daemon.md)). Its evidence rules answer failure
+[the daemon overview contract](daemon.md)). Another crypto asset's basis
+that covers only part of its quantity (`otherAssets[].basisComplete` false)
+reaches the model as `partialCostBasis`, with `costBasis` null, so it cannot
+be read as the full basis. Its evidence rules answer failure
 modes seen in a real repair session: name only ids a tool returned in the
 chat, take totals from tools rather than summing sampled pages, check value
 against the wallets' own rows or `ui.transactions.verify` instead of the
@@ -2012,7 +2016,12 @@ the staged file inside a rolled-back savepoint and returns its exact effect
 with a plan digest, the file's SHA-256 and the book's input version;
 `ui_wallets_import_attachment_apply` repeats it and commits only when all three
 still match, after once-only consent. The approval row shows the plan the daemon
-recomputes then, and its summary names the row count and target. Only file
+recomputes then, and its summary names the row count and target. When the
+book keeps values the file states differently, the plan, its digest and the
+apply result carry `corrections_ignored` as counts per field and the first 20
+transaction ids, never the values; a file whose rows look like rows the book
+has under another id or amount is a blocker (`import_changed_rows`) the user
+answers in the desktop or CLI ([re-importing](imports.md#re-importing-a-newer-export)). Only file
 and exchange wallets, or a new `custom` wallet, are targets. Applied imports
 are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the
 consented, plan-bound `ui_imports_rollback` undo them, except when a rollback

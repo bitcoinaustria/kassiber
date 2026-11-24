@@ -42,7 +42,7 @@ const STATUS: &str = "CASE
 const PAYMENT: &str = "CASE
  WHEN lower(t.asset)='lbtc' OR lower(w.kind) IN ('liquid') OR lower(w.config_json) LIKE '%\"chain\"%liquid%' OR lower(w.label) LIKE '%liquid%' OR lower(w.label) LIKE '%lbtc%' THEN 'Liquid'
  WHEN lower(w.kind) IN ('lnd','core-ln','coreln','nwc','phoenix') OR lower(w.label) LIKE '%lightning%' OR lower(w.label) LIKE '%phoenix%' OR lower(w.label) LIKE '% ln%' OR lower(w.label) LIKE 'ln %' OR lower(w.label) LIKE '%(ln)%' THEN 'Lightning'
- WHEN lower(w.kind) IN ('kraken','bitstamp','coinbase','bitpanda','river','bullbitcoin','coinfinity','strike','exchange') OR lower(w.label) LIKE '%exchange%' THEN 'Exchange'
+ WHEN lower(w.kind) IN ('kraken','bitstamp','coinbase','bitpanda','bitvavo','bitfinex','bitcoinde','river','bullbitcoin','coinfinity','strike','exchange') OR lower(w.label) LIKE '%exchange%' THEN 'Exchange'
  ELSE 'On-chain' END";
 const MISSING_PRICE: &str = "(t.fiat_rate IS NULL OR t.fiat_rate<=0)
  AND (t.fiat_rate_exact IS NULL OR CAST(t.fiat_rate_exact AS REAL)<=0)

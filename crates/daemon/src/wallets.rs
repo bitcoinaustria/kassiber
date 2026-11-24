@@ -265,6 +265,14 @@ fn build_config(args: &Value, update: bool) -> Result<Json, AppError> {
         }
         c["deprecated"] = raw["deprecated"].clone();
     }
+    // docs/plan/24-crypto-assets.md: the desktop's "also track other crypto
+    // assets" toggle, and the choice a new provider wallet's Add connection
+    // asks before its one import. Refused before the re-auth round trip when
+    // it is not a scope; the lifecycle stores it normalized.
+    if let Some(value) = crate::imports::optional_string(args, "asset_scope")? {
+        let scope = kassiber_wallets::file_import::assets::Scope::parse(&value)?;
+        c["asset_scope"] = json!(scope.as_str());
+    }
     if let Some(format) = c.get("source_format").and_then(Json::as_str) {
         if !SOURCE_FORMATS.contains(&format) {
             return Err(AppError::new(
@@ -437,6 +445,24 @@ fn lifecycle(
         let label = required(args, "label", "Connection label")?;
         let kind = required(args, "kind", "Connection type")?;
         let config = build_config(args, false)?;
+        // A wallet created after the asset question: its file must still be
+        // the one the preview read (docs/reference/imports.md#choosing-the-assets-before-the-first-import).
+        if let Some(token) = crate::imports::optional_string(args, "preview_token")? {
+            let (Some(file), Some(format)) = (
+                config.get("source_file").and_then(Json::as_str),
+                config
+                    .get("source_format")
+                    .and_then(Json::as_str)
+                    .and_then(kassiber_wallets::file_import::Format::from_source_format),
+            ) else {
+                return Err(AppError::new(
+                    "validation",
+                    "preview_token needs the source_file and source_format it previewed",
+                )
+                .into());
+            };
+            kassiber_wallets::file_import::check_file_preview(&profile_id, format, file, &token)?;
+        }
         let account = crate::imports::optional_string(args, "account")?;
         Operation::Create {
             workspace_id,
@@ -663,6 +689,28 @@ mod tests {
             assert!(auth(&mut plain, &response, &request_id, scope, "prompt")
                 .unwrap()
                 .is_none());
+        }
+    }
+
+    #[test]
+    fn wallet_create_and_update_carry_a_normalized_asset_scope() {
+        // docs/plan/24-crypto-assets.md: the desktop's scope toggle, and the
+        // scope a new provider wallet is created with.
+        let args = dict([("wallet", s("w")), ("asset_scope", s(" Crypto "))]);
+        for update in [true, false] {
+            assert_eq!(
+                build_config(&args, update).unwrap(),
+                json!({"asset_scope": "crypto"})
+            );
+        }
+        assert_eq!(
+            build_config(&dict([("wallet", s("w"))]), false).unwrap(),
+            json!({})
+        );
+        for bad in [s("eth"), Value::Int(1.into())] {
+            let args = dict([("wallet", s("w")), ("asset_scope", bad)]);
+            assert_eq!(build_config(&args, true).unwrap_err().code, "validation");
+            assert_eq!(build_config(&args, false).unwrap_err().code, "validation");
         }
     }
 }

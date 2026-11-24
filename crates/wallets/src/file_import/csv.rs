@@ -3,7 +3,7 @@
 //! get None, duplicate headings overwrite, and blank physical rows are skipped.
 use super::*;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Row {
     pub data: Json,
     pub headers: Vec<String>,
@@ -11,6 +11,10 @@ pub(crate) struct Row {
     pub original: Option<Py>,
 }
 pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
+    rows_delimited(text, ',')
+}
+/// [`rows`] with another field delimiter (Bitcoin.de exports use `;`).
+pub(super) fn rows_delimited(text: &str, delimiter: char) -> Result<Vec<Row>, AppError> {
     let mut records = Vec::new();
     let mut row = Vec::new();
     let mut field = String::new();
@@ -36,11 +40,11 @@ pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
                 touched = true;
                 continue;
             }
-            if ch == ',' || ch == '\r' || ch == '\n' {
-                if ch == ',' || touched || !row.is_empty() {
+            if ch == delimiter || ch == '\r' || ch == '\n' {
+                if ch == delimiter || touched || !row.is_empty() {
                     row.push(std::mem::take(&mut field));
                 }
-                if ch != ',' {
+                if ch != delimiter {
                     if ch == '\r' && chars.peek() == Some(&'\n') {
                         chars.next();
                     }

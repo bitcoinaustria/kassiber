@@ -2369,7 +2369,7 @@ $ daemon
 > #149
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3285 bytes fnv128 fbdf38e0580e34547acca73616541ade]
 > #150
-< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3500 bytes fnv128 e782b0d7bf5a3e83c0232a8f5edc0968]
+< {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3384 bytes fnv128 38ab410d25cff837f555c6c7f3cd9264]
 > #151
 < {"kind":"test.ai_tool","schema_version":1,"data":{"tool_result":{"kind":"ai.chat.tool_result","sch… [3297 bytes fnv128 9c9fae3d17a38b7e9f966ea9434e24c7]
 > #152

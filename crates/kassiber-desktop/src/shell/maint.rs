@@ -5,7 +5,8 @@
 //! Ports `hooks/useWalletSyncAction.ts`, `hooks/useJournalProcessingAction.ts`,
 //! `lib/syncProgress.ts` and the parts of `lib/syncResults.ts` those use. The web hard-codes the
 //! phase labels, progress labels and run summaries in English; here they come from the bundles
-//! (`chrome:syncProgress`) like the titles, toasts and journal phases. The `details` lines no
+//! (`chrome:syncProgress`) like the titles, toasts and journal phases, and so do the running
+//! job's detail lines (source, retry, outcome: `chrome:maintProgress`). The `details` lines no
 //! surface renders stay English, and the daemon's own reasons and messages pass through as sent.
 
 use std::collections::HashMap;
@@ -350,9 +351,12 @@ fn active_title(p: &Value) -> String {
 /// `activeSyncMaintenanceProgress`'s detail lines.
 fn details(p: &Value) -> Vec<String> {
     let (index, total) = job_numbers(p);
-    let job = index
-        .zip(total)
-        .map(|(i, n)| format!("Source {} of {}", fmt_count(i.min(n)), fmt_count(n)));
+    let job = index.zip(total).map(|(i, n)| {
+        tr(
+            "chrome:maintProgress.sourceOf",
+            &[("index", &fmt_count(i.min(n))), ("total", &fmt_count(n))],
+        )
+    });
     let src = source(p);
     let named = if src.is_empty() {
         source_type_label(p).map(str::to_owned)
@@ -361,13 +365,24 @@ fn details(p: &Value) -> Vec<String> {
     };
     let backoff = (phase(p) == Some("rate_limited")).then(|| {
         let retry = match (num(p, "retry_attempt"), num(p, "retry_max")) {
-            (Some(a), Some(m)) => format!("retry {a}/{m}"),
-            _ => "retrying".into(),
+            (Some(a), Some(m)) => tr(
+                "chrome:maintProgress.retry",
+                &[("attempt", &a.to_string()), ("max", &m.to_string())],
+            ),
+            _ => t("chrome:maintProgress.retrying"),
         };
         let wait = num(p, "wait_seconds")
-            .map(|w| format!(" in {w}s"))
+            .map(|w| {
+                tr(
+                    "chrome:maintProgress.waitIn",
+                    &[("seconds", &w.to_string())],
+                )
+            })
             .unwrap_or_default();
-        format!("Rate limited — {retry}{wait}")
+        tr(
+            "chrome:maintProgress.rateLimited",
+            &[("retry", &retry), ("wait", &wait)],
+        )
     });
     let rows = match numbers(p) {
         (Some(done), Some(total)) if total > 0.0 => Some(format!(
@@ -382,11 +397,18 @@ fn details(p: &Value) -> Vec<String> {
     let retained = (phase(p) == Some("discovery"))
         .then(|| num(p, "retained_targets").filter(|r| *r >= 0.0))
         .flatten()
-        .map(|r| format!("{} targets selected so far", fmt_count(r.floor())));
+        .map(|r| {
+            tr(
+                "chrome:maintProgress.retained",
+                &[("count", &fmt_count(r.floor()))],
+            )
+        });
     let outcome = {
         let parts: Vec<String> = [
-            num(p, "imported").map(|n| format!("{} imported", fmt_count(n))),
-            num(p, "skipped").map(|n| format!("{} unchanged", fmt_count(n))),
+            num(p, "imported")
+                .map(|n| tr("chrome:maintProgress.imported", &[("count", &fmt_count(n))])),
+            num(p, "skipped")
+                .map(|n| tr("chrome:maintProgress.known", &[("count", &fmt_count(n))])),
         ]
         .into_iter()
         .flatten()

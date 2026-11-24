@@ -30,6 +30,7 @@ Use these without opening extra references when the request clearly matches:
 | Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
 | Import an export from a platform Kassiber doesn't list | `kassiber --machine wallets analyze-file --file <export>` |
 | Undo an import that mapped columns wrongly | `kassiber imports list` then `imports rollback --batch <id> --confirm` |
+| An import refused with `import_changed_rows` (rows that look like rows the book has) | ask the user, then rerun with `--changed-rows skip` (keep the book's rows) or `--changed-rows import` (separate transactions); never pick for them ([re-importing](../../docs/reference/imports.md#re-importing-a-newer-export)) |
 | How complete is each wallet's history | `kassiber --machine wallets list` (`completeness_class`, `scan_bounds`) |
 | Ask the in-product assistant with tools | `kassiber chat "<question>"` |
 | Give an MCP host typed tools for one book | `kassiber mcp serve --workspace <set> --profile <book>`; the user turns agents on and picks their grant (read, operator, accounting_decisions) in Settings → AI or with `kassiber mcp enable --grant <grant>` in their own terminal; never run `mcp enable` for them ([MCP](../../docs/reference/mcp.md)) |

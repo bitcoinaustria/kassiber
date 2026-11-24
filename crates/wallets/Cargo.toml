@@ -114,6 +114,8 @@ kassiber-transactions = { path = "../transactions" }
 kassiber-tax-countries = { path = "../tax-countries" }
 # Pair Bisq escrow legs with the on-chain rows their txids name, through the
 # shared pair authoring (wallets has no pairing of its own).
+# Imports pair the two legs of a provider-reported swap through reviewed
+# pair authoring (docs/plan/24-crypto-assets.md).
 kassiber-transfers = { path = "../transfers" }
 # The generic-ledger template workbook, through the shared renderer.
 kassiber-xlsx = { path = "../xlsx" }
@@ -129,6 +131,9 @@ bdk_chain = { version = "=0.23.3", default-features = false, features = ["std"] 
 bdk_core = { version = "=0.6.3", default-features = false, features = ["std"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
 sha2 = "0.11"
+# Single-use Bitstamp request nonces; the standard library has no portable
+# cryptographic random-byte API.
+getrandom = "=0.4.3"
 regex = "1"
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 # Match the lwk 0.18.0 Python binding's wollet, update and store semantics.

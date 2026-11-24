@@ -3,7 +3,83 @@ use kassiber_pyjson::{dumps, Options, Value};
 use kassiber_store::Book;
 use serde_json::Value as Json;
 
+/// `KASSIBER_GOLDEN_WRITE=1` rewrites each mismatching case's `expected` in
+/// `data/vectors.json` from the current output instead of failing, and prints
+/// every changed field (docs/reference/testing.md#changing-a-frozen-golden).
+/// Refused under `CI`. Only the `expected` string of a changed case is
+/// replaced; every other byte of the file stays as it was.
+fn golden_write() -> bool {
+    let write = std::env::var_os("KASSIBER_GOLDEN_WRITE").is_some_and(|v| v == "1");
+    assert!(
+        !(write && std::env::var_os("CI").is_some()),
+        "KASSIBER_GOLDEN_WRITE is refused in CI"
+    );
+    write
+}
+
+/// Every field that differs between two JSON documents, as `path: old -> new`.
+fn structural_diff(path: &str, old: &Json, new: &Json, out: &mut Vec<String>) {
+    match (old, new) {
+        (Json::Object(a), Json::Object(b)) => {
+            let keys: std::collections::BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+            for key in keys {
+                let at = format!("{path}.{key}");
+                match (a.get(key), b.get(key)) {
+                    (Some(x), Some(y)) => structural_diff(&at, x, y, out),
+                    (Some(x), None) => out.push(format!("{at}: {x} -> (absent)")),
+                    (None, Some(y)) => out.push(format!("{at}: (absent) -> {y}")),
+                    (None, None) => {}
+                }
+            }
+        }
+        (Json::Array(a), Json::Array(b)) => {
+            for i in 0..a.len().max(b.len()) {
+                let at = format!("{path}[{i}]");
+                match (a.get(i), b.get(i)) {
+                    (Some(x), Some(y)) => structural_diff(&at, x, y, out),
+                    (Some(x), None) => out.push(format!("{at}: {x} -> (absent)")),
+                    (None, Some(y)) => out.push(format!("{at}: (absent) -> {y}")),
+                    (None, None) => {}
+                }
+            }
+        }
+        (a, b) if a != b => out.push(format!("{path}: {a} -> {b}")),
+        _ => {}
+    }
+}
+
+/// Replace one case's `expected` string in the vectors file, found by the
+/// case's unique name, leaving every other byte unchanged.
+fn rewrite_expected(name: &str, old: &str, new: &str) {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock().unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/vectors.json");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let marker = format!("\"name\": {}", serde_json::to_string(name).unwrap());
+    assert_eq!(
+        text.matches(&marker).count(),
+        1,
+        "case name not unique: {name}"
+    );
+    let start = text.find(&marker).unwrap();
+    let field = "\"expected\": ";
+    let at = start + text[start..].find(field).unwrap() + field.len();
+    let encoded_old = serde_json::to_string(old).unwrap();
+    assert!(
+        text[at..].starts_with(&encoded_old),
+        "{name}: expected is not encoded as this writer would encode it"
+    );
+    let rewritten = format!(
+        "{}{}{}",
+        &text[..at],
+        serde_json::to_string(new).unwrap(),
+        &text[at + encoded_old.len()..]
+    );
+    std::fs::write(&path, rewritten).unwrap();
+}
+
 fn check(group: &str) {
+    let write = golden_write();
     let cases: Vec<Json> = serde_json::from_str(include_str!("data/vectors.json")).unwrap();
     assert!(
         cases.iter().any(|v| v["group"] == group),
@@ -49,12 +125,24 @@ fn check(group: &str) {
             },
         )
         .unwrap();
-        assert_eq!(
-            actual,
-            case["expected"].as_str().unwrap(),
-            "{}",
-            case["name"]
-        );
+        let expected = case["expected"].as_str().unwrap();
+        if write && actual != expected {
+            let name = case["name"].as_str().unwrap();
+            let mut changed = Vec::new();
+            structural_diff(
+                "$",
+                &serde_json::from_str(expected).unwrap(),
+                &serde_json::from_str(&actual).unwrap(),
+                &mut changed,
+            );
+            eprintln!("golden {group}/{name}: {} field(s) changed", changed.len());
+            for line in &changed {
+                eprintln!("  {line}");
+            }
+            rewrite_expected(name, expected, &actual);
+        } else {
+            assert_eq!(actual, expected, "{}", case["name"]);
+        }
         assert_eq!(
             before,
             book.connection().total_changes(),

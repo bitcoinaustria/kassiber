@@ -703,6 +703,22 @@ becomes a directory during writing; random staging filenames are not exposed.
 
 If transactions do not already include usable fiat pricing, Kassiber first tries to fill them from the local rates cache during journal processing. When a transaction has a known `confirmed_at` timestamp, Kassiber prices from that confirmation time; otherwise it falls back to `occurred_at`. `LBTC` / `L-BTC` transactions use the BTC fiat rate because Liquid Bitcoin is pegged one-to-one with BTC.
 
+A swap between Bitcoin and another crypto asset (an active transaction pair
+whose legs hold different assets) is one trade, so once the rates cache
+prices its Bitcoin leg, the same pass gives the other, unpriced leg that
+value: rate = value / quantity, the Bitcoin leg's source kind, provider,
+pair, timestamp and quality, and `pricing_method` `swap_counter_leg`.
+Repricing that rate pair clears both legs. The counter-leg price is derived,
+not stored as a fact: every pass clears it and prices again only from the
+pairs that exist then. Unpairing or re-pairing the swap, excluding its
+Bitcoin leg, or pricing that leg by hand leaves the other leg unpriced and
+back in review (or valued from its new pair), never at a stale value. A swap with no Bitcoin leg, or
+whose Bitcoin leg has no cached rate or another currency, stays unpriced and
+held in review. A Bitcoin row, such as one leg of a transfer between own
+wallets, is never priced from its pair. Kassiber never prices another asset
+from a rate of its own
+([plan 24](../plan/24-crypto-assets.md)).
+
 All price write paths use shared finite decimal validation, including overrides,
 history reverts, manual/cached rates, BTCPay, imports, documents and source-of-funds sources. Values must
 fit finite numeric output, use exponents between -308 and 308, and have zero or

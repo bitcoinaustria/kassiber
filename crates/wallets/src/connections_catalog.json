@@ -132,6 +132,30 @@
     "config_fields": "backend"
   },
   {
+    "kind": "bitvavo",
+    "summary": "Bitvavo read-only API connection and transaction-history CSV importer for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "bitstamp",
+    "summary": "Bitstamp read-only API and transaction CSV import wallet for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "bitfinex",
+    "summary": "Bitfinex read-only API connection and Reports CSV importer for BTC spot trades, wallet movements and funding interest.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
+    "kind": "bitcoinde",
+    "summary": "Bitcoin.de read-only Trading API sync and BTC account statement CSV importer for BTC trades and wallet movements.",
+    "requires": "",
+    "config_fields": "backend, source_file, source_format"
+  },
+  {
     "kind": "wasabi",
     "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
     "requires": "",

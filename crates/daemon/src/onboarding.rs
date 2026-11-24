@@ -26,6 +26,7 @@ pub const KINDS: &[&str] = &[
     "ui.wallets.identify_onchain.cancel",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
+    "ui.wallets.import_preview",
     "ui.wallets.ledger_preview",
     "ui.transactions.ledger_template",
     "ui.wallets.analyze_file",
@@ -246,6 +247,7 @@ pub(super) fn handle(
             .book_mut()?
             .service(kind, args.unwrap_or(&Value::Null))?,
         "ui.wallets.ledger_preview" => ledger_preview(&object(args)?)?,
+        "ui.wallets.import_preview" => import_preview(daemon, &object(args)?)?,
         "ui.transactions.ledger_template" => ledger_template(daemon, &object(args)?)?,
         _ => {
             let args = detection_args(&object(args)?)?;
@@ -256,6 +258,35 @@ pub(super) fn handle(
         Some(with_request_id(success(kind, payload), request_id)),
         false,
     ))
+}
+
+/// `ui.wallets.import_preview`: the other crypto assets a provider file holds,
+/// before the Add connection dialog creates its wallet
+/// (docs/reference/imports.md#choosing-the-assets-before-the-first-import).
+/// Reads only the file the user chose; writes nothing.
+fn import_preview(daemon: &mut Daemon, args: &Value) -> Result<Value, AppError> {
+    let source_format = optional_string(args, "source_format")?
+        .ok_or_else(|| AppError::new("validation", "Source format is required."))?;
+    let format = file_import::Format::from_source_format(&source_format)
+        .filter(|_| crate::wallets::SOURCE_FORMATS.contains(&source_format.as_str()))
+        .ok_or_else(|| {
+            AppError::new(
+                "validation",
+                format!("Unsupported source format '{source_format}'"),
+            )
+            .with_hint("Choose a supported file format.")
+        })?;
+    let Some(file) = crate::wallets::source_file(args)? else {
+        return Err(AppError::new("validation", "source_file is required")
+            .with_hint("Choose the local export file to import."));
+    };
+    let label = optional_string(args, "label")?.unwrap_or_default();
+    let (_, profile_id) = daemon.book_mut()?.resolve_scope(None, None)?;
+    let mut preview = file_import::preview_assets(&file, format, &label)?;
+    // The create and import after the answer refuse another file.
+    let token = file_import::file_preview_token(&profile_id, format, &file)?;
+    kassiber_envelope::set(&mut preview, "preview_token", s(token));
+    Ok(preview)
 }
 
 /// `_import_wallet_file_payload` up to the importer: argument checks in
@@ -286,6 +317,7 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
                 mode: None,
                 companion: None,
                 timezone: None,
+                changed_rows: changed_rows(args)?,
             },
             payload: bundle.clone(),
         });
@@ -325,7 +357,8 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             let wallet = optional_string(args, "wallet")?;
             (wallet, Some(mode()?.unwrap_or_else(|| "full".into())), None)
         }
-        "strike_csv" | "bisq_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
+        "strike_csv" | "bisq_csv" | "bitvavo_csv" | "bitstamp_csv" | "bitfinex_csv"
+        | "bitcoinde_csv" => (optional_string(args, "wallet")?, Some("full".into()), None),
         _ => {
             let wallet = required("wallet", "Wallet")?;
             let column_map = match get(args, "column_map") {
@@ -341,6 +374,10 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
     };
     let format = format.expect("validated source format");
     let (_, profile_id) = daemon.book_mut()?.resolve_scope(None, None)?;
+    // An import the asset question answered imports only the previewed file.
+    if let Some(token) = optional_string(args, "preview_token")? {
+        file_import::check_file_preview(&profile_id, format, &file, &token)?;
+    }
     Ok(DesktopImport::File {
         request: file_import::Request {
             profile_id,
@@ -350,9 +387,18 @@ fn import_file(daemon: &mut Daemon, args: &Value) -> Result<DesktopImport, AppEr
             mode,
             companion: crate::wallets::companion_file(args)?,
             timezone: crate::imports::optional_string(args, "timezone")?,
+            changed_rows: changed_rows(args)?,
         },
         column_map,
     })
+}
+
+/// `changed_rows`: the user's answer to rows that look like a stored row
+/// (docs/reference/imports.md#re-importing-a-newer-export).
+pub(crate) fn changed_rows(args: &Value) -> Result<Option<file_import::ChangedRows>, AppError> {
+    optional_string(args, "changed_rows")?
+        .map(|value| file_import::ChangedRows::parse(&value))
+        .transpose()
 }
 
 /// `_import_samourai_payload`: watch-only source sets only.

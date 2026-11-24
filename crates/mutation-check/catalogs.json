@@ -1378,6 +1378,45 @@
     "-p",
     "kassiber-tax"
    ]
+  },
+  {
+   "name": "asset-views",
+   "catalogs": [
+    "crates/reports/scripts/asset_view_mutations.json"
+   ],
+   "cargo": [],
+   "groups": {
+    "by": "id-prefix",
+    "args": {
+     "workspace": [
+      "-p",
+      "kassiber-workspace",
+      "--lib"
+     ],
+     "reports": [
+      "-p",
+      "kassiber-reports",
+      "--lib"
+     ]
+    }
+   }
+  },
+  {
+   "name": "crypto-assets",
+   "catalogs": [
+    "crates/kassiber/scripts/crypto_asset_mutations.json"
+   ],
+   "cargo": [
+    "-p",
+    "kassiber",
+    "--features",
+    "test-harness",
+    "--test",
+    "exchange_swaps"
+   ],
+   "env": {
+    "KASSIBER_TEST_NO_EGRESS": "1"
+   }
   }
  ]
 }

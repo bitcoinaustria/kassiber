@@ -2895,48 +2895,9 @@ impl Book for RealBook {
         wallet: &str,
         backend: &str,
         kind: &str,
+        changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
     ) -> Result<Value, AppError> {
-        use kassiber_net::{Consent, Gate, Ledger, Offline};
-        use kassiber_wallets::file_import::{exchange_api, Identity};
-        // backends.resolve_backend(runtime_config, name) over the merged view.
-        let mut backends = self.backends.clone();
-        backends.merge(self.conn()?)?;
-        let config = backends.resolve_configured(self.conn()?, Some(backend))?;
-        let gate = Gate::new(
-            || match Context::from_env()
-                .ok()
-                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            {
-                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                Some(_) => Offline::Online,
-                None => Offline::Unavailable,
-            },
-            Ledger::process(),
-        );
-        #[cfg(feature = "test-harness")]
-        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
-            .ok()
-            .and_then(|ids| {
-                Some(Identity {
-                    ids: ids.split(',').map(str::to_owned).collect(),
-                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
-                })
-            });
-        #[cfg(not(feature = "test-harness"))]
-        let identity: Option<Identity> = None;
-        // This command is the user's explicit request for exactly this
-        // backend's signed history; the grant covers only the reported route.
-        exchange_api::execute(
-            self.conn()?,
-            profile,
-            wallet,
-            &config,
-            kind,
-            &gate,
-            crate::version::current(),
-            &mut |route| Some(Consent::explicit_trigger(route.request())),
-            identity.as_ref(),
-        )
+        self.exchange_import(profile, wallet, backend, kind, changed_rows, None)
     }
     fn import_ledger_file(
         &mut self,
@@ -3608,5 +3569,63 @@ mod selected_data_root_tests {
             kassiber_paths::canonicalize_allow_missing(&selected).unwrap(),
             kassiber_paths::canonicalize_allow_missing(&data).unwrap()
         );
+    }
+}
+
+impl RealBook {
+    /// `wallets sync-<kind>`, and the desktop's sync after the asset question
+    /// (`preview_token`: only the history the user answered for imports).
+    pub(crate) fn exchange_import(
+        &mut self,
+        profile: &str,
+        wallet: &str,
+        backend: &str,
+        kind: &str,
+        changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
+        preview_token: Option<&str>,
+    ) -> Result<Value, AppError> {
+        use kassiber_net::{Consent, Gate, Ledger, Offline};
+        use kassiber_wallets::file_import::{exchange_api, Identity};
+        // backends.resolve_backend(runtime_config, name) over the merged view.
+        let mut backends = self.backends.clone();
+        backends.merge(self.conn()?)?;
+        let config = backends.resolve_configured(self.conn()?, Some(backend))?;
+        let gate = Gate::new(
+            || match Context::from_env()
+                .ok()
+                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+            {
+                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                Some(_) => Offline::Online,
+                None => Offline::Unavailable,
+            },
+            Ledger::process(),
+        );
+        #[cfg(feature = "test-harness")]
+        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
+            .ok()
+            .and_then(|ids| {
+                Some(Identity {
+                    ids: ids.split(',').map(str::to_owned).collect(),
+                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
+                })
+            });
+        #[cfg(not(feature = "test-harness"))]
+        let identity: Option<Identity> = None;
+        // This command is the user's explicit request for exactly this
+        // backend's signed history; the grant covers only the reported route.
+        exchange_api::execute_with(
+            self.conn()?,
+            profile,
+            wallet,
+            &config,
+            kind,
+            &gate,
+            crate::version::current(),
+            &mut |route| Some(Consent::explicit_trigger(route.request())),
+            identity.as_ref(),
+            changed_rows,
+            preview_token,
+        )
     }
 }

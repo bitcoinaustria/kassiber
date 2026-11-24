@@ -295,14 +295,35 @@ fn exchange_connection_kinds_are_desktop_kinds() {
         assert!(tauri.contains(kind) && vite.contains(kind), "{kind}");
         assert!(desktop_allowlist().contains(kind), "{kind}");
     }
-    let exchanges: Vec<String> = catalog_entries()
-        .iter()
-        .filter(|e| field(e, "setupKind").as_deref() == Some("exchange-api"))
-        .filter_map(|e| field(e, "exchange"))
-        .collect::<BTreeSet<_>>()
+    // The exchanges the desktop app sets up with a read-only API key.
+    let model = read("crates/kassiber-desktop/src/wallets/add/exchange/model.rs");
+    let exchanges: Vec<String> = quoted_list(&model, "pub const KINDS: [&str; ", "];")
         .into_iter()
         .collect();
-    assert_eq!(exchanges, ["binance", "bitpanda", "coinbase", "kraken"]);
+    assert_eq!(
+        exchanges,
+        [
+            "binance",
+            "bitcoinde",
+            "bitfinex",
+            "bitpanda",
+            "bitstamp",
+            "bitvavo",
+            "coinbase",
+            "kraken"
+        ]
+    );
+}
+
+#[test]
+fn asset_scope_toggle_stays_out_of_ai_tools() {
+    // docs/plan/24-crypto-assets.md: the desktop sets a wallet's asset scope
+    // through `ui.wallets.update`; assistant tools do not touch wallet
+    // configuration, so neither that kind nor the setting is an AI tool.
+    assert!(desktop_allowlist().contains("ui.wallets.update"));
+    let catalog = read("crates/ai/src/data/catalog.json");
+    assert!(!catalog.contains("ui.wallets.update"));
+    assert!(!catalog.contains("asset_scope"));
 }
 
 #[test]

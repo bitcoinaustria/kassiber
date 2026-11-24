@@ -408,10 +408,13 @@ fn file_filters(id: &str) -> Vec<(String, Vec<&'static str>)> {
         (Some("21bitcoin_csv"), _) => f("twentyonebitcoinCsv", vec!["csv"]),
         (Some("strike_csv"), _) => f("strikeCsv", vec!["csv"]),
         (Some("bisq_csv"), _) => f("bisqCsv", vec!["csv"]),
+        (Some("bitstamp_csv"), _) => f("bitstampCsv", vec!["csv"]),
         (Some("ledgerlive_csv"), _) => f("ledgerliveCsv", vec!["csv"]),
         (Some("cointracking_csv"), _) => f("cointrackingCsv", vec!["csv"]),
         (Some("blockpit_csv"), _) => f("blockpitCsv", vec!["csv"]),
         (Some("binance_supplemental_csv"), _) => f("binanceSupplementalCsv", vec!["csv"]),
+        (Some("binance_history_csv"), _) => f("binanceHistoryCsv", vec!["csv"]),
+        (Some("bitfinex_csv"), _) => f("bitfinexReports", vec!["zip", "csv"]),
         (Some("btcpay_csv"), _) => f("btcpayCsv", vec!["csv"]),
         (Some("wasabi_bundle"), _) => f("wasabiBundle", vec!["json"]),
         (_, SetupKind::Samourai) => f("samouraiSourceSet", vec!["json"]),
@@ -466,7 +469,7 @@ fn b64(data: &[u8]) -> String {
 fn set_source_file(a: &mut App, path: String) {
     stm(a).form.source_file = TextEdit::new(&path);
     stm(a).errors.remove("sourceFile");
-    stm(a).last_import = None;
+    super::inputs_changed(a);
 }
 
 /// The generic ledger's picker reads the file too (`pickFileWithContentsBase64`) and feeds the
@@ -501,7 +504,7 @@ fn source_file_setup(app: &App, tk: &Tk, sync_label: Option<String>) -> Vec<El> 
         &[("title", &src.title())],
     );
     let on_change: fn(&mut App) = |a| {
-        stm(a).last_import = None;
+        super::inputs_changed(a);
         if meta(selected(a).id).source_format == Some("generic_ledger") {
             ledger_preview::set_source(a, None);
         }
@@ -1907,14 +1910,14 @@ fn wasabi_fields(app: &App, tk: &Tk) -> Vec<El> {
             "connection-wasabi-mode",
             (&t("connections:add.wasabi.pasteRpc"), rpc, |a: &mut App| {
                 stm(a).form.wasabi_mode = "rpc";
-                stm(a).last_import = None;
+                super::inputs_changed(a);
             }),
             (
                 &t("connections:add.wasabi.bundleFile"),
                 !rpc,
                 |a: &mut App| {
                     stm(a).form.wasabi_mode = "bundle-file";
-                    stm(a).last_import = None;
+                    super::inputs_changed(a);
                 },
             ),
         ),
@@ -2110,7 +2113,7 @@ fn file_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                     !existing,
                     |a: &mut App| {
                         stm(a).form.btcpay_csv_mode = "wallet_source";
-                        stm(a).last_import = None;
+                        super::inputs_changed(a);
                     },
                 ),
                 (
@@ -2127,7 +2130,7 @@ fn file_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                         if f.target_wallet.is_empty() {
                             f.target_wallet = first;
                         }
-                        stm(a).last_import = None;
+                        super::inputs_changed(a);
                     },
                 ),
             ),
@@ -2217,7 +2220,7 @@ fn file_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             true,
             |a: &mut App, v: &str| {
                 stm(a).form.source_format = if v == "json" { "json" } else { "csv" };
-                stm(a).last_import = None;
+                super::inputs_changed(a);
             },
         );
         out.push(setup_field(tk, &name, sel, None, None));
@@ -2365,7 +2368,7 @@ fn bull_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                 !existing,
                 |a: &mut App| {
                     stm(a).form.bull_mode = "wallet_sources";
-                    stm(a).last_import = None;
+                    super::inputs_changed(a);
                 },
             ),
             (
@@ -2373,7 +2376,7 @@ fn bull_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                 existing,
                 |a: &mut App| {
                     stm(a).form.bull_mode = "existing_wallets";
-                    stm(a).last_import = None;
+                    super::inputs_changed(a);
                 },
             ),
         ),
@@ -2415,7 +2418,7 @@ fn bull_wallet_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
                             f.bull_routes.insert(id, default);
                         }
                     }
-                    stm(a).last_import = None;
+                    super::inputs_changed(a);
                 })
                 .child(checkbox_box(tk, on))
                 .child(
@@ -2592,7 +2595,7 @@ fn enrichment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
             true,
             |a: &mut App, v: &str| {
                 stm(a).form.bull_import_mode = if v == "full" { "full" } else { "relevant" };
-                stm(a).last_import = None;
+                super::inputs_changed(a);
             },
         );
         let helper = tr(
@@ -2662,7 +2665,7 @@ fn enrichment_fields(app: &App, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> {
         |a: &mut App, v: &str| {
             stm(a).form.target_wallet = v.to_owned();
             stm(a).errors.remove("targetWallet");
-            stm(a).last_import = None;
+            super::inputs_changed(a);
         },
     );
     out.push(setup_field(
@@ -3549,7 +3552,7 @@ fn fields(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> 
 }
 
 /// `renderImportSummary`.
-fn import_summary(tk: &Tk, r: &Value) -> El {
+fn import_summary(app: &App, tk: &Tk, r: &Value) -> El {
     let n = |k: &str| r.get(k).and_then(Value::as_u64);
     let imported = n("imported").unwrap_or(0);
     let skipped = n("skipped").unwrap_or(0);
@@ -3567,14 +3570,16 @@ fn import_summary(tk: &Tk, r: &Value) -> El {
     .find_map(|k| n(k))
     .unwrap_or(imported + skipped);
     let book = r.get("scope").and_then(Value::as_str) == Some("book");
-    let changed = imported + n("updated").unwrap_or(0);
+    // A result that does not name `updated` still lists the rows it updated.
+    let updated = crate::wallets::reimport::updated(r);
+    let changed = imported + updated.unwrap_or(0);
     let mut metrics: Vec<(String, Option<u64>)> = vec![
         (
             t("connections:add.summary.metric.rowsRead"),
             Some(rows_read),
         ),
         (t("connections:add.summary.metric.inserted"), Some(imported)),
-        (t("connections:add.summary.metric.updated"), n("updated")),
+        (t("connections:add.summary.metric.updated"), updated),
         (
             t("connections:add.summary.metric.unchanged"),
             n("unchanged"),
@@ -3769,6 +3774,22 @@ fn import_summary(tk: &Tk, r: &Value) -> El {
         )
         .child(grid)
         .children(bisq_held_block(tk, r))
+        .children(
+            [
+                crate::wallets::reimport::changed_line(r),
+                crate::wallets::reimport::corrections_line(r),
+            ]
+            .into_iter()
+            .flatten()
+            .map(|line| {
+                text(line)
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg)
+                    .wrap()
+                    .role("status")
+            }),
+        )
+        .children(crate::wallets::assets::import_view(app, tk, r))
         .child(records)
 }
 
@@ -3934,8 +3955,61 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
                 .role("alert"),
         );
     }
+    // The asset question before a new provider wallet's import, for the current inputs.
+    let current = super::submit::current_ask_source(app);
+    let history = current.as_ref().is_some_and(|c| c.is_history());
+    if let Some(n) = &s.asset_notice {
+        form = form.child(
+            text(n.clone())
+                .font(tk.txs(400.0))
+                .color(tk.muted_fg)
+                .wrap()
+                .role("status"),
+        );
+    }
+    if s.job
+        .as_ref()
+        .is_some_and(|j| j.stage == super::submit::Stage::AssetPreview)
+    {
+        form = form.child(crate::wallets::asset_choice::checking_view(tk, history));
+    } else if let Some(ask) = s
+        .asset_ask
+        .as_ref()
+        .filter(|a| current.as_ref() == Some(&a.source))
+    {
+        if let Some(choice) = &ask.choice {
+            form = form.child(crate::wallets::asset_choice::choice_view(
+                tk,
+                choice,
+                history,
+                ask.bitcoin_only,
+                super::submit::pick_bitcoin_only,
+            ));
+        } else if let Some(c) = &ask.cannot_keep {
+            form = form.child(crate::wallets::asset_choice::cannot_keep_view(tk, c));
+        }
+    }
+    if let Some(e) = &s.asset_error {
+        let provider = super::exchange::provider_name(meta(src.id).exchange.unwrap_or(""));
+        form = form.child(super::exchange::error_notice(tk, provider, e));
+    }
+    // A refusal answers only for the inputs it was refused for.
+    if let Some(r) = s
+        .refused
+        .as_ref()
+        .filter(|r| r.inputs == super::submit::current_inputs(app))
+    {
+        form = form.child(crate::wallets::reimport::refusal_view(
+            tk,
+            "import-refusal",
+            &r.refusal,
+            r.is_sync(),
+            s.job.is_some(),
+            |a: &mut App, answer| super::submit::answer_refusal(a, answer),
+        ));
+    }
     if let Some(r) = &s.last_import {
-        form = form.child(import_summary(tk, r));
+        form = form.child(import_summary(app, tk, r));
     }
     let _ = notice(tk, Tone::Neutral, "");
     let mut right = col().grow(1.0).min_w(0.0).h_full();

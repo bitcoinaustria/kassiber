@@ -3121,6 +3121,7 @@ dependencies = [
  "bitcoin",
  "elements-miniscript",
  "flate2",
+ "getrandom 0.4.3",
  "kassiber-ai",
  "kassiber-chain",
  "kassiber-credentials",

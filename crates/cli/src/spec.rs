@@ -102,6 +102,15 @@ pub const AI_PROVIDER_KIND_CHANGE_HELP: &str = "Change the privacy kind, or make
 pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.sync-bitpanda",
     "wallets.import-bisq",
+    "wallets.import-binance-history",
+    "wallets.sync-bitvavo",
+    "wallets.import-bitvavo",
+    "wallets.sync-bitstamp",
+    "wallets.import-bitstamp",
+    "wallets.sync-bitfinex",
+    "wallets.import-bitfinex",
+    "wallets.sync-bitcoinde",
+    "wallets.import-bitcoinde",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",
@@ -126,9 +135,48 @@ pub fn rust_only_new(dotted: &str) -> bool {
         .iter()
         .any(|c| dotted == *c || (c.ends_with('.') && dotted.starts_with(c)))
 }
+
+/// `--changed-rows`, a flag only the Rust backend accepts, on these file
+/// imports and exchange syncs (docs/reference/imports.md#re-importing-a-newer-export).
+pub const CHANGED_ROWS_LEAVES: &[&str] = &[
+    "wallets.import-json",
+    "wallets.import-csv",
+    "wallets.import-btcpay",
+    "wallets.import-phoenix",
+    "wallets.import-wasabi",
+    "wallets.import-river",
+    "wallets.import-bull",
+    "wallets.import-bullbitcoin",
+    "wallets.import-coinfinity",
+    "wallets.import-21bitcoin",
+    "wallets.import-pocket",
+    "wallets.import-pocketbitcoin",
+    "wallets.import-strike",
+    "wallets.import-bitvavo",
+    "wallets.import-bitstamp",
+    "wallets.import-bitfinex",
+    "wallets.import-bitcoinde",
+    "wallets.import-ledger-live",
+    "wallets.import-cointracking",
+    "wallets.import-blockpit",
+    "wallets.import-binance-supplemental",
+    "wallets.import-binance-history",
+    "wallets.sync-kraken",
+    "wallets.sync-coinbase",
+    "wallets.sync-binance",
+    "wallets.sync-bitpanda",
+    "wallets.sync-bitvavo",
+    "wallets.sync-bitstamp",
+    "wallets.sync-bitfinex",
+    "wallets.sync-bitcoinde",
+    "wallets.import-ledger",
+];
+/// The `--changed-rows` help.
+pub const CHANGED_ROWS_HELP: &str = "For rows that look like a stored row under another id, or under its id with another amount or fee: skip keeps the book's rows, import adds them as new transactions. Without it such an import refuses.";
 /// Backend kinds only the Rust backend accepts, extra `--kind` choices of
 /// `backends create` and `backends update`.
-pub const RUST_ONLY_BACKEND_KINDS: &[&str] = &["bitpanda"];
+pub const RUST_ONLY_BACKEND_KINDS: &[&str] =
+    &["bitpanda", "bitvavo", "bitstamp", "bitfinex", "bitcoinde"];
 
 /// The `--cost-basis-pool-scope` help: each country's scopes, its default
 /// when it has a choice.

@@ -63,7 +63,10 @@ const BOUNDS: &[(u64, [f32; 4])] = &[
     (0x6311a3b36c9cbdde, [0.000, 0.000, 0.885, 0.987]), // bisq.svg
     (0x24e278ad2b7fce45, [0.207, 0.041, 0.793, 0.959]), // bitbox.svg
     (0x648daec469342a7f, [0.000, 0.000, 1.000, 1.000]), // bitcoin.svg
+    (0x74efbf98f4522355, [0.000, 0.000, 0.998, 0.918]), // bitcoinde.svg
+    (0x793ab36f7c50b268, [0.039, 0.070, 0.971, 0.992]), // bitfinex.svg
     (0x6a23b2c946006f26, [0.000, 0.070, 0.570, 0.930]), // bitpanda.svg
+    (0x4638ffba6de1cb58, [0.000, 0.000, 1.000, 1.000]), // bitstamp.svg
     (0xd47fd81727ab93db, [0.000, 0.000, 1.000, 1.000]), // blockpit.png
     (0x0725fe6b7ae35352, [0.000, 0.000, 1.000, 1.000]), // blockstream-green.svg
     (0xc8c35f7e8daec450, [0.027, 0.031, 0.789, 0.971]), // bluewallet.png

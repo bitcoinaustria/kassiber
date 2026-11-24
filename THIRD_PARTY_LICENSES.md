@@ -83,7 +83,7 @@ third-party package or runtime requirement is added.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities, and the provider broker's tool-call ids, bridge pipe names and private temporary-directory names | MIT OR Apache-2.0 |
+| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment, invalidation generations and backup preview capabilities, the provider broker's tool-call ids, bridge pipe names and private temporary-directory names, and single-use Bitstamp API request nonces | MIT OR Apache-2.0 |
 | `bdk_wallet` | `=3.0.0` | Native in-memory watch-only wallet state and indexing matching bdkpython; standard library and descriptor parsing alone cannot reproduce BDK's update model. No BDK storage or connector features | MIT OR Apache-2.0 |
 | `bdk_chain` | `=0.23.3` | Native graph, chain checkpoints and changeset merging matching the Python binding; fetched data comes through Kassiber's consent-bound clients | MIT OR Apache-2.0 |
 | `bdk_core` | `=0.6.3` | Exact BDK script requests, transaction updates and confirmation anchors; keeps the native observer's update contract pinned to Python | MIT OR Apache-2.0 |

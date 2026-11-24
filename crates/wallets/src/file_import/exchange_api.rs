@@ -16,10 +16,17 @@ use kassiber_pyjson::{Key, PyStr};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod binance;
+pub(super) mod bitcoinde;
+pub(super) mod bitfinex;
 mod bitpanda;
+pub(super) mod bitstamp;
+pub(super) mod bitvavo;
 mod coinbase;
+mod contract;
 pub mod desktop;
 mod kraken;
+use contract::Mapper;
+use contract::{Balance, Descriptor, Event, Kind};
 #[cfg(test)]
 mod tests;
 
@@ -30,8 +37,18 @@ const MAX_ROWS: usize = 1_000_000;
 /// Python has no overall budget; each read still has the backend timeout.
 const BUDGET: Duration = Duration::from_secs(3600);
 
-/// Bitpanda is Rust only; Python knows the first three.
-pub const KINDS: [&str; 4] = ["kraken", "coinbase", "binance", "bitpanda"];
+/// Bitpanda, Bitvavo, Bitstamp, Bitfinex and Bitcoin.de are Rust only; Python
+/// knows the first three.
+pub const KINDS: [&str; 8] = [
+    "kraken",
+    "coinbase",
+    "binance",
+    "bitpanda",
+    "bitvavo",
+    "bitstamp",
+    "bitfinex",
+    "bitcoinde",
+];
 
 /// The resolved backend as Python's `runtime_config["backends"][name]`.
 /// The trusted command boundary supplies a fresh consent for [`Route::request`].
@@ -59,12 +76,37 @@ pub fn execute(
     consent: &mut dyn FnMut(&Route) -> Option<Consent>,
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
+    execute_with(
+        conn, profile, wallet_ref, backend, expected, gate, version, consent, identity, None, None,
+    )
+}
+
+/// [`execute`] with the user's answer to rows under a stored row's id with
+/// another amount or fee (`ChangedRows`); without one such a sync refuses.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_with(
+    conn: &Connection,
+    profile: &str,
+    wallet_ref: &str,
+    backend: &Json,
+    expected: &str,
+    gate: &Gate,
+    version: &str,
+    consent: &mut dyn FnMut(&Route) -> Option<Consent>,
+    identity: Option<&Identity>,
+    changed_rows: Option<ChangedRows>,
+    preview_token: Option<&str>,
+) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
-    let label = provider(&kind);
-    let prepared = prepare(&backend, &kind, &name)?;
+    // The wallet's `asset_scope` decides which non-Bitcoin rows are kept.
+    let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
+    let exchange = exchange(&kind)?;
+    let label = exchange.provider;
+    guard_api_wallet(conn, exchange, &wallet.id)?;
+    let prepared = prepare(&backend, exchange, &name)?;
     let book = book_id(conn)?;
     let binding: [u8; 32] = Sha256::digest(
         serde_json::to_vec(&json!([
@@ -96,38 +138,35 @@ pub fn execute(
     };
     // Each read rechecks the gate itself, after local steps Python takes first
     // (such as decoding the Kraken secret).
-    let mut skipped = None;
-    let records = match kind.as_str() {
-        "kraken" => kraken::fetch(&client)?,
-        "coinbase" => coinbase::fetch(&client)?,
-        "bitpanda" => {
-            let fetched = bitpanda::fetch(&client)?;
-            skipped = Some(fetched.skipped);
-            fetched.records
-        }
-        _ => binance::fetch(&client)?,
-    };
+    let mut mapper = Mapper::new(exchange, scope, &wallet.label);
+    let balance =
+        (exchange.fetch)(&client, &mut mapper).map_err(|error| leaving(error, &client))?;
+    let contract::Mapped {
+        records,
+        tally,
+        skipped,
+    } = mapper.finish();
+    if client.http.echoed() {
+        return Err(echo_refusal(label));
+    }
     let fetched = records.len();
-    let rows: Vec<csv::Row> = records
-        .into_iter()
-        .map(|record| csv::Row {
-            headers: vec![],
-            data: generic_json::projection(&record),
-            rest: None,
-            original: Some(record),
-        })
-        .collect();
-    let normalized = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
+    let (rows, normalized) = normalized_rows(records)?;
+    // The history the user answered the asset question for, or nothing.
+    if let Some(token) = preview_token {
+        check_history(&book, &kind, &normalized, scope, token)?;
+    }
     let request = Request {
         profile_id: profile.into(),
         wallet: wallet.id.clone(),
         file: String::new(),
         format: Format::Json,
-        mode: None,
         companion: None,
         timezone: None,
+        mode: None,
+        changed_rows,
     };
     kassiber_store::begin_write_savepoint(conn, "exchange_api_import").map_err(database_error)?;
+    let mut selected = vec![];
     let result = apply_records(
         conn,
         &request,
@@ -137,8 +176,37 @@ pub fn execute(
         &mut ids,
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
+        &mut selected,
     )
+    .and_then(|result| {
+        if exchange.same_second_tags {
+            let inserted: Vec<String> = match at(&result, "inserted_records") {
+                Py::List(items) => items
+                    .iter()
+                    .map(|item| lossy(&text(at(item, "transaction_id"))))
+                    .collect(),
+                _ => vec![],
+            };
+            tag_same_second(conn, profile, &wallet.id, &inserted, true, &mut ids)?;
+        }
+        if let Some(after_insert) = exchange.after_insert {
+            after_insert(conn, profile, &wallet.id, &rows, &mut ids)?;
+        }
+        Ok(result)
+    })
+    .and_then(|mut result| match exchange.after_sync {
+        Some(after_sync) => {
+            after_sync(conn, profile, &wallet.id, &mut result, &mut ids).map(|()| result)
+        }
+        None => Ok(result),
+    })
     // A revoked or offline route never publishes a book.
+    // Both legs of each swap are stored now; pair them in the same write.
+    .and_then(|mut result| {
+        let pairs = swaps::pair(conn, profile, &rows, &normalized, &selected)?;
+        kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs.unwrap_or(0)));
+        Ok(result)
+    })
     .and_then(|result| client.authorize().map(|()| result));
     match &result {
         Ok(_) => conn.execute_batch("RELEASE exchange_api_import"),
@@ -160,7 +228,283 @@ pub fn execute(
     if let Some(skipped) = skipped {
         kassiber_envelope::set(&mut result, "skipped", skipped);
     }
+    let assets = tally.envelope(scope, &wallet.label);
+    kassiber_envelope::set(&mut result, "assets", assets);
+    if let Some(balance) = balance {
+        let check = provider_balance(conn, profile, &wallet.id, &balance)?;
+        kassiber_envelope::set(&mut result, "provider_balance", check);
+        if let Some(reported) = balance.reported() {
+            kassiber_envelope::set(&mut result, "reported_balance", reported);
+        }
+    }
     Ok(result)
+}
+
+/// Whether `format` is an exchange's file export, read through the
+/// exchange contract.
+pub(super) fn file_exchange(format: Format) -> bool {
+    contract::registry::by_format(format).is_some()
+}
+
+/// Whether `format` is an exchange export whose parser reads only Bitcoin.
+pub(super) fn file_reads_bitcoin_only(format: Format) -> bool {
+    contract::registry::by_format(format)
+        .is_some_and(|(_, export)| export.reads == contract::Reads::BitcoinOnly)
+}
+
+/// The exchange's own check before an import of its export, or a sync of its
+/// API (`api_source` `<kind>:api:<backend>`), stores rows.
+pub(super) fn before_insert(
+    format: Format,
+    api_source: Option<&str>,
+    conn: &Connection,
+    wallet: &str,
+    records: &[Record],
+) -> Result<(), AppError> {
+    let exchange = match api_source {
+        Some(source) => source
+            .split_once(':')
+            .and_then(|(kind, _)| contract::registry::by_kind(kind)),
+        None => contract::registry::by_format(format).map(|(exchange, _)| exchange),
+    };
+    match exchange.and_then(|exchange| exchange.before_insert) {
+        Some(before_insert) => before_insert(conn, wallet, records),
+        None => Ok(()),
+    }
+}
+
+/// The exchange's own step after an import of its export stored the rows.
+pub(super) fn after_file_insert(
+    format: Format,
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    rows: &[csv::Row],
+    ids: &mut Ids<'_>,
+) -> Result<(), AppError> {
+    match contract::registry::by_format(format).and_then(|(exchange, _)| exchange.after_insert) {
+        Some(after_insert) => after_insert(conn, profile, wallet, rows, ids),
+        None => Ok(()),
+    }
+}
+
+/// Whether an import of `format` tags rows whose order within one second
+/// Kassiber cannot know ([`tag_same_second`]).
+pub(super) fn tags_same_second(format: Format) -> bool {
+    contract::registry::by_format(format).is_some_and(|(exchange, _)| exchange.same_second_tags)
+}
+
+/// An exchange file export's records as import rows, and the rows the
+/// wallet's asset scope left out; `None` for a format no exchange owns.
+/// Without a target wallet the export is read in the `bitcoin` scope.
+pub(super) fn load_file(
+    format: Format,
+    file: &str,
+    target: Option<tax_platform::Target<'_>>,
+) -> Result<Option<(Vec<csv::Row>, assets::Tally)>, AppError> {
+    let Some((exchange, export)) = contract::registry::by_format(format) else {
+        return Ok(None);
+    };
+    let (scope, wallet) = target.map_or((assets::Scope::Bitcoin, ""), |t| (t.scope, t.wallet));
+    let mut mapper = Mapper::reading(exchange, export.reads, scope, wallet);
+    (export.load)(file, &mut mapper)?;
+    let mapped = mapper.finish();
+    let rows = mapped
+        .records
+        .into_iter()
+        .map(|record| csv::Row {
+            headers: vec![],
+            data: generic_json::projection(&record),
+            rest: None,
+            original: Some(record),
+        })
+        .collect();
+    Ok(Some((rows, mapped.tally)))
+}
+
+/// Refuses an exchange file export into a wallet that syncs the exchange's
+/// API when the two sources give a transaction different identities
+/// (Binance's export has no ids): the same transaction would be stored twice.
+pub(super) fn guard_file_wallet(format: Format, configuration: &Json) -> Result<(), AppError> {
+    let Some((exchange, _)) = contract::registry::by_format(format) else {
+        return Ok(());
+    };
+    let synced = configuration
+        .get("backend")
+        .and_then(Json::as_str)
+        .is_some_and(|backend| !backend.trim().is_empty());
+    if exchange.shared_ids || !synced {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet syncs the {} API, and the {} export cannot be matched to its rows",
+            exchange.provider, exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Import the {} export into its own wallet, without a backend; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
+}
+
+/// Refuses an import of an exchange export, or a sync of its API
+/// (`api_source` `<kind>:api:<backend>`), into a wallet that holds rows of
+/// the exchange's other source when the two give a transaction different
+/// identities. Runs inside the import's write, on the stored rows.
+pub(super) fn guard_sources(
+    format: Format,
+    api_source: Option<&str>,
+    conn: &Connection,
+    wallet: &str,
+) -> Result<(), AppError> {
+    match api_source {
+        Some(source) => match source
+            .split_once(':')
+            .and_then(|(kind, _)| contract::registry::by_kind(kind))
+        {
+            Some(exchange) => guard_api_wallet(conn, exchange, wallet),
+            None => Ok(()),
+        },
+        None => match contract::registry::by_format(format) {
+            Some((exchange, _)) => guard_file_rows(conn, exchange, wallet),
+            None if format == Format::Binance => guard_supplemental(conn, wallet),
+            None => Ok(()),
+        },
+    }
+}
+
+/// Refuses a Binance supplemental CSV into a wallet that holds rows of
+/// Binance's Transaction History export: the history already contains the
+/// supplemental rewards and buys under other identities, so they would be
+/// stored twice (the reverse order is refused by `guard_file_rows`).
+fn guard_supplemental(conn: &Connection, wallet: &str) -> Result<(), AppError> {
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=? AND substr(external_id,1,12)='binance:csv:'",
+            [wallet],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        "This wallet holds rows of Binance's Transaction History export, which the supplemental CSV cannot be matched to",
+    )
+    .with_hint("The Transaction History export is Binance's complete ledger and already contains these rows; import the supplemental CSV only into a wallet without it."))
+}
+
+/// Refuses an exchange file export into a wallet that holds rows of the
+/// exchange's other sources (its API sync, also one that left the wallet's
+/// configuration empty, and older imports) when the export gives a
+/// transaction another identity: the same transaction would be stored twice.
+fn guard_file_rows(conn: &Connection, exchange: &Descriptor, wallet: &str) -> Result<(), AppError> {
+    if exchange.shared_ids {
+        return Ok(());
+    }
+    let prefix = format!("{}:csv:", exchange.kind);
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=?1 AND counterparty=?2 AND (external_id IS NULL OR substr(external_id,1,length(?3))<>?3)",
+            kassiber_store::rusqlite::params![wallet, exchange.provider, prefix],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet holds rows of another {} source, which the {} export cannot be matched to",
+            exchange.provider, exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Import the {} export into its own wallet; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
+}
+
+/// Refuses an API sync into a wallet that holds an exchange file export's
+/// rows when the two sources give a transaction different identities.
+fn guard_api_wallet(
+    conn: &Connection,
+    exchange: &Descriptor,
+    wallet: &str,
+) -> Result<(), AppError> {
+    if exchange.shared_ids {
+        return Ok(());
+    }
+    let prefix = format!("{}:csv:", exchange.kind);
+    let held: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM transactions WHERE wallet_id=? AND substr(external_id,1,length(?2))=?2",
+            kassiber_store::rusqlite::params![wallet, prefix],
+            |r| r.get(0),
+        )
+        .map_err(database_error)?;
+    if held == 0 {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "validation",
+        format!(
+            "This wallet holds rows from a {} export, which the API sync cannot match",
+            exchange.provider
+        ),
+    )
+    .with_hint(format!(
+        "Sync the {} API into its own wallet; use either the export or the API sync for one account, not both.",
+        exchange.provider
+    )))
+}
+
+/// The exchange's own BTC balance against the wallet's book balance after the
+/// import: what the wallet's included BTC rows add up to. Informational: a
+/// mismatch is reported, never corrected.
+fn provider_balance(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    balance: &contract::Balance,
+) -> Result<Py, AppError> {
+    let provider = match balance.msat {
+        Ok(msat) => msat,
+        Err(reason) => {
+            return Ok(dict([
+                ("status", s("unavailable")),
+                ("asset", s("BTC")),
+                ("reason", s(reason)),
+            ]))
+        }
+    };
+    let book: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(CASE WHEN direction = 'inbound' THEN amount \
+             WHEN direction = 'outbound' THEN -amount - fee ELSE 0 END), 0) \
+             FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0 AND asset = 'BTC'",
+            [profile, wallet],
+            |row| row.get(0),
+        )
+        .map_err(database_error)?;
+    Ok(dict([
+        (
+            "status",
+            s(if book == provider {
+                "matches"
+            } else {
+                "mismatch"
+            }),
+        ),
+        ("asset", s("BTC")),
+        ("provider_msat", Py::from(provider)),
+        ("book_msat", Py::from(book)),
+        ("difference_msat", Py::from(book as i128 - provider as i128)),
+    ]))
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when
@@ -178,7 +522,11 @@ fn backend_kind(backend: &Py, expected: &str) -> Result<(PyStr, String), AppErro
                 name.clone(),
                 format!("' has kind '{kind}', expected an exchange API kind").into(),
             ]))
-            .with_hint("Use a backend kind of kraken, coinbase, or binance."));
+            .with_hint(format!(
+                "Use a backend kind of {}, or {}.",
+                KINDS[..KINDS.len() - 1].join(", "),
+                KINDS[KINDS.len() - 1]
+            )));
     }
     if !expected.is_empty() && kind != expected {
         return Err(
@@ -203,21 +551,23 @@ struct Prepared {
 
 /// `fetch_*_records`' local steps: credentials, then base URL, timeout and
 /// opener, all before any request.
-fn prepare(backend: &Py, kind: &str, name: &PyStr) -> Result<Prepared, AppError> {
-    let label = provider(kind);
+fn prepare(backend: &Py, exchange: &Descriptor, name: &PyStr) -> Result<Prepared, AppError> {
+    let label = exchange.provider;
     let key = backend_value(backend, &["token", "api_key", "username"]);
     let secret = backend_value(backend, &["auth_header", "api_secret", "password"]);
-    // Bitpanda (Rust only) authenticates with the key alone; a stray secret
-    // is still withheld from every error.
+    // An exchange that authenticates with the key alone (Bitpanda) still
+    // has a stray secret withheld from every error.
     let (key, secret) = match (key, secret) {
-        (Some(key), secret) if kind == "bitpanda" => (key, secret.unwrap_or_else(|| "".into())),
+        (Some(key), secret) if exchange.key_only => (key, secret.unwrap_or_else(|| "".into())),
         (Some(key), Some(secret)) => (key, secret),
-        _ if kind == "bitpanda" => {
-            return Err(
-                AppError::new("config_error", "Bitpanda backend is missing its API key").with_hint(
-                    "Store a read-only Bitpanda API key in token (backends create --token-stdin).",
-                ),
+        _ if exchange.key_only => {
+            return Err(AppError::new(
+                "config_error",
+                format!("{label} backend is missing its API key"),
             )
+            .with_hint(format!(
+                "Store a read-only {label} API key in token (backends create --token-stdin)."
+            )))
         }
         _ => {
             return Err(AppError::new(
@@ -231,7 +581,7 @@ fn prepare(backend: &Py, kind: &str, name: &PyStr) -> Result<Prepared, AppError>
     let (key, secret) = (lossy(&key), lossy(&secret));
     let base = backend_value(backend, &["url"])
         .map(|url| lossy(&url))
-        .unwrap_or_else(|| default_url(kind).to_owned());
+        .unwrap_or_else(|| exchange.default_url.to_owned());
     let base = base.trim_end_matches('/').to_owned();
     let timeout = timeout(backend)?;
     // Python's opener uses system trust and only `tor_proxy`; chain-backend
@@ -260,21 +610,15 @@ fn book_id(conn: &Connection) -> Result<String, AppError> {
         .unwrap_or_default())
 }
 
-fn provider(kind: &str) -> &'static str {
-    match kind {
-        "kraken" => "Kraken",
-        "coinbase" => "Coinbase",
-        "bitpanda" => "Bitpanda",
-        _ => "Binance",
-    }
-}
-fn default_url(kind: &str) -> &'static str {
-    match kind {
-        "kraken" => "https://api.kraken.com",
-        "coinbase" => "https://api.coinbase.com",
-        "bitpanda" => "https://api.public.bitpanda.com",
-        _ => "https://api.binance.com",
-    }
+/// The exchange of a kind [`backend_kind`] accepted. A kind the registry
+/// does not know is a bug, never a reason to read another exchange's API.
+fn exchange(kind: &str) -> Result<&'static Descriptor, AppError> {
+    contract::registry::by_kind(kind).ok_or_else(|| {
+        AppError::new(
+            "internal_error",
+            format!("No exchange API reader for kind '{kind}'"),
+        )
+    })
 }
 
 /// `_get_or_create_exchange_api_wallet`: an explicit reference, else the
@@ -290,7 +634,7 @@ fn wallet(
     if !reference.is_empty() {
         return resolve(conn, profile, reference);
     }
-    let label = provider(kind);
+    let label = exchange(kind)?.provider;
     let existing: Option<String> = conn
         .query_row(
             "SELECT id FROM wallets WHERE profile_id=? AND lower(label)=lower(?) LIMIT 1",
@@ -302,19 +646,118 @@ fn wallet(
     if let Some(id) = existing {
         return resolve(conn, profile, &id);
     }
-    create_wallet(conn, profile, label, kind, &lossy(backend), ids)
+    create_wallet(conn, profile, label, kind, &lossy(backend), None, ids)
+}
+
+/// Fetched records as import rows and normalized records.
+fn normalized_rows(records: Vec<Py>) -> Result<(Vec<csv::Row>, Vec<Record>), AppError> {
+    let rows: Vec<csv::Row> = records
+        .into_iter()
+        .map(|record| csv::Row {
+            headers: vec![],
+            data: generic_json::projection(&record),
+            rest: None,
+            original: Some(record),
+        })
+        .collect();
+    let normalized = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
+    Ok((rows, normalized))
+}
+
+/// The two halves of an exchange preview token: the history's Bitcoin rows
+/// (swap legs aside, which only the `crypto` scope reads) and its rows per
+/// other crypto asset, each bound to the book and the exchange.
+fn history_digests(book: &str, kind: &str, records: &[Record]) -> (String, String) {
+    let mut bitcoin: Vec<String> = Vec::new();
+    let mut other: BTreeMap<String, i64> = BTreeMap::new();
+    for r in records {
+        let asset = string(&r.fields, "asset");
+        match assets::class(&asset) {
+            assets::Class::Bitcoin if string(&r.fields, "kind") != "swap" => bitcoin.push(
+                json!([
+                    string(&r.fields, "external_id"),
+                    string(&r.fields, "occurred_at"),
+                    string(&r.fields, "direction"),
+                    asset,
+                    integer_or_zero(r.fields.get("amount")),
+                    integer_or_zero(r.fields.get("fee")),
+                ])
+                .to_string(),
+            ),
+            assets::Class::Crypto => *other.entry(asset).or_default() += 1,
+            _ => {}
+        }
+    }
+    bitcoin.sort();
+    let digest = |part: &str, value: Json| {
+        let bound = json!([
+            "kassiber.import_preview.exchange.v1",
+            book,
+            kind,
+            part,
+            value
+        ]);
+        Sha256::digest(bound.to_string().as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    };
+    (
+        digest("bitcoin", json!(bitcoin)),
+        digest("other", json!(other)),
+    )
+}
+
+/// The token `ui.connections.exchange.preview` hands out for `records`.
+fn history_token(book: &str, kind: &str, records: &[Record]) -> String {
+    let (bitcoin, other) = history_digests(book, kind, records);
+    format!("v1.{bitcoin}.{other}")
+}
+
+/// Refuses a sync whose history is no longer the one `token` previewed, when
+/// the wallet keeps other crypto assets: its Bitcoin rows and its rows per
+/// other asset. A Bitcoin-only wallet's answer binds no history: the preview
+/// is the `crypto` scope's read, and an exchange that reads only BTC hands
+/// out no token at all.
+fn check_history(
+    book: &str,
+    kind: &str,
+    records: &[Record],
+    scope: assets::Scope,
+    token: &str,
+) -> Result<(), AppError> {
+    let parts: Vec<&str> = token.split('.').collect();
+    let same = match parts[..] {
+        ["v1", _, _] if scope == assets::Scope::Bitcoin => true,
+        ["v1", bitcoin_part, other_part] => {
+            let (bitcoin, other) = history_digests(book, kind, records);
+            bitcoin_part == bitcoin && other_part == other
+        }
+        _ => false,
+    };
+    if same {
+        Ok(())
+    } else {
+        Err(preview_stale("history"))
+    }
 }
 
 /// The provider wallet `wallets sync-<kind>` creates on its first run:
-/// `label`, `kind` and `{"backend": name}`, through the shared lifecycle.
+/// `label`, `kind` and `{"backend": name}`, through the shared lifecycle;
+/// with `scope`, the asset scope the desktop asked before the first sync.
 fn create_wallet(
     conn: &Connection,
     profile: &str,
     label: &str,
     kind: &str,
     backend: &str,
+    scope: Option<assets::Scope>,
     ids: &mut Ids<'_>,
 ) -> Result<crate::Wallet, AppError> {
+    let mut config = json!({"backend": backend});
+    if let Some(scope) = scope {
+        config[assets::Scope::KEY] = json!(scope.as_str());
+    }
     let workspace: String = conn
         .query_row(
             "SELECT workspace_id FROM profiles WHERE id=?",
@@ -331,7 +774,7 @@ fn create_wallet(
             label: label.into(),
             kind: kind.into(),
             account: None,
-            config: json!({"backend": backend}),
+            config,
         },
         &mut |conn| {
             let id = ids.next(conn)?;
@@ -405,6 +848,24 @@ impl Client<'_> {
                 Ok(request)
             },
         )
+    }
+    /// [`Self::response`] with headers `sign` builds afresh for every
+    /// attempt, so a retried request carries a new timestamp and signature.
+    fn signed_response(
+        &self,
+        url: &str,
+        accepted: &'static [u16],
+        sign: impl Fn() -> Result<Vec<(&'static str, String)>, AppError>,
+    ) -> Result<kassiber_net::HttpResponse, AppError> {
+        let (consent, deadline) = (self.consent, self.deadline);
+        self.http
+            .authenticated_response(url, consent, deadline, self.source, accepted, || {
+                let mut request = HttpRequest::new("GET", url).map_err(|e| e.app_error())?;
+                for (name, value) in sign()? {
+                    request = request.header(name, &value).map_err(|e| e.app_error())?;
+                }
+                Ok(request)
+            })
     }
 }
 
@@ -511,37 +972,82 @@ fn timeout(backend: &Py) -> Result<u64, AppError> {
         .ok_or_else(|| AppError::new("config_error", "Backend timeout must be positive"))
 }
 
-/// `_asset(value)`: `normalize_asset_code`, then exchange aliases.
+/// `_asset(value)`: `normalize_asset_code`, then exchange aliases. Kraken's
+/// `Z` fiat prefix applies to fiat fields only ([`fiat_code`]): a four-letter
+/// crypto code starting with Z (`ZETA`) is a ticker of its own.
 fn asset(value: &Py) -> String {
+    let code = normalized(value);
+    match code.as_str() {
+        "BTC" | "XBT" | "XXBT" => "BTC".into(),
+        "LBTC" | "L-BTC" => "LBTC".into(),
+        "XETH" => "ETH".into(),
+        _ => code,
+    }
+}
+/// A fiat field's code with Kraken's `Z` prefix dropped (`ZEUR`): Kraken's
+/// trade quotes, and the fiat fields the reference read through the same
+/// alias (Coinbase native amounts, Binance fiat payments). Never a crypto
+/// code's, and the result must still be a fiat currency.
+fn fiat_code(code: String) -> String {
+    match code.strip_prefix('Z') {
+        Some(rest) if code.chars().count() == 4 => rest.into(),
+        _ => code,
+    }
+}
+/// `normalize_asset_code(value)`: stripped and upper-cased, `l-btc` as
+/// `LBTC`, a 64-hex Liquid asset id lower-cased. Each exchange applies its
+/// own aliases on top.
+fn normalized(value: &Py) -> String {
     let raw = if truthy(value) {
         lossy(&text(value))
     } else {
         String::new()
     };
     let raw = kassiber_pytext::strip(&raw);
-    let code = if raw.is_empty() {
-        String::new()
-    } else {
-        let lowered = kassiber_pytext::lower(raw);
-        if lowered.chars().count() == 64
-            && lowered
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
-        {
-            lowered
-        } else if lowered == "l-btc" || lowered == "lbtc" {
-            "LBTC".into()
-        } else {
-            kassiber_pytext::upper(raw)
-        }
-    };
-    match code.as_str() {
-        "BTC" | "XBT" | "XXBT" => "BTC".into(),
-        "LBTC" | "L-BTC" => "LBTC".into(),
-        _ if code.starts_with('Z') && code.chars().count() == 4 => code[1..].into(),
-        "XETH" => "ETH".into(),
-        _ => code,
+    if raw.is_empty() {
+        return String::new();
     }
+    let lowered = kassiber_pytext::lower(raw);
+    if lowered.chars().count() == 64
+        && lowered
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        lowered
+    } else if lowered == "l-btc" || lowered == "lbtc" {
+        "LBTC".into()
+    } else {
+        kassiber_pytext::upper(raw)
+    }
+}
+/// Whether a canonical code is a plain exchange ticker (`ETH`, `1INCH`):
+/// ASCII capitals and digits, at most 20 characters. Anything else is not
+/// mapped to an asset by guesswork.
+fn ticker(code: &str) -> bool {
+    (1..=20).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+}
+/// Refuses, naming the provider's row, a non-Bitcoin amount or fee finer
+/// than the 11 decimals the book stores (docs/plan/24-crypto-assets.md),
+/// before the coordinator would refuse it without the row's id.
+fn exact(entry: &Entry, row: &str) -> Result<(), AppError> {
+    if assets::class(&entry.asset) == assets::Class::Bitcoin {
+        return Ok(());
+    }
+    for (field, value) in [("amount", &entry.amount), ("fee", &entry.fee)] {
+        // Non-finite values keep the coordinator's own error. The check
+        // reads the value as given: a context-rounded `abs` could shorten it.
+        abs(value.clone())?;
+        if let PriceNumber::Finite(value) = value {
+            assets::exact_units(&entry.asset, field, &value.copy_abs()).map_err(|mut error| {
+                error.message = format!("{} {row}: {}", entry.provider, error.message);
+                error
+            })?;
+        }
+    }
+    Ok(())
 }
 fn is_bitcoin(code: &str) -> bool {
     matches!(code, "BTC" | "LBTC")
@@ -701,6 +1207,14 @@ struct Pricing {
     external_ref: PyStr,
 }
 fn record(entry: Entry) -> Result<Py, AppError> {
+    // Every exchange's amount and fee is checked here, as parsed, before the
+    // net-of-fee sum and the `abs` below round them to the decimal context:
+    // a value finer than 11 decimals would otherwise be stored rounded
+    // (docs/plan/24-crypto-assets.md).
+    exact(
+        &entry,
+        &format!("transaction '{}'", lossy(&entry.external_id)),
+    )?;
     let Entry {
         provider,
         external_id,
@@ -712,8 +1226,27 @@ fn record(entry: Entry) -> Result<Py, AppError> {
         kind,
         raw,
         description,
-        pricing,
+        mut pricing,
     } = entry;
+    // Another asset arriving with a fee in itself stores what the wallet
+    // gained; a price then covers the net quantity, so the provider's gross
+    // unit price gives way to value over amount.
+    let (amount, fee) = match inbound
+        .then(|| {
+            let row = format!("{provider} {}", lossy(&external_id));
+            assets::net_inbound(&asset, &amount, &fee, &row)
+        })
+        .transpose()?
+        .flatten()
+    {
+        Some(net_amount) => {
+            if let Some(pricing) = &mut pricing {
+                pricing.fiat_rate = None;
+            }
+            (net_amount, PriceNumber::Finite(Decimal::zero()))
+        }
+        None => (amount, fee),
+    };
     // A sell's amount is negative; its unit price is not. A value that is not
     // positive prices nothing, so the row stays unpriced.
     let rate = match &pricing {
@@ -817,4 +1350,376 @@ fn key_text(key: &Key) -> PyStr {
         Key::Int(n) => n.to_string().into(),
         Key::Float(f) => kassiber_pyjson::float_repr(*f).into(),
     }
+}
+
+// Helpers every exchange adapter shares (docs/reference/rust-exchange-sync.md).
+
+/// A sync whose successful pages echoed a request credential stores nothing.
+fn echo_refusal(provider: &str) -> AppError {
+    AppError::new(
+        "credential_echo",
+        format!("{provider} returned an API credential in its response; nothing was imported"),
+    )
+    .with_hint("The exchange echoed the key, the secret or a request signature. Revoke and replace this key, then report the response shape.")
+}
+
+/// A read's error as it may leave: every credential the reads carried is
+/// withheld from it. When a successful page echoed a request credential, an
+/// error built from that page (a mapping refusal quoting a truncated field,
+/// say) can still hold part of one, which no whole-value scrub finds: the
+/// echo refusal replaces such an error.
+fn leaving(error: AppError, client: &Client<'_>) -> AppError {
+    let credentials = client.http.display_credentials();
+    let error = scrub_error(error, &credentials);
+    if client.http.echoed() && quotes_part(&error, &credentials) {
+        return echo_refusal(client.source);
+    }
+    error
+}
+
+/// Whether `error`'s message or a detail string holds [`PART`] or more
+/// consecutive characters of one of `credentials`.
+fn quotes_part(error: &AppError, credentials: &[String]) -> bool {
+    /// A run this long of a credential counts as quoting it.
+    const PART: usize = 8;
+    fn texts(value: &Py, out: &mut Vec<String>) {
+        match value {
+            Py::Str(text) => out.push(lossy(text)),
+            Py::List(items) => items.iter().for_each(|item| texts(item, out)),
+            Py::Dict(items) => items.iter().for_each(|(_, item)| texts(item, out)),
+            _ => {}
+        }
+    }
+    let mut shown = vec![error.message.clone()];
+    if let Some(details) = &error.details {
+        texts(details, &mut shown);
+    }
+    credentials.iter().any(|credential| {
+        let chars: Vec<char> = credential.chars().collect();
+        chars.windows(PART).any(|run| {
+            let run: String = run.iter().collect();
+            shown.iter().any(|text| text.contains(&run))
+        })
+    })
+}
+
+/// `error` with every one of `credentials` withheld, at any length, from its
+/// message and every detail string; a numeric detail equal to one is
+/// dropped. The hint is Kassiber's own text and stays whole. Strings are
+/// scrubbed over code points, so a provider's lone surrogate survives beside
+/// a withheld credential, as Python's `withhold_credentials` keeps it.
+fn scrub_error(mut error: AppError, credentials: &[String]) -> AppError {
+    use kassiber_credentials::{withhold, withhold_py, Forms};
+    fn walk(value: &mut Py, forms: &Forms, credentials: &[String]) {
+        match value {
+            Py::Str(text) => *text = withhold_py(text, forms),
+            Py::Int(number) if credentials.contains(&number.to_string()) => *value = Py::Null,
+            Py::List(items) => items
+                .iter_mut()
+                .for_each(|item| walk(item, forms, credentials)),
+            Py::Dict(items) => items
+                .iter_mut()
+                .for_each(|(_, item)| walk(item, forms, credentials)),
+            _ => {}
+        }
+    }
+    let forms = kassiber_credentials::credential_forms(credentials);
+    if forms.is_empty() {
+        return error;
+    }
+    error.message = withhold(&error.message, &forms);
+    if let Some(points) = &mut error.message_codepoints {
+        **points = withhold_py(points, &forms);
+    }
+    if let Some(details) = &mut error.details {
+        walk(details, &forms, credentials);
+    }
+    error
+}
+
+/// A provider's error code as Kassiber's own value: the matching entry of
+/// `table`, else "unknown", never the provider's string.
+fn known_code(code: &str, table: &[&'static str]) -> Py {
+    table
+        .iter()
+        .find(|known| **known == code)
+        .map_or_else(|| s("unknown"), |known| s(*known))
+}
+/// A numeric provider code inside one of the `documented` ranges, else
+/// "unknown" (null when absent).
+fn known_number(code: &Py, documented: &[std::ops::RangeInclusive<i64>]) -> Py {
+    match code {
+        Py::Null => Py::Null,
+        Py::Int(number) => i64::try_from(number.clone())
+            .ok()
+            .filter(|n| documented.iter().any(|range| range.contains(n)))
+            .map_or_else(|| s("unknown"), Py::from),
+        _ => s("unknown"),
+    }
+}
+
+/// `<provider> transaction '<id>' has <what>`: a row Kassiber cannot read
+/// exactly; nothing is imported.
+pub(super) fn malformed(provider: &str, id: &str, what: &str) -> AppError {
+    AppError::new(
+        "validation",
+        format!("{provider} transaction '{id}' has {what}"),
+    )
+    .with_hint(format!(
+        "{provider} returned a transaction Kassiber cannot read exactly; nothing was imported."
+    ))
+}
+/// `<provider> transaction '<id>' (type '<kind>') <reason>`: a row Kassiber
+/// refuses to book; nothing is imported and `hint` says what to do.
+pub(super) fn refusal(
+    provider: &str,
+    id: &str,
+    kind: &str,
+    reason: impl std::fmt::Display,
+    hint: &str,
+) -> AppError {
+    AppError::new(
+        "validation",
+        format!("{provider} transaction '{id}' (type '{kind}') {reason}"),
+    )
+    .with_hint(hint.to_owned())
+}
+
+/// A BTC amount as whole msat by its own digits, without context rounding:
+/// `None` when it is finer than a millisatoshi, negative or out of range.
+pub(super) fn exact_msat(btc: &Decimal) -> Option<i64> {
+    const DECIMALS: i64 = 11;
+    if btc.is_zero() {
+        return Some(0);
+    }
+    if btc.is_sign_negative() {
+        return None;
+    }
+    let (mut coefficient, mut exponent) = (btc.coefficient_u128()?, btc.exponent());
+    while exponent < -DECIMALS && coefficient % 10 == 0 {
+        coefficient /= 10;
+        exponent += 1;
+    }
+    let scale = u32::try_from(exponent.checked_add(DECIMALS)?).ok()?;
+    i64::try_from(coefficient.checked_mul(10u128.checked_pow(scale)?)?).ok()
+}
+/// Whole msat as a BTC decimal.
+pub(super) fn btc_decimal(msat: i64) -> Result<Decimal, AppError> {
+    let (whole, rest) = (
+        msat.div_euclid(100_000_000_000),
+        msat.rem_euclid(100_000_000_000),
+    );
+    format!("{whole}.{rest:011}").parse().map_err(decimal_error)
+}
+
+/// A decimal written plainly: digits with an optional fraction and, when
+/// `signed` (a file export), a leading minus or an exponent (`1e-05`).
+/// Anything else (blank, `NaN`, separators, `+`) is `None`.
+pub(super) fn strict_decimal(text: &str, signed: bool) -> Option<Decimal> {
+    let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    let unsigned = text.strip_prefix('-').filter(|_| signed).unwrap_or(text);
+    let (mantissa, exponent) = match unsigned.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) if signed => (mantissa, Some(exponent)),
+        Some(_) => return None,
+        None => (unsigned, None),
+    };
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    if whole.is_empty() || !digits(whole) || !digits(fraction) || mantissa.ends_with('.') {
+        return None;
+    }
+    if let Some(exponent) = exponent {
+        let exponent = exponent.strip_prefix(['-', '+']).unwrap_or(exponent);
+        if exponent.is_empty() || !digits(exponent) || exponent.len() > 3 {
+            return None;
+        }
+    }
+    text.parse().ok()
+}
+/// One spelling per number (`0.0040` and `0.004` are both `0.004`), so two
+/// sources that compute an amount differently store the same text and
+/// fingerprint.
+pub(super) fn canonical(value: &Decimal) -> Result<PriceNumber, AppError> {
+    let fixed = value.to_fixed_string().map_err(decimal_error)?;
+    let trimmed = match fixed.contains('.') {
+        true => fixed.trim_end_matches('0').trim_end_matches('.'),
+        false => fixed.as_str(),
+    };
+    PriceNumber::parse(trimmed)
+}
+
+/// Tag on rows whose order within one second Kassiber cannot know: stored
+/// times are whole seconds, and a later import's rows take source positions
+/// after an earlier import's, whatever their milliseconds.
+pub(super) const ORDER_TAG: &str = "same-second-order-uncertain";
+/// The rows of a wallet in one second, with what decides whether their
+/// order matters ([`Ordered`]), read through the profile/time index
+/// (`idx_transactions_profile_page`).
+pub(super) const SAME_SECOND_SQL: &str =
+    "SELECT id, direction, asset, COALESCE(kind_override, kind), amount, fee, fiat_currency, fiat_value_exact FROM transactions WHERE profile_id=?1 AND occurred_at=?3 AND wallet_id=?2";
+
+/// What decides whether two rows of one second are order-sensitive: FIFO
+/// and LIFO take lots in the journals' order, which within a second is
+/// source position and id, not the provider's sub-second time.
+#[derive(Clone)]
+struct Ordered {
+    direction: String,
+    asset: Option<String>,
+    kind: Option<String>,
+    amount: i64,
+    fee: i64,
+    currency: Option<String>,
+    value: Option<String>,
+}
+impl Ordered {
+    fn read(
+        r: &kassiber_store::rusqlite::Row<'_>,
+    ) -> kassiber_store::rusqlite::Result<(String, Self)> {
+        Ok((
+            r.get(0)?,
+            Ordered {
+                direction: r.get(1)?,
+                asset: r.get(2)?,
+                kind: r.get(3)?,
+                amount: r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                fee: r.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                currency: r.get(6)?,
+                value: r.get(7)?,
+            },
+        ))
+    }
+
+    /// Whether swapping the two rows can change basis or gains. Rows of
+    /// opposite directions always can. Rows of one direction and one asset
+    /// can unless they are the same kind, priced in one currency at the same
+    /// value per unit and charged the same fee per unit: lots that differ
+    /// only in size. Anything unpriced or not exactly comparable counts as
+    /// sensitive; a row of another asset in the same direction is its own lot.
+    fn sensitive(&self, other: &Ordered) -> bool {
+        if self.direction != other.direction {
+            return true;
+        }
+        if self.asset != other.asset {
+            return false;
+        }
+        // a / self.amount == b / other.amount, exactly.
+        let per_unit = |a: i128, b: i128| {
+            a.checked_mul(i128::from(other.amount))
+                .zip(b.checked_mul(i128::from(self.amount)))
+                .is_some_and(|(left, right)| left == right)
+        };
+        let same_value = || -> Option<bool> {
+            let mine: Decimal = self.value.as_deref()?.parse().ok()?;
+            let theirs: Decimal = other.value.as_deref()?.parse().ok()?;
+            let floor = mine.exponent().min(theirs.exponent());
+            let scaled = |d: &Decimal| -> Option<i128> {
+                let shift = u32::try_from(d.exponent().checked_sub(floor)?).ok()?;
+                let magnitude = i128::try_from(d.coefficient_u128()?)
+                    .ok()?
+                    .checked_mul(10i128.checked_pow(shift)?)?;
+                Some(if d.is_sign_negative() {
+                    -magnitude
+                } else {
+                    magnitude
+                })
+            };
+            Some(per_unit(scaled(&mine)?, scaled(&theirs)?))
+        };
+        !(self.kind == other.kind
+            && self.amount > 0
+            && other.amount > 0
+            && self.currency.is_some()
+            && self.currency == other.currency
+            && per_unit(i128::from(self.fee), i128::from(other.fee))
+            && same_value() == Some(true))
+    }
+}
+
+/// After an import into `wallet`: each row it inserted into a second that
+/// holds an order-sensitive row ([`Ordered::sensitive`]: the other
+/// direction, or the same direction at another unit cost) from an earlier
+/// import is tagged [`ORDER_TAG`] with those rows, for review; their order
+/// decides FIFO and LIFO basis, and stored times are whole seconds. With `together` (an API
+/// sync, which records no source positions, so the journals order a
+/// second's rows by id rather than the provider's sub-second order) rows of
+/// this import in one second are tagged with each other too; a file import
+/// keeps its rows' order as their source positions. Returns how many rows
+/// carry the tag.
+pub(super) fn tag_same_second(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    inserted: &[String],
+    together: bool,
+    ids: &mut Ids<'_>,
+) -> Result<i64, AppError> {
+    let new: std::collections::BTreeSet<&str> = inserted.iter().map(String::as_str).collect();
+    let mut uncertain = std::collections::BTreeSet::<String>::new();
+    let mut row = conn
+        .prepare("SELECT occurred_at FROM transactions WHERE id=?")
+        .map_err(database_error)?;
+    let mut same_second = conn.prepare(SAME_SECOND_SQL).map_err(database_error)?;
+    for id in inserted {
+        let occurred: String = row.query_row([id], |r| r.get(0)).map_err(database_error)?;
+        let second = same_second
+            .query_map([profile, wallet, &occurred], Ordered::read)
+            .map_err(database_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(database_error)?;
+        let Some(mine) = second.iter().find(|(e, _)| e == id).map(|(_, o)| o.clone()) else {
+            continue;
+        };
+        let earlier: Vec<String> = second
+            .into_iter()
+            .filter(|(e, other)| {
+                e != id && (together || !new.contains(e.as_str())) && mine.sensitive(other)
+            })
+            .map(|(e, _)| e)
+            .collect();
+        if !earlier.is_empty() {
+            uncertain.insert(id.clone());
+            uncertain.extend(earlier);
+        }
+    }
+    if uncertain.is_empty() {
+        return Ok(0);
+    }
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM tags WHERE profile_id=? AND code=?",
+            [profile, ORDER_TAG],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(database_error)?;
+    let tag = match existing {
+        Some(tag) => tag,
+        None => {
+            let workspace: String = conn
+                .query_row(
+                    "SELECT workspace_id FROM profiles WHERE id=?",
+                    [profile],
+                    |r| r.get(0),
+                )
+                .map_err(database_error)?;
+            let id = ids.next(conn)?;
+            conn.execute(
+                "INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) VALUES(?,?,?,?,?,?)",
+                kassiber_store::rusqlite::params![id, workspace, profile, ORDER_TAG, "Same-second order uncertain", ids.time(conn)?],
+            )
+            .map_err(database_error)?;
+            id
+        }
+    };
+    for transaction in &uncertain {
+        conn.execute(
+            "INSERT OR IGNORE INTO transaction_tags(transaction_id,tag_id) VALUES(?,?)",
+            [transaction.as_str(), tag.as_str()],
+        )
+        .map_err(database_error)?;
+    }
+    Ok(uncertain.len() as i64)
+}
+/// An asset code as a file export writes it, normalized as API rows are.
+pub(super) fn asset_code(text: &str) -> String {
+    asset(&s(text))
 }

@@ -82,10 +82,15 @@ const CLI_OPERATOR_PATHS: &str = "
     wallets.import-phoenix wallets.import-wasabi wallets.import-river
     wallets.import-bull wallets.import-bullbitcoin wallets.import-coinfinity
     wallets.import-21bitcoin wallets.import-pocket wallets.import-pocketbitcoin
-    wallets.import-strike wallets.import-bisq wallets.import-ledger-live
+    wallets.import-strike wallets.import-bisq wallets.import-bitvavo
+    wallets.import-bitstamp wallets.import-bitfinex
+    wallets.import-ledger-live
     wallets.import-cointracking wallets.import-blockpit
-    wallets.import-binance-supplemental wallets.sync-kraken
-    wallets.sync-coinbase wallets.sync-binance wallets.sync-bitpanda wallets.import-ledger
+    wallets.import-binance-supplemental wallets.import-binance-history
+    wallets.import-bitcoinde wallets.sync-kraken
+    wallets.sync-coinbase wallets.sync-binance wallets.sync-bitpanda wallets.sync-bitvavo
+    wallets.sync-bitstamp wallets.sync-bitfinex wallets.sync-bitcoinde
+    wallets.import-ledger
     wallets.ledger-template wallets.import-document wallets.import-samourai
     wallets.sync-btcpay wallets.attach-btcpay wallets.attach-bullbitcoin-wallet
     wallets.sync wallets.derive transactions.export attachments.add
@@ -185,7 +190,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt
     ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
-    ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
+    ui.wallets.ledger_preview ui.wallets.import_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
     ui.imports.list
     ui.wallets.detect_script_types ui.connections.sources ui.connections.btcpay.key_guide
     ui.connections.exchange.status
@@ -243,7 +248,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.wallets.document_import.import ui.wallets.import_samourai
     ui.connections.btcpay.create ui.connections.bullbitcoin_wallet.create
     ui.connections.btcpay.discover ui.connections.btcpay.test
-    ui.connections.exchange.test ui.connections.exchange.create ui.connections.exchange.sync
+    ui.connections.exchange.test ui.connections.exchange.preview ui.connections.exchange.create ui.connections.exchange.sync
     ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
     ui.wallets.sync ai.chat ai.chat.cancel ai.chat.permission_mode ai.tool_call.consent ui.chat.attachments.upload
 ";

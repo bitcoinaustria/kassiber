@@ -88,6 +88,13 @@ pub fn execute(
     execute_with_sources(conn, scope, operation, args, &SystemSources)
 }
 
+/// Pairs the two stored legs of a swap an import's provider reported as one
+/// trade (`tx_out`, `tx_in`, `notes`), as `pair_source` `provider`. Only the
+/// import coordinator calls this; `transfers.pair` refuses that source.
+pub fn pair_provider_swap(conn: &Connection, scope: &Scope<'_>, args: &Value) -> Result<Value> {
+    pair_authoring::create_provider_swap(conn, scope, args, &SystemSources)
+}
+
 pub fn execute_with_sources(
     conn: &Connection,
     scope: &Scope<'_>,

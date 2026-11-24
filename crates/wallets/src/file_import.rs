@@ -1,5 +1,6 @@
 //! User-triggered ingestion. Document OCR requires an exact local-provider grant.
 pub mod analysis;
+pub mod assets;
 pub mod attachment;
 mod binance;
 mod bisq;
@@ -7,6 +8,7 @@ pub use bisq::holds::{quarantines as bisq_hold_quarantines, REASON as BISQ_HOLD_
 mod btcpay;
 mod bull;
 mod bull_wallet;
+mod changed;
 mod coinfinity;
 pub(crate) mod csv;
 pub mod document;
@@ -22,7 +24,9 @@ mod pocket;
 mod river;
 pub mod samourai;
 mod strike;
+mod swaps;
 mod synthetic;
+pub use changed::{ChangedRows, HINT as CHANGED_ROWS_HINT};
 pub use synthetic::synthetic_csv_identity;
 mod tax_platform;
 mod twentyone;
@@ -54,6 +58,9 @@ pub struct Request {
     pub companion: Option<String>,
     /// The IANA zone of a local-time export's clock (Bisq writes no offset).
     pub timezone: Option<String>,
+    /// What to do with rows that look like a stored row under another id
+    /// or amount (`changed::Conflict`); `None` refuses such an import.
+    pub changed_rows: Option<ChangedRows>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -72,6 +79,11 @@ pub enum Format {
     Blockpit,
     Binance,
     Bisq,
+    BinanceHistory,
+    Bitvavo,
+    Bitstamp,
+    Bitfinex,
+    Bitcoinde,
     BtcpayCsv,
     BtcpayJson,
     Ledger,
@@ -97,6 +109,11 @@ impl Format {
             "ledgerlive_csv" => Self::LedgerLive,
             "binance_supplemental_csv" => Self::Binance,
             "bisq_csv" => Self::Bisq,
+            "binance_history_csv" => Self::BinanceHistory,
+            "bitvavo_csv" => Self::Bitvavo,
+            "bitstamp_csv" => Self::Bitstamp,
+            "bitfinex_csv" => Self::Bitfinex,
+            "bitcoinde_csv" => Self::Bitcoinde,
             "cointracking_csv" => Self::CoinTracking,
             "blockpit_csv" => Self::Blockpit,
             "wasabi_bundle" => Self::Wasabi,
@@ -125,11 +142,24 @@ impl Format {
             Self::Blockpit => "blockpit_csv",
             Self::Binance => "binance_supplemental_csv",
             Self::Bisq => "bisq_csv",
+            Self::BinanceHistory => "binance_history_csv",
+            Self::Bitvavo => "bitvavo_csv",
+            Self::Bitstamp => "bitstamp_csv",
+            Self::Bitfinex => "bitfinex_csv",
+            Self::Bitcoinde => "bitcoinde_csv",
             Self::Ledger => "generic_ledger",
         }
     }
     fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
         match self {
+            // Exchange exports: the registry names each one's parser.
+            Self::BinanceHistory
+            | Self::Bitvavo
+            | Self::Bitstamp
+            | Self::Bitfinex
+            | Self::Bitcoinde => Ok(exchange_api::load_file(self, file, None)?
+                .map(|(rows, _)| rows)
+                .unwrap_or_default()),
             Self::Document => Err(AppError::new(
                 "validation",
                 "Document imports require reviewed draft rows",
@@ -139,22 +169,84 @@ impl Format {
             Self::Json => generic_json::load(file),
             Self::BtcpayCsv | Self::BtcpayJson => btcpay::load(file, self == Self::BtcpayJson),
             Self::Csv => csv::load(file),
-            Self::Binance => binance::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Binance => binance::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::Bisq => Err(AppError::new(
                 "internal_error",
                 "Bisq imports read the book for their escrow timeline",
             )),
             Self::Phoenix => phoenix::parse(csv::load(file)?),
             Self::River => river::parse(csv::load(file)?),
-            Self::Bull => bull::parse(csv::load(file)?),
+            Self::Bull => bull::parse(csv::load(file)?, None, &mut Default::default()),
             Self::BullWallet => bull_wallet::parse(csv::load(file)?),
-            Self::Coinfinity => coinfinity::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::Coinfinity => coinfinity::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::TwentyOne => twentyone::parse(csv::load(file)?),
             Self::Strike => strike::parse(csv::load(file)?),
             Self::Pocket => pocket::parse(csv::load(file)?),
-            Self::LedgerLive => ledgerlive::parse(csv::rows(&csv::read_sig(file)?)?),
+            Self::LedgerLive => ledgerlive::parse(
+                csv::rows(&csv::read_sig(file)?)?,
+                None,
+                &mut Default::default(),
+            ),
             Self::Ledger => ledger::load(file, None),
         }
+    }
+    /// The rows a wallet import keeps under the wallet's asset scope, and,
+    /// for a format converted to docs/plan/24-crypto-assets.md, the rows the
+    /// scope left out. Other formats are still Bitcoin-only and return no
+    /// tally.
+    fn load_for(
+        self,
+        file: &str,
+        target: tax_platform::Target<'_>,
+    ) -> Result<(Vec<csv::Row>, Option<assets::Tally>), AppError> {
+        if let Some((rows, tally)) = exchange_api::load_file(self, file, Some(target))? {
+            return Ok((rows, Some(tally)));
+        }
+        match self {
+            Self::CoinTracking | Self::Blockpit => {
+                tax_platform::load_for(file, self, target).map(|(rows, tally)| (rows, Some(tally)))
+            }
+            Self::Binance | Self::Coinfinity | Self::LedgerLive => {
+                let parse = match self {
+                    Self::Binance => binance::parse,
+                    Self::Coinfinity => coinfinity::parse,
+                    _ => ledgerlive::parse,
+                };
+                let mut tally = assets::Tally::default();
+                let rows = parse(
+                    csv::rows(&csv::read_sig(file)?)?,
+                    Some(target.scope),
+                    &mut tally,
+                )?;
+                Ok((rows, Some(tally)))
+            }
+            Self::Bull => {
+                let mut tally = assets::Tally::default();
+                let rows = bull::parse(csv::load(file)?, Some(target.scope), &mut tally)?;
+                Ok((rows, Some(tally)))
+            }
+            _ => self.load(file).map(|rows| (rows, None)),
+        }
+    }
+    /// Whether the format reads the wallet's asset scope (`load_for`).
+    fn scoped(self) -> bool {
+        matches!(
+            self,
+            Self::CoinTracking
+                | Self::Blockpit
+                | Self::Binance
+                | Self::Coinfinity
+                | Self::LedgerLive
+                | Self::Bull
+        ) || exchange_api::file_exchange(self)
     }
     fn evidence(self) -> bool {
         matches!(
@@ -172,11 +264,20 @@ impl Format {
         }
     }
     fn active(self) -> bool {
-        matches!(self, Self::TwentyOne | Self::Strike) || self == Self::Bisq
+        matches!(self, Self::TwentyOne | Self::Strike)
+            || self == Self::Bisq
+            || self == Self::Bitvavo
+            || self == Self::Bitstamp
+            || self == Self::Bitfinex
+            || self == Self::Bitcoinde
     }
     fn provider(self) -> (&'static str, &'static str, &'static str) {
         match self {
             Self::Binance => ("Binance", "binance", "binance_rows"),
+            Self::Bitvavo => ("Bitvavo", "bitvavo", "bitvavo_rows"),
+            Self::Bitstamp => ("Bitstamp", "bitstamp", "bitstamp_rows"),
+            Self::Bitfinex => ("Bitfinex", "bitfinex", "bitfinex_rows"),
+            Self::Bitcoinde => ("Bitcoin.de", "bitcoinde", "bitcoinde_rows"),
             Self::Coinfinity => ("Coinfinity", "coinfinity", "coinfinity_rows"),
             Self::Pocket => ("Pocket Bitcoin", "pocketbitcoin", "pocketbitcoin_rows"),
             Self::TwentyOne => ("21bitcoin", "21bitcoin", "twentyonebitcoin_rows"),
@@ -584,6 +685,9 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
             }
         }
     };
+    // Another asset's exactness is checked on the value as parsed, before
+    // the context-rounded `abs` could shorten it.
+    let parsed_amount = amount.copy_abs();
     let amount = amount.abs(&CTX).map_err(decimal_error)?;
     let fee_special = special(&text(row, "fee"));
     if amount_special
@@ -594,11 +698,12 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     {
         return Err(decimal_error(DecimalError::InvalidOperation));
     }
-    let fee = if fee_special.is_some() {
+    let parsed_fee = if fee_special.is_some() {
         dec("0")?
     } else {
-        dec(&text(row, "fee"))?.abs(&CTX).map_err(decimal_error)?
+        dec(&text(row, "fee"))?.copy_abs()
     };
+    let fee = parsed_fee.abs(&CTX).map_err(decimal_error)?;
     let rate = (!text(row, "fiat_rate").is_empty())
         .then(|| PriceNumber::import_price(&text(row, "fiat_rate"), "fiat_rate"))
         .transpose()?;
@@ -746,10 +851,8 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     fields.insert("occurred_at".into(), Sql::Text(occurred));
     fields.insert("confirmed_at".into(), sql(confirmed));
     fields.insert("direction".into(), Sql::Text(direction.into()));
-    fields.insert(
-        "asset".into(),
-        Sql::Text(asset(text(row, "asset").if_empty("BTC"))),
-    );
+    let code = asset(text(row, "asset").if_empty("BTC"));
+    fields.insert("asset".into(), Sql::Text(code.clone()));
     let integer_error = |v: &String| {
         AppError::new(
             "internal_error",
@@ -783,8 +886,16 @@ fn normalize_labeled(input: &csv::Row, label: &str) -> Result<Record, AppError> 
     // Python keeps a non-finite fee Decimal until the row's fingerprint
     // converts it to msat, after the network guard.
     let deferred = fee_special.as_ref().map(integer_error);
-    fields.insert("amount".into(), Sql::Integer(msat(&amount)?));
-    fields.insert("fee".into(), Sql::Integer(msat(&fee)?));
+    // Bitcoin keeps its msat conversion; other assets must be exact.
+    let units = |field: &str, value: &Decimal, parsed: &Decimal| match assets::class(&code) {
+        assets::Class::Bitcoin => msat(value),
+        _ => assets::exact_units(&code, field, parsed),
+    };
+    fields.insert(
+        "amount".into(),
+        Sql::Integer(units("amount", &amount, &parsed_amount)?),
+    );
+    fields.insert("fee".into(), Sql::Integer(units("fee", &fee, &parsed_fee)?));
     fields.insert(
         "amount_includes_fee".into(),
         Sql::Integer(i64::from(!text(row, "amount_includes_fee").is_empty())),
@@ -1478,6 +1589,116 @@ pub fn execute_wasabi_payload(
     Ok(result)
 }
 
+/// `ui.wallets.import_preview`: which other crypto assets a provider file
+/// holds, read under both asset scopes before a wallet exists, so the user
+/// chooses the new wallet's scope before its one import. Nothing is stored.
+/// A format that keeps no other crypto asset, or reads only BTC (an exchange
+/// export the registry marks so, Bull Bitcoin), offers no choice. When neither scope can read the file the
+/// `bitcoin` scope's error is returned, as the import would.
+pub fn preview_assets(file: &str, format: Format, label: &str) -> Result<Py, AppError> {
+    let source = ("source_format", format.name());
+    let reads_bitcoin_only =
+        format == Format::Bull || exchange_api::file_reads_bitcoin_only(format);
+    if !format.scoped() {
+        return Ok(assets::Preview::default().envelope(source));
+    }
+    let load = |scope| {
+        format.load_for(
+            file,
+            tax_platform::Target {
+                scope,
+                wallet: label,
+            },
+        )
+    };
+    let crypto = (!reads_bitcoin_only).then(|| load(assets::Scope::Crypto));
+    // A file the `crypto` scope cannot read says why, so the other assets
+    // are not dropped from the question silently.
+    let crypto_refused = match &crypto {
+        Some(Err(error)) => Some(error.message.clone()),
+        _ => None,
+    };
+    let mut preview = match load(assets::Scope::Bitcoin) {
+        Ok((_, tally)) => tally
+            .as_ref()
+            .map(assets::Preview::from_tally)
+            .unwrap_or_default(),
+        Err(error) => match &crypto {
+            Some(Ok((rows, tally))) => {
+                let mut preview = tally
+                    .as_ref()
+                    .map(assets::Preview::from_tally)
+                    .unwrap_or_default();
+                preview.count_rows(rows.iter().map(|row| {
+                    row.data
+                        .get("asset")
+                        .and_then(Json::as_str)
+                        .unwrap_or_default()
+                }));
+                preview.bitcoin_refused = Some(error.message);
+                preview
+            }
+            _ => return Err(error),
+        },
+    };
+    preview.crypto = matches!(crypto, Some(Ok(_)));
+    preview.crypto_refused = crypto_refused;
+    Ok(preview.envelope(source))
+}
+
+/// The refusal for a source that changed after its asset preview.
+pub const PREVIEW_STALE: &str = "import_preview_stale";
+
+pub(crate) fn preview_stale(what: &str) -> AppError {
+    AppError::new(
+        PREVIEW_STALE,
+        format!(
+            "The {what} changed after Kassiber checked its assets; check it again before importing"
+        ),
+    )
+    .with_hint(
+        "Nothing was imported. Run the asset check again and answer for what the source holds now.",
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The token a provider file's asset preview hands out: bound to the
+/// book's profile, the format and the file's bytes, so a create or import
+/// that carries it refuses a file that changed since (`check_file_preview`).
+pub fn file_preview_token(profile: &str, format: Format, file: &str) -> Result<String, AppError> {
+    let bytes = std::fs::read(file).map_err(|_| {
+        AppError::new("not_found", format!("Source file not found: {file}"))
+            .with_hint("Choose an existing local export file.")
+    })?;
+    let bound = json!([
+        "kassiber.import_preview.file.v1",
+        profile,
+        format.name(),
+        sha256_hex(&bytes)
+    ]);
+    Ok(sha256_hex(bound.to_string().as_bytes()))
+}
+
+/// Refuses a file that is no longer the one `token` previewed.
+pub fn check_file_preview(
+    profile: &str,
+    format: Format,
+    file: &str,
+    token: &str,
+) -> Result<(), AppError> {
+    if file_preview_token(profile, format, file)? == token {
+        Ok(())
+    } else {
+        Err(preview_stale("file"))
+    }
+}
+
 /// What the desktop's `ui.wallets.import_file` and `ui.wallets.import_samourai`
 /// ask the book to import before the local journal step.
 pub enum DesktopImport {
@@ -1554,12 +1775,19 @@ fn run(
     };
     let mut bisq_escrow = None;
     let mut lock = None;
-    let rows = if let Some(bundle) = &bundle {
-        wasabi::rows(&bundle.records)?
+    // The wallet's asset scope, for formats that keep other crypto assets.
+    let scope = match &wallet {
+        Some(wallet) if request.format.scoped() => {
+            Some(assets::Scope::of_wallet(conn, &wallet.id)?)
+        }
+        _ => None,
+    };
+    let (rows, tally) = if let Some(bundle) = &bundle {
+        (wasabi::rows(&bundle.records)?, None)
     } else if request.format == Format::Ledger {
-        ledger::load(&request.file, column_map)?
+        (ledger::load(&request.file, column_map)?, None)
     } else if request.format == Format::BullWallet {
-        bull_wallet::parse_all(csv::load(&request.file)?)?
+        (bull_wallet::parse_all(csv::load(&request.file)?)?, None)
     } else if request.format == Format::Bisq {
         let wallet = wallet.as_ref().expect("bisq escrow wallet");
         // The escrow ledger and its held trades belong to a dedicated wallet.
@@ -1595,9 +1823,15 @@ fn run(
         let rows = std::mem::take(&mut parsed.rows);
         bisq_escrow = Some(parsed);
         lock = Some(held);
-        rows
+        (rows, None)
+    } else if let (Some(scope), Some(wallet)) = (scope, &wallet) {
+        let target = tax_platform::Target {
+            scope,
+            wallet: &wallet.label,
+        };
+        request.format.load_for(&request.file, target)?
     } else {
-        request.format.load(&request.file)?
+        (request.format.load(&request.file)?, None)
     };
     // A Bull Bitcoin wallet imports only the rows of its configured network,
     // and Lightning rows only where the book proves their network.
@@ -1616,21 +1850,41 @@ fn run(
     };
     // Relevant mode normalizes and validates each row in reference order;
     // a matched price refusal precedes normalization of any later row.
-    let records = if mode == Some("relevant") {
+    let mut records = if mode == Some("relevant") {
         Vec::new()
     } else {
         rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?
     };
+    // Identical ID-less rows of a generic file stay separate rows.
+    if matches!(
+        request.format,
+        Format::Csv | Format::Json | Format::Ledger | Format::River
+    ) {
+        changed::number_occurrences(&mut records);
+    }
+    // A format without its own asset tally stores the asset each row names.
+    if let (None, Some(wallet)) = (&tally, &wallet) {
+        let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
+        for (index, record) in records.iter().enumerate() {
+            // A row that cannot be stored at all keeps its own error.
+            if record.deferred.is_some() || record.insert_binding_error().is_some() {
+                continue;
+            }
+            let row = format!("{} row {}", request.format.name(), index + 1);
+            assets::screen_stored(&string(&record.fields, "asset"), scope, &wallet.label, &row)?;
+        }
+    }
     let lock = match lock {
         Some(lock) => lock,
         None => {
             kassiber_store::WriteLock::begin(conn, "wallet_file_import").map_err(database_error)?
         }
     };
+    let mut selected = vec![];
     let result = if mode == Some("relevant") {
         exchange::enrich(conn, &request, &rows)
     } else {
-        apply(
+        apply_records(
             conn,
             &request,
             wallet.as_ref().expect("wallet import"),
@@ -1638,7 +1892,25 @@ fn run(
             &records,
             &mut ids,
             column_map,
+            None,
+            &mut selected,
         )
+        .and_then(|mut result| {
+            // Both legs of each provider-reported swap are stored; pair them.
+            let wallet = wallet.as_ref().expect("wallet import");
+            let pairs = swaps::pair(conn, &request.profile_id, &rows, &records, &selected)?;
+            // A converted format always reports its pairs and what its
+            // scope left out.
+            if let (Some(tally), Some(scope)) = (&tally, scope) {
+                let pairs = pairs.unwrap_or(0);
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+                let assets = tally.envelope(scope, &wallet.label);
+                kassiber_envelope::set(&mut result, "assets", assets);
+            } else if let Some(pairs) = pairs {
+                kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs));
+            }
+            Ok(result)
+        })
         .and_then(|result| {
             if let Some(bundle) = &bundle {
                 let wallet = wallet.as_ref().expect("wallet import");
@@ -1824,8 +2096,53 @@ struct Inserted {
     unchanged: i64,
     skipped: i64,
     inserted_ids: Vec<String>,
+    /// Per record, in order: the transaction it is now, inserted or matched
+    /// (`None` for a row left out), so a later step names exactly that row.
+    selected: Vec<Option<String>>,
     /// `reset_decisions` while the book keeps "Reset book data" records.
     reset: Option<Py>,
+    /// Provider values the stored rows kept (`changed::ignored`).
+    corrections: Vec<Py>,
+    /// Rows the user's `changed_rows` answer applied to: (re-identified,
+    /// corrected).
+    changed: (i64, i64),
+    /// `skip` answers to remember once the run is recorded: (stored
+    /// transaction id, incoming key).
+    answered: Vec<(String, String)>,
+}
+
+/// `find`, then for a row whose provider id is a chain txid the ID-less row
+/// an earlier export of the same history stored.
+fn lookup(
+    conn: &Connection,
+    wallet: &str,
+    r: &Record,
+    fp: &str,
+) -> Result<Option<Fields>, AppError> {
+    let existing = find(conn, wallet, r, fp)?;
+    if existing.is_some()
+        || r.fingerprint_identity.is_none()
+        || string(&r.fields, "external_id_kind") != "txid"
+    {
+        return Ok(existing);
+    }
+    let mut idless = Record {
+        fields: r.fields.clone(),
+        amount: r.amount.clone(),
+        fee: r.fee.clone(),
+        fingerprint_identity: r.fingerprint_identity.clone(),
+        ignore_fee: false,
+        binding_errors: BTreeMap::new(),
+        economics: r.economics,
+        tolerance: r.tolerance,
+        deferred: None,
+        bull: None,
+    };
+    idless
+        .fields
+        .insert("external_id".into(), Sql::Text(String::new()));
+    Ok(find(conn, wallet, &idless, &fingerprint(wallet, &idless))?
+        .filter(|row| row.get("external_id").is_none_or(|v| *v == Sql::Null)))
 }
 
 /// `insert_wallet_records`' row loop: enrich a matching transaction or insert
@@ -1837,12 +2154,25 @@ fn insert_records(
     records: &[Record],
     ids: &mut Ids<'_>,
     match_existing_only: bool,
+    screen: Option<&changed::Screen<'_>>,
 ) -> Result<Inserted, AppError> {
-    insert_settled_records(conn, scope, wallet, records, ids, match_existing_only, None)
+    insert_settled_records(
+        conn,
+        scope,
+        wallet,
+        records,
+        ids,
+        match_existing_only,
+        None,
+        screen,
+    )
 }
 
 /// [`insert_records`] for an LND wallet's import, whose live settlement
-/// evidence may correct a stored payment's date.
+/// evidence may correct a stored payment's date. With a `screen`, rows that
+/// look like a stored row under another id or amount follow the user's
+/// `changed_rows` answer, or refuse the import (`changed`).
+#[allow(clippy::too_many_arguments)]
 fn insert_settled_records(
     conn: &Connection,
     scope: (&String, &String, &String),
@@ -1851,6 +2181,7 @@ fn insert_settled_records(
     ids: &mut Ids<'_>,
     match_existing_only: bool,
     settlement_ids: Option<&[String]>,
+    screen: Option<&changed::Screen<'_>>,
 ) -> Result<Inserted, AppError> {
     let (profile, workspace, currency) = scope;
     let mut imported = Vec::new();
@@ -1858,6 +2189,7 @@ fn insert_settled_records(
     let mut unchanged = 0;
     let mut skipped = 0;
     let mut inserted_ids = Vec::new();
+    let mut selected: Vec<Option<String>> = Vec::with_capacity(records.len());
     let reset_active = kassiber_setup::book_reset::has_state(conn, profile)?;
     let mut reset_rebound = 0_i64;
     // Stored ID-less rows match by economic identity and occurrence number,
@@ -1883,24 +2215,107 @@ fn insert_settled_records(
             BTreeMap::new()
         };
     let mut incoming: BTreeMap<String, i64> = BTreeMap::new();
-    let total = records.len();
-    import_progress(&wallet.label, 0, total, None);
-    for (index, (r, identity)) in records.iter().zip(&identities).enumerate() {
-        let index = index + 1;
-        if let Some((economic, _, _)) = identity {
+    // The stored row a record's occurrence names under another external id:
+    // the record is that row.
+    let slots: Vec<Option<String>> = records
+        .iter()
+        .zip(&identities)
+        .map(|(r, identity)| {
+            let (economic, _, _) = identity.as_ref()?;
             let occurrence = incoming.entry(economic.clone()).or_default();
             *occurrence += 1;
-            if stored
+            stored
                 .get(economic)
                 .and_then(|slots| slots.get(occurrence))
-                .is_some_and(|row| row.external_id != string(&r.fields, "external_id"))
-            {
-                skipped += 1;
-                unchanged += 1;
-                if index % 200 == 0 || index == total {
-                    import_progress(&wallet.label, index, total, Some((imported.len(), skipped)));
+                .filter(|row| row.external_id != string(&r.fields, "external_id"))
+                .map(|row| row.id.clone())
+        })
+        .collect();
+    let found = match screen {
+        Some(screen) => {
+            let mut matched = Vec::with_capacity(records.len());
+            for (r, slot) in records.iter().zip(&slots) {
+                if slot.is_some()
+                    || r.deferred.is_some()
+                    || ["external_id", "asset"]
+                        .iter()
+                        .any(|key| r.binding_errors.contains_key(*key))
+                {
+                    // Matched, or refused by the loop below.
+                    matched.push(Some(slot.clone()));
+                    continue;
                 }
-                continue;
+                let fp = fingerprint(&wallet.id, r);
+                matched.push(lookup(conn, &wallet.id, r, &fp)?.map(|row| Some(string(&row, "id"))));
+            }
+            changed::conflicts(conn, &wallet.id, records, &matched, screen)?
+        }
+        None => BTreeMap::new(),
+    };
+    let choice = screen.and_then(|screen| screen.changed_rows);
+    let mut corrections = Vec::new();
+    let mut changed = (0_i64, 0_i64);
+    // `skip` answers to remember: (stored transaction id, incoming key).
+    let mut answered: Vec<(String, String)> = Vec::new();
+    let total = records.len();
+    import_progress(&wallet.label, 0, total, None);
+    for (index, (r, slot)) in records.iter().zip(&slots).enumerate() {
+        let position = index;
+        let index = index + 1;
+        if slot.is_some() {
+            selected.push(slot.clone());
+            skipped += 1;
+            unchanged += 1;
+            if index % 200 == 0 || index == total {
+                import_progress(&wallet.label, index, total, Some((imported.len(), skipped)));
+            }
+            continue;
+        }
+        if let Some(item) = found.get(&position) {
+            let stored = item.conflict.stored();
+            let corrected = matches!(item.conflict, changed::Conflict::Corrected(_));
+            // An earlier `skip` of this very difference answers it again,
+            // unless the user now asks to import it.
+            let remembered = item.remembered && choice != Some(ChangedRows::Import);
+            let decision = if remembered {
+                Some(ChangedRows::Skip)
+            } else {
+                if corrected {
+                    changed.1 += 1;
+                } else {
+                    changed.0 += 1;
+                }
+                choice
+            };
+            match decision {
+                None => {
+                    let sync = screen.is_some_and(|screen| screen.sync);
+                    return Err(changed::refusal(records, &found, sync));
+                }
+                Some(ChangedRows::Import) => {}
+                Some(ChangedRows::Skip) => {
+                    if corrected {
+                        corrections.extend(changed::ignored(stored, r, None));
+                    }
+                    if !remembered {
+                        let answer = (string(stored, "id"), item.key.clone());
+                        if !answered.contains(&answer) {
+                            answered.push(answer);
+                        }
+                    }
+                    selected.push(Some(string(stored, "id")));
+                    skipped += 1;
+                    unchanged += 1;
+                    if index % 200 == 0 || index == total {
+                        import_progress(
+                            &wallet.label,
+                            index,
+                            total,
+                            Some((imported.len(), skipped)),
+                        );
+                    }
+                    continue;
+                }
             }
         }
         // Python's fingerprint converts the amount to msat, after the
@@ -1914,29 +2329,7 @@ fn insert_settled_records(
                 return Err(error.clone());
             }
         }
-        let mut existing = find(conn, &wallet.id, r, &fp)?;
-        if existing.is_none()
-            && r.fingerprint_identity.is_some()
-            && string(&r.fields, "external_id_kind") == "txid"
-        {
-            let mut idless = Record {
-                fields: r.fields.clone(),
-                amount: r.amount.clone(),
-                fee: r.fee.clone(),
-                fingerprint_identity: r.fingerprint_identity.clone(),
-                ignore_fee: false,
-                binding_errors: BTreeMap::new(),
-                economics: r.economics,
-                tolerance: r.tolerance,
-                deferred: None,
-                bull: None,
-            };
-            idless
-                .fields
-                .insert("external_id".into(), Sql::Text(String::new()));
-            existing = find(conn, &wallet.id, &idless, &fingerprint(&wallet.id, &idless))?
-                .filter(|row| row.get("external_id").is_none_or(|v| *v == Sql::Null));
-        }
+        let existing = lookup(conn, &wallet.id, r, &fp)?;
         let fiat = string(&r.fields, "fiat_currency");
         price_currency(r, currency)?;
         if let Some(existing) = existing {
@@ -1953,6 +2346,9 @@ fn insert_settled_records(
             } else {
                 merge(&existing, r, &fp, settlement)?
             };
+            if screen.is_some() {
+                corrections.extend(changed::ignored(&existing, r, Some(&changes)));
+            }
             if changes.is_empty() {
                 unchanged += 1;
             } else {
@@ -2005,8 +2401,10 @@ fn insert_settled_records(
                     changes.keys().cloned().collect(),
                 ));
             }
+            selected.push(Some(id));
             skipped += 1;
         } else if match_existing_only || r.bull.as_ref().is_some_and(|b| b.match_only) {
+            selected.push(None);
             skipped += 1;
         } else {
             // After "Reset book data" the re-observed row takes its old id
@@ -2074,6 +2472,7 @@ fn insert_settled_records(
                 kassiber_envelope::set(&mut inserted, "review", s(reason));
             }
             imported.push(inserted);
+            selected.push(Some(id.clone()));
             inserted_ids.push(id);
         }
         if index % 200 == 0 || index == total {
@@ -2096,7 +2495,11 @@ fn insert_settled_records(
         unchanged,
         skipped,
         inserted_ids,
+        selected,
         reset,
+        corrections,
+        changed,
+        answered,
     })
 }
 /// Tag a Bull Bitcoin wallet row held out of accounting for review: the
@@ -2157,7 +2560,17 @@ fn apply(
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
 ) -> Result<Py, AppError> {
-    apply_records(conn, request, wallet, rows, records, ids, column_map, None)
+    apply_records(
+        conn,
+        request,
+        wallet,
+        rows,
+        records,
+        ids,
+        column_map,
+        None,
+        &mut vec![],
+    )
 }
 #[allow(clippy::too_many_arguments)]
 fn apply_records(
@@ -2169,6 +2582,8 @@ fn apply_records(
     ids: &mut Ids<'_>,
     column_map: Option<&ledger::ColumnMap>,
     api_source: Option<&str>,
+    // Out: the transaction each record is now (`Inserted::selected`).
+    selected: &mut Vec<Option<String>>,
 ) -> Result<Py, AppError> {
     let profile = &request.profile_id;
     let (workspace, currency): (String, String) = conn
@@ -2186,6 +2601,8 @@ fn apply_records(
         )
         .map_err(database_error)?;
     let configuration = serde_json::from_str(&configuration).unwrap_or(Json::Null);
+    exchange_api::guard_file_wallet(request.format, &configuration)?;
+    exchange_api::guard_sources(request.format, api_source, conn, &wallet.id)?;
     for r in records {
         let raw = serde_json::from_str(&string(&r.fields, "raw_json")).unwrap_or(Json::Null);
         network::guard_import(
@@ -2207,13 +2624,26 @@ fn apply_records(
     } else {
         None
     };
+    exchange_api::before_insert(request.format, api_source, conn, &wallet.id, records)?;
+    // A file is compared with earlier runs of its format; an API sync, whose
+    // ids are the exchange's own, only with rows under the same id.
+    let screen = changed::Screen {
+        format: (api_source.is_none() && request.format != Format::Document)
+            .then(|| request.format.name()),
+        changed_rows: request.changed_rows,
+        sync: api_source.is_some(),
+    };
     let Inserted {
         imported,
         updated,
         unchanged,
         skipped,
         inserted_ids,
+        selected: chosen,
         reset,
+        corrections,
+        changed: (reidentified, corrected),
+        answered,
     } = insert_records(
         conn,
         (profile, &workspace, &currency),
@@ -2221,7 +2651,13 @@ fn apply_records(
         records,
         ids,
         false,
+        Some(&screen),
     )?;
+    *selected = chosen;
+    if exchange_api::tags_same_second(request.format) {
+        exchange_api::tag_same_second(conn, profile, &wallet.id, &inserted_ids, false, ids)?;
+    }
+    exchange_api::after_file_insert(request.format, conn, profile, &wallet.id, rows, ids)?;
     let invalidated = !imported.is_empty() || !updated.is_empty();
     if invalidated {
         invalidate_journals(conn, profile)?;
@@ -2241,10 +2677,27 @@ fn apply_records(
         ("imported", Py::from(imported.len() as i64)),
         ("skipped", Py::from(skipped)),
         ("unchanged", Py::from(unchanged)),
+    ];
+    // Every import that enriched rows says how many; the formats below name
+    // the count in their own place.
+    let names_updated_later = api_source.is_some()
+        || request.format.evidence()
+        || request.format.active()
+        || request.format == Format::Document;
+    if updated_count > 0 && !names_updated_later {
+        result.push(("updated", Py::from(updated_count)));
+    }
+    result.extend([
         ("journal_invalidated", Py::Bool(invalidated)),
         ("inserted_records", Py::List(imported)),
         ("updated_records", Py::List(updated)),
-    ];
+    ]);
+    if !corrections.is_empty() {
+        result.push(("corrections_ignored", Py::List(corrections)));
+    }
+    if let Some(summary) = changed::summary(request.changed_rows, reidentified, corrected) {
+        result.push(("changed_rows", summary));
+    }
     if let Some(reset) = reset {
         result.push(("reset_decisions", reset));
     }
@@ -2252,6 +2705,9 @@ fn apply_records(
         if updated_count > 0 {
             result.push(("updated", Py::from(updated_count)));
         }
+        // An API sync records no import run, so its `skip` answers stand
+        // until the user answers otherwise.
+        changed::remember(conn, &wallet.id, &answered, None)?;
         return Ok(dict(result));
     }
     if request.format == Format::Phoenix {
@@ -2319,7 +2775,9 @@ fn apply_records(
             invalidated,
         )?;
     }
-    if !inserted_ids.is_empty() && !matches!(request.format, Format::Wasabi | Format::Document) {
+    let batch = if !inserted_ids.is_empty()
+        && !matches!(request.format, Format::Wasabi | Format::Document)
+    {
         let batch = ids.next(conn)?;
         conn.execute("INSERT INTO import_batches(id,workspace_id,profile_id,wallet_id,source_format,source_filename,column_map_json,imported_at,rows_inserted,rows_updated,rows_skipped) VALUES(?,?,?,?,?,?,?,?,?,?,?)",params![batch,workspace,profile,wallet.id,format,std::path::Path::new(&request.file).file_name().unwrap_or_default().to_string_lossy(),column_map.map(|map| config::stored_json(&map.raw)),ids.time(conn)?,inserted_ids.len() as i64,if request.format.evidence() || request.format.active() { updated_count } else { 0 },skipped]).map_err(database_error)?;
         // Each row's place among the run's created rows is its source
@@ -2327,8 +2785,13 @@ fn apply_records(
         for (position, id) in (1_i64..).zip(inserted_ids) {
             conn.execute("INSERT OR IGNORE INTO import_batch_transactions(batch_id,transaction_id,source_position) VALUES(?,?,?)",params![batch,id,position]).map_err(database_error)?;
         }
-        result.push(("import_batch_id", s(batch)));
-    }
+        result.push(("import_batch_id", s(batch.as_str())));
+        Some(batch)
+    } else {
+        None
+    };
+    // A `skip` answer stands while the run that recorded it is in the book.
+    changed::remember(conn, &wallet.id, &answered, batch.as_deref())?;
     if request.format.evidence() || request.format.active() {
         result.push((request.format.provider().2, Py::from(records.len() as i64)));
     }
@@ -2426,6 +2889,7 @@ pub(crate) fn import_records(
         &mut ids,
         spec.match_existing_only,
         (kind == "lnd").then_some(spec.settlement_ids),
+        None,
     )?;
     let invalidated = !inserted.imported.is_empty() || !inserted.updated.is_empty();
     if invalidated {

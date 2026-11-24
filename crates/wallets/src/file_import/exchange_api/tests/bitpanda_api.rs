@@ -291,6 +291,9 @@ impl Script {
             assets: json!([
                 {"id": "f0f13b6a-0000-4000-8000-000000000001", "name": "Grayscale Bitcoin Mini Trust", "symbol": "BTC", "type": "equity_security", "group": "ETF"},
                 {"id": BTC.to_uppercase(), "name": "Bitcoin", "symbol": "BTC", "type": "CRYPTO", "group": "CRYPTOCOIN"},
+                {"id": ETH, "name": "Ethereum", "symbol": "ETH", "type": "crypto", "group": "cryptocoin"},
+                {"id": BEST, "name": "Bitpanda Ecosystem Token", "symbol": "BEST", "type": "crypto", "group": "cryptocoin"},
+                {"id": GOLD, "name": "Gold", "symbol": "XAU", "type": "metal", "group": "metal"},
             ]),
             operations: history(),
             page: 2,
@@ -433,13 +436,24 @@ fn bitpanda_reads_only_and_maps_every_btc_event() {
         kassiber_pyjson::dumps(at(&result, "skipped"), &Default::default()).unwrap(),
         r#"{"fiat_only_operations": 1, "non_btc_operations": 2, "internal_btc_moves": 1}"#
     );
+    // The bitcoin scope names what it left out, and how to keep the crypto.
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "assets"), &Default::default()).unwrap(),
+        r#"{"scope": "bitcoin", "skipped": {"ETH": 1}, "excluded": {"XAU": 1}, "next_step": "kassiber wallets update --wallet 'Bitpanda' --config '{\"asset_scope\": \"crypto\"}', then sync or import again to keep ETH"}"#
+    );
+    assert_eq!(at(&result, "swap_pairs"), &Py::from(0));
+    // Bitpanda's balance (w-btc 0.00491 + w-earn 0.005) equals the book's.
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "matches", "asset": "BTC", "provider_msat": 991000000, "book_msat": 991000000, "difference_msat": 0}"#
+    );
     // Only reads, each carrying the key, in this order; cursors escaped.
     assert!(served.fake.seen.lock().unwrap().iter().all(|r| r.signed));
     assert_eq!(
         served.targets(),
         [
             "/v1/trading-limits",
-            "/v1/assets?symbol=BTC&page_size=100",
+            "/v1/assets?page_size=100",
             "/v1/currencies",
             "/v1/operations?page_size=100",
             "/v1/operations?page_size=100&cursor=c%2B2%3D%3D",
@@ -553,6 +567,85 @@ fn bitpanda_reads_only_and_maps_every_btc_event() {
     assert_eq!(reference, "trade-2");
 }
 
+/// The scripted history with one leg's transaction rewritten.
+fn edited(id: &str, edit: impl Fn(&mut J)) -> Script {
+    let mut script = Script::new();
+    let leg = script
+        .operations
+        .iter_mut()
+        .flat_map(|op| op["transactions"].as_array_mut().unwrap())
+        .find(|tx| tx["transaction_id"] == id)
+        .unwrap();
+    edit(leg);
+    script
+}
+fn provider_balance(script: Script) -> String {
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap()
+}
+
+#[test]
+fn bitpanda_reports_a_balance_mismatch_without_changing_the_book() {
+    // Bitpanda says w-btc holds 0.001 BTC more than the rows add up to.
+    let script = edited("t-savings", |tx| tx["asset_balance_after"] = btc("0.00591"));
+    let (_, run) = sync(script);
+    let result = run.result.unwrap();
+    assert_eq!(at(&result, "imported"), &Py::from(6));
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "mismatch", "asset": "BTC", "provider_msat": 1091000000, "book_msat": 991000000, "difference_msat": -100000000}"#
+    );
+}
+
+#[test]
+fn bitpanda_balance_is_unavailable_rather_than_guessed() {
+    let unavailable = |reason: &str| {
+        format!(r#"{{"status": "unavailable", "asset": "BTC", "reason": "{reason}"}}"#)
+    };
+    let no_balance = "a BTC wallet's latest transaction has no whole-msat BTC balance";
+    // The latest w-btc leg carries no balance; an earlier one does not stand in.
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] = J::Null)),
+        unavailable(no_balance)
+    );
+    // Finer than a msat, or in another asset.
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] =
+            btc("0.004910000001"))),
+        unavailable(no_balance)
+    );
+    assert_eq!(
+        provider_balance(edited("t-savings", |tx| tx["asset_balance_after"] = eur("0.00491"))),
+        unavailable(no_balance)
+    );
+    // A leg without a wallet cannot be placed.
+    assert_eq!(
+        provider_balance(edited("t-reward", |tx| tx["wallet_id"] = J::Null)),
+        unavailable("a BTC transaction names no Bitpanda wallet")
+    );
+    // Two legs at w-earn's latest time that disagree: neither is the balance.
+    let mut script = Script::new();
+    script.operations.push(op(
+        "op-earn",
+        "DEPOSIT",
+        vec![after(
+            tx(
+                "t-earn",
+                btc("0.001"),
+                "INCOMING",
+                "2024-01-04T00:00:00Z",
+                "w-earn",
+            ),
+            "0.006",
+        )],
+    ));
+    assert_eq!(
+        provider_balance(script),
+        unavailable("a BTC wallet's latest transactions show different balances")
+    );
+}
+
 #[test]
 fn bitpanda_resync_is_idempotent() {
     let served = serve_script(Script::new());
@@ -648,9 +741,22 @@ fn bitpanda_auth_errors_withhold_the_echoed_key() {
     assert_eq!(error.message, "Bitpanda refused the API key (HTTP 401)");
     let details =
         kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap();
+    // Only a known error key is kept: anything else, and any credential in
+    // it, reaches the error as "unknown".
     assert_eq!(
         details,
-        r#"{"http_status": 401, "bitpanda_error": "invalid key <redacted>"}"#
+        r#"{"http_status": 401, "bitpanda_error": "unknown"}"#
+    );
+    let mut script = Script::new();
+    script.faults = vec![(3, 401, r#"{"error":{"code":"invalid_api_key"}}"#.into())];
+    let details = kassiber_pyjson::dumps(
+        refusal(script).details.as_ref().unwrap(),
+        &Default::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        details,
+        r#"{"http_status": 401, "bitpanda_error": "invalid_api_key"}"#
     );
     // Another status keeps the shared transport's withheld body prefix.
     let mut script = Script::new();
@@ -1018,6 +1124,17 @@ fn bitpanda_refusals_withhold_echoed_credentials() {
         "{}",
         error.message
     );
+    // Withheld before the quote is cut to 80 characters: a key crossing the
+    // cut leaves no prefix the error's own scrub could no longer match.
+    let pad = "x".repeat(76);
+    let mut script = Script::new();
+    script.operations[1]["operation_type"] = json!(format!("{pad}{}", loopback::KEY));
+    let error = refusal(script);
+    assert!(
+        error.message.contains(&format!("'{pad}<red'")),
+        "{}",
+        error.message
+    );
 }
 
 #[test]
@@ -1050,11 +1167,8 @@ fn bitpanda_reads_need_consent_an_open_gate_and_a_key() {
     let error = run(&stray, "bitpanda", "", true, online())
         .result
         .unwrap_err();
-    assert!(
-        kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default())
-            .unwrap()
-            .contains("bad <redacted>")
-    );
+    let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+    assert!(!shown.contains("stray-secret"), "{shown}");
 }
 
 #[test]
@@ -1064,4 +1178,328 @@ fn bitpanda_query_values_are_escaped() {
         "eyJsYXN0SWQiOiIxMjM0NTYifQ%3D%3D"
     );
     assert_eq!(bitpanda::escape("a+b/c d~-._"), "a%2Bb%2Fc%20d~-._");
+}
+
+/// A Bitpanda wallet that keeps other crypto assets.
+fn crypto_wallet(conn: &Connection) {
+    conn.execute(
+        "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('bp','ws','p','Bitpanda','bitpanda',?,'2025-01-01')",
+        [r#"{"asset_scope": "crypto", "backend": "fixture"}"#],
+    )
+    .unwrap();
+}
+fn sync_crypto(script: Script) -> (Served, loopback::Run) {
+    let served = serve_script(script);
+    let run = loopback::run_prepared(
+        &backend("bitpanda", &served.fake.url),
+        "bitpanda",
+        "",
+        true,
+        online(),
+        &crypto_wallet,
+    );
+    (served, run)
+}
+/// A BTC -> ETH swap with a BEST fee, after the scripted history.
+fn swap_op() -> J {
+    op(
+        "op-swap",
+        "SWAP",
+        vec![
+            with(
+                after(
+                    traded(
+                        tx(
+                            "t-swap-btc",
+                            btc("0.001"),
+                            "OUTGOING",
+                            "2024-01-10T00:00:00Z",
+                            "w-btc",
+                        ),
+                        "trade-6",
+                    ),
+                    "0.00391",
+                ),
+                "fee_amount",
+                asset(BEST, "0.5"),
+            ),
+            tx(
+                "t-swap-eth",
+                asset(ETH, "0.05"),
+                "INCOMING",
+                "2024-01-10T00:00:00Z",
+                "w-eth",
+            ),
+        ],
+    )
+}
+fn amount_of(conn: &Connection, external_id: &str) -> (String, String, i64) {
+    conn.query_row(
+        "SELECT kind, asset, amount FROM transactions WHERE external_id=?",
+        [external_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap()
+}
+
+/// docs/plan/24-crypto-assets.md: in crypto scope other crypto assets are
+/// imported (buys priced, swaps paired once, a BEST fee as its own row),
+/// metals are still left out, and the BTC balance check is unchanged.
+#[test]
+fn bitpanda_crypto_scope_imports_other_crypto_assets() {
+    let mut script = Script::new();
+    script.operations.push(swap_op());
+    let served = serve_script(script);
+    let backend = backend("bitpanda", &served.fake.url);
+    let run = loopback::run_prepared(&backend, "bitpanda", "", true, online(), &crypto_wallet);
+    let result = run.result.unwrap();
+    // 6 BTC rows, the ETH buy, two swap legs and the BEST fee.
+    assert_eq!(at(&result, "imported"), &Py::from(10), "{result:?}");
+    assert_eq!(at(&result, "swap_pairs"), &Py::from(1));
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "assets"), &Default::default()).unwrap(),
+        r#"{"scope": "crypto", "skipped": {}, "excluded": {"XAU": 1}}"#
+    );
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "matches", "asset": "BTC", "provider_msat": 891000000, "book_msat": 891000000, "difference_msat": 0}"#
+    );
+    let conn = &run.conn;
+    assert_eq!(
+        amount_of(conn, "bitpanda:t-eth"),
+        ("buy".into(), "ETH".into(), 100_000_000_000)
+    );
+    let priced: (String, String, String) = conn
+        .query_row(
+            "SELECT fiat_value_exact, fiat_currency, pricing_method FROM transactions WHERE external_id='bitpanda:t-eth'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(priced, ("2000".into(), "EUR".into(), "bitpanda_api".into()));
+    assert_eq!(
+        amount_of(conn, "bitpanda:t-swap-btc"),
+        ("swap".into(), "BTC".into(), 100_000_000)
+    );
+    assert_eq!(
+        amount_of(conn, "bitpanda:t-swap-eth"),
+        ("swap".into(), "ETH".into(), 5_000_000_000)
+    );
+    assert_eq!(
+        amount_of(conn, "bitpanda:t-swap-btc:fee"),
+        ("fee".into(), "BEST".into(), 0)
+    );
+    // A fee-only spend: the whole BEST quantity is the fee.
+    assert_eq!(
+        count(
+            conn,
+            "SELECT fee FROM transactions WHERE external_id='bitpanda:t-swap-btc:fee'"
+        ),
+        50_000_000_000
+    );
+    // The swap legs carry no invented price.
+    assert_eq!(
+        count(
+            conn,
+            "SELECT count(*) FROM transactions WHERE kind='swap' AND fiat_value_exact IS NULL"
+        ),
+        2
+    );
+    // A second sync imports nothing and keeps the one pair.
+    let gate = Gate::new(
+        || kassiber_net::Offline::Online,
+        kassiber_net::Ledger::default(),
+    );
+    let again = execute(
+        conn,
+        "p",
+        "",
+        &backend,
+        "bitpanda",
+        &gate,
+        "test",
+        &mut |route| Some(Consent::explicit_trigger(route.request())),
+        None,
+    )
+    .unwrap();
+    assert_eq!(at(&again, "imported"), &Py::from(0), "{again:?}");
+    assert_eq!(at(&again, "swap_pairs"), &Py::from(0));
+    let scope = kassiber_transfers::Scope {
+        workspace_id: "ws",
+        profile_id: "p",
+    };
+    let pairs = kassiber_transfers::paired_transaction_ids(conn, &scope).unwrap();
+    assert_eq!(pairs.len(), 2, "{pairs:?}");
+}
+
+/// In crypto scope, what cannot be placed exactly still refuses the sync.
+#[test]
+fn bitpanda_crypto_scope_refuses_what_it_cannot_place() {
+    type Change = fn(&mut Script);
+    let cases: Vec<(&str, Change, &str)> = vec![
+        (
+            "unlisted asset",
+            |s| {
+                let leg = &mut s.operations[7]["transactions"][0];
+                leg["asset_id"] = json!("b86c9999-0000-0000-0000-000000000000");
+                leg["asset_amount"]["asset_id"] = json!("b86c9999-0000-0000-0000-000000000000");
+            },
+            "which Bitpanda does not list",
+        ),
+        (
+            "finer than 11 decimals",
+            |s| {
+                s.operations[7]["transactions"][0]["asset_amount"]["value"] =
+                    json!("1.000000000001")
+            },
+            "finer than 11 decimal places",
+        ),
+        (
+            "40-digit third-asset fee",
+            |s| {
+                let mut swap = swap_op();
+                swap["transactions"][0]["fee_amount"] =
+                    asset(BEST, "1.0000000000000000000000000000000000000001");
+                s.operations.push(swap);
+            },
+            // Rounded to 32 digits it would be stored as exactly 1 BEST.
+            "Bitpanda transaction 'bitpanda:t-swap-btc:fee': BEST fee 1.0000000000000000000000000000000000000001 has more than 11 decimal places",
+        ),
+        (
+            "shared ticker",
+            |s| {
+                s.assets.as_array_mut().unwrap().push(json!({"id": "b86c0000-1111-4000-8000-000000000000", "symbol": "ETH", "type": "crypto"}));
+            },
+            "a ticker several Bitpanda assets share",
+        ),
+        (
+            "swap fee in a leg's asset",
+            |s| {
+                let mut swap = swap_op();
+                swap["transactions"][0]["fee_amount"] = btc("0.00001");
+                s.operations.push(swap);
+            },
+            "charges a separate fee",
+        ),
+        (
+            "swap legs the same way",
+            |s| {
+                let mut swap = swap_op();
+                swap["transactions"][1]["flow"] = json!("OUTGOING");
+                s.operations.push(swap);
+            },
+            "the same way",
+        ),
+        (
+            "crypto against a metal",
+            |s| {
+                let mut swap = swap_op();
+                swap["transactions"][1] = tx(
+                    "t-swap-xau",
+                    asset(GOLD, "1"),
+                    "INCOMING",
+                    "2024-01-10T00:00:00Z",
+                    "w-gold",
+                );
+                s.operations.push(swap);
+            },
+            "involves XAU alongside another asset",
+        ),
+    ];
+    for (name, change, message) in cases {
+        let mut script = Script::new();
+        change(&mut script);
+        let (_, run) = sync_crypto(script);
+        let error = run.result.unwrap_err();
+        assert_eq!(error.code, "validation", "{name}: {error:?}");
+        assert!(error.message.contains(message), "{name}: {}", error.message);
+        assert_eq!(
+            count(&run.conn, "SELECT count(*) FROM transactions"),
+            0,
+            "{name}"
+        );
+    }
+}
+
+/// In the default scope a swap into another crypto asset is refused, and the
+/// hint says how to import it.
+#[test]
+fn bitpanda_bitcoin_scope_points_swaps_at_the_asset_scope() {
+    let mut script = Script::new();
+    script.operations.push(swap_op());
+    let error = refusal(script);
+    assert!(
+        error
+            .message
+            .contains("involves ETH alongside another asset"),
+        "{}",
+        error.message
+    );
+    assert!(
+        error.hint.as_deref().unwrap_or("").contains("asset_scope"),
+        "{error:?}"
+    );
+}
+
+/// An ETH buy after the BTC history that pays its fee in BTC.
+fn eth_buy_with_btc_fee(fee: &str) -> J {
+    op(
+        "op-eth-btc-fee",
+        "BUY",
+        vec![
+            with(
+                traded(
+                    tx(
+                        "t-eth-2",
+                        asset(ETH, "1"),
+                        "INCOMING",
+                        "2024-02-01T00:00:00Z",
+                        "w-eth",
+                    ),
+                    "trade-9",
+                ),
+                "fee_amount",
+                btc(fee),
+            ),
+            tx(
+                "t-eth-2-eur",
+                eur("2000"),
+                "OUTGOING",
+                "2024-02-01T00:00:00Z",
+                "w-eur",
+            ),
+        ],
+    )
+}
+
+/// A BTC fee on another asset's trade after the latest BTC transaction is
+/// in no reported BTC balance: the balance is unavailable, not a mismatch.
+#[test]
+fn bitpanda_btc_fee_after_the_latest_btc_transaction_leaves_the_balance_unknown() {
+    let mut script = Script::new();
+    script.operations.push(eth_buy_with_btc_fee("0.01"));
+    let (_, run) = sync_crypto(script);
+    let result = run.result.unwrap();
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "unavailable", "asset": "BTC", "reason": "a BTC fee after a BTC wallet's latest transaction is in no reported balance"}"#
+    );
+}
+
+/// A third-asset BTC fee finer than 1 msat refuses the sync instead of
+/// being rounded.
+#[test]
+fn bitpanda_refuses_a_btc_fee_finer_than_one_msat() {
+    let mut script = Script::new();
+    script
+        .operations
+        .push(eth_buy_with_btc_fee("0.000000000005"));
+    let (_, run) = sync_crypto(script);
+    let error = run.result.unwrap_err();
+    assert!(
+        error.message.contains("finer than 1 msat"),
+        "{}",
+        error.message
+    );
+    assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
 }

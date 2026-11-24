@@ -9,7 +9,8 @@ record of how that provider's rows are interpreted.
   written up as a filled spec (illustrative reference; the code is the source of
   truth).
 - **Implemented specs:** [binance.md](binance.md), [bisq.md](bisq.md),
-  [coinbase.md](coinbase.md), [kraken.md](kraken.md), and
+  [bitcoinde.md](bitcoinde.md), [bitfinex.md](bitfinex.md), [bitstamp.md](bitstamp.md),
+  [bitvavo.md](bitvavo.md), [coinbase.md](coinbase.md), [kraken.md](kraken.md), and
   [ledger-live.md](ledger-live.md).
 - **How to add one:** copy [TEMPLATE.md](TEMPLATE.md) to
   `docs/exchanges/<slug>.md`, fill the intake sections, and use the closest

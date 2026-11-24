@@ -758,6 +758,7 @@
       "importingSamourai": "Importing Samourai…",
       "importing": "Importing…",
       "previewingLabels": "Previewing labels…",
+      "checkingAssets": "Checking assets…",
       "previewLabels": "Preview labels",
       "importingLabels": "Importing labels…",
       "saving": "Saving…",
@@ -966,10 +967,13 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "bitstampCsv": "Bitstamp CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "cointrackingCsv": "CoinTracking transaction CSV",
       "blockpitCsv": "Blockpit transaction CSV",
       "binanceSupplementalCsv": "Binance supplemental CSV",
+      "binanceHistoryCsv": "Binance Transaction History CSV",
+      "bitfinexReports": "Bitfinex Reports zip or CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
@@ -1434,9 +1438,9 @@
       },
       "metric": {
         "rowsRead": "Rows read",
-        "inserted": "Inserted",
+        "inserted": "New",
         "updated": "Updated",
-        "unchanged": "Unchanged",
+        "unchanged": "Already in the book",
         "matched": "Matched",
         "coinsObserved": "Coins observed",
         "activeCoins": "Active coins",
@@ -1495,6 +1499,10 @@
       "coinbase": "In Coinbase, open Settings → API and create a key for your BTC wallet. Copy the API key and its secret. Kassiber signs requests with that key and secret; key files from the Coinbase Developer Platform are not supported yet.",
       "binance": "In Binance, open Account → API Management, create a system-generated key and edit its restrictions. Copy the API key and the secret key; Binance shows the secret only once. Kassiber refuses a key that can do more than read.",
       "bitpanda": "In Bitpanda, open Account settings → API Keys → New API key. Bitpanda shows the key only once, and it expires after at most a year. Kassiber refuses a key that can trade.",
+      "bitvavo": "In Bitvavo, open Settings → API → Add new API key. Turn on only View access, optionally add this computer's IP address to the IP whitelist, and confirm with your 2FA code. Copy the API key and the secret; Bitvavo shows them only once. Bitvavo does not tell Kassiber what a key may do, so leave trading and withdrawals off yourself.",
+      "bitstamp": "In Bitstamp, open Settings → API access and create a new key. Turn on only the read permissions below, confirm with your two-factor code, copy the API key and the secret (Bitstamp shows the secret only once), then activate the key from the confirmation email. Bitstamp does not tell Kassiber what else a key may do, so leave every trading, withdrawal, deposit and transfer permission off.",
+      "bitfinex": "In Bitfinex, open Account → API Keys → Create New Key and choose only read permissions. Bitfinex emails a confirmation link; after it, copy the API key and the API key secret, which Bitfinex shows only once. Optionally restrict the key to your IP address. Kassiber refuses a key with any write permission.",
+      "bitcoinde": "In Bitcoin.de, open mein Bitcoin.de → Trading-API and create a new key. Tick only the methods below and leave every order, trade and withdrawal method off; optionally restrict the key to your IP address. Copy the API key and the API secret; Bitcoin.de shows the secret only once. Kassiber refuses a key that can do more than read.",
       "grant": "Turn on only",
       "deny": "Leave off",
       "open": "Open the {{provider}} API key page"
@@ -1504,7 +1512,10 @@
       "secret": {
         "kraken": "Private key",
         "coinbase": "API secret",
-        "binance": "Secret key"
+        "binance": "Secret key",
+        "bitstamp": "API secret",
+        "bitfinex": "API key secret",
+        "bitcoinde": "API secret"
       },
       "stored": "Kassiber saves the key with this book (encrypted if the book is) and never shows it again."
     },
@@ -1557,6 +1568,12 @@
       "never": "Not synced since Kassiber started",
       "ok": "{{time}} · {{imported}} new of {{fetched}} read",
       "failed": "{{time}} · failed",
+      "balance": "{{provider}} balance",
+      "balanceMatches": "{{amount}} · matches the book",
+      "balanceMismatch": "{{amount}} · the book shows {{book}}",
+      "balanceUnavailable": "Not stated unambiguously in the history",
+      "binanceSpotTrades": "Binance's API does not list spot trades. For a complete ledger, import Binance's Transaction History CSV export into its own wallet instead.",
+      "balanceMismatchNote": "The book and {{provider}} disagree. Check for excluded transactions, transactions added to this wallet from other sources, or {{provider}} history the API did not return.",
       "skipped_one": "{{count}} entry was skipped because it is not BTC or moves only fiat.",
       "skipped_other": "{{count}} entries were skipped because they are not BTC or move only fiat.",
       "sessionNote": "Sync results are kept until Kassiber restarts; the book stores only the imported transactions."
@@ -1900,11 +1917,21 @@
         "description": "Binance BTC buys, transfers and income through a read-only API key.",
         "details": [
           "Needs a key with only Enable Reading; a key that can trade, transfer or withdraw is refused",
-          "Fiat BTC buys keep their exact execution value; deposits, withdrawals and BTC income import too",
+          "Fiat BTC buys and Converts keep their exact execution value; deposits, withdrawals and BTC income import too",
+        "Binance's API does not list spot trades: import the Transaction History CSV for a complete ledger",
           "Kassiber contacts Binance only when you test the key or press Sync now"
         ]
       },
-      "binance": {
+      "binance-history": {
+      "title": "Binance Transaction History",
+      "description": "Binance's complete ledger, spot trades included, from its Transaction History export.",
+      "details": [
+        "Export all statements under Orders → Transaction History and import each file unchanged",
+        "Spot trades, Converts, deposits, withdrawals and Earn rewards import; other crypto assets follow the wallet's asset scope",
+        "Use it instead of the Binance API connection, not beside it: the export has no ids to match the API's rows"
+      ]
+    },
+    "binance": {
         "title": "Binance CSV",
         "description": "BTC supplemental rows from Binance exports.",
         "details": [
@@ -1969,7 +1996,163 @@
         "details": [
           "Labels are stored locally and bridged to matching transactions"
         ]
+      },
+      "bitvavo": {
+        "description": "Bitvavo transaction-history CSV import with exact trade pricing.",
+        "details": [
+          "Export Transaction history from Bitvavo and import it unchanged",
+          "BTC buys and sells against EUR keep exact execution pricing; deposits, withdrawals and staking import as BTC activity",
+          "Trades against altcoins or stablecoins (USDC) are refused by name; fiat-only rows are skipped",
+          "Shares transaction ids with the Bitvavo API connection, so importing both keeps one record each"
+        ]
+      },
+      "bitcoinde": {
+        "description": "Bitcoin.de BTC account statement (Kontoauszug) CSV import.",
+        "details": [
+          "Download the BTC statement for the whole period and import it unchanged; later imports may only add newer bookings",
+          "Buys and sells store the exact euros that changed hands; payouts carry their network fee",
+          "Other coins' statements are refused; bookings the API also returns are stored once"
+        ]
+      },
+      "bitvavo-api": {
+        "description": "Bitvavo history through a read-only API key.",
+        "details": [
+          "Needs a key with only View access; Bitvavo does not reveal a key's permissions, so leave trading and withdrawals off",
+          "BTC buys and sells against EUR, deposits, withdrawals and staking import; altcoin and stablecoin trades are refused by name",
+          "Kassiber contacts Bitvavo only when you test the key or press Sync now"
+        ]
+      },
+      "bitstamp-api": {
+        "title": "Bitstamp API",
+        "description": "Bitstamp history and BTC balance through a read-only API key.",
+        "details": [
+          "Needs a key with only Account balance and User transactions; Bitstamp cannot tell Kassiber whether a key can trade, so leave every other permission off",
+          "Fiat BTC trades keep their exact value; deposits, withdrawals, account transfers and referral rewards import too",
+          "Reads the whole transaction history, oldest first; the CSV export imports into the same wallet without duplicates",
+          "Kassiber contacts Bitstamp only when you test the key or press Sync now"
+        ]
+      },
+      "bitstamp": {
+        "title": "Bitstamp CSV",
+        "description": "Bitstamp transaction history export as an active custodial ledger.",
+        "details": [
+          "Import the transaction history exported in the RFC 4180 format; the legacy export has no transaction IDs and is refused",
+          "Rows share their IDs with the API, so the export and the API sync dedupe in one wallet",
+          "Fiat-only and other-asset rows are skipped; BTC traded against another coin is refused"
+        ]
+      },
+      "bitfinex": {
+        "description": "Bitfinex BTC spot trades and movements through a read-only API key.",
+        "details": [
+          "Needs a key with only read permissions (Account History and Wallets); a key with any write permission is refused",
+          "BTC trades against USD, EUR, GBP or JPY keep their exact execution value; BTC deposits, withdrawals and funding interest import too",
+          "Margin, derivatives and BTC traded against another coin refuse the sync by name",
+          "Kassiber contacts Bitfinex only when you test the key or press Sync now"
+        ]
+      },
+      "bitfinex-csv": {
+        "title": "Bitfinex CSV",
+        "description": "Bitfinex Reports trades, movements and ledgers exports.",
+        "details": [
+          "Export Trades, Movements and Ledgers from Bitfinex Reports with the YYYY-MM-DD date format and UTC",
+          "Uses the same ids as the API, so a CSV import and an API sync never duplicate rows",
+          "Import the Reports zip with all three exports: a trade is accepted only when the ledger shows it in the exchange wallet (not margin)"
+        ]
+      },
+      "bitcoinde-api": {
+        "description": "Bitcoin.de BTC statement and BTC/EUR trades through a read-only API key.",
+        "details": [
+          "Needs a key with only showPermissions, showAccountLedger and showMyTrades; a key that can trade or withdraw is refused",
+          "BTC/EUR trades keep the exact euros that changed hands; deposits, payouts with their network fee and credits import too",
+          "The statement lists bookings up to the previous day; today's bookings arrive with the next sync",
+          "Kassiber contacts Bitcoin.de only when you test the key or press Sync now"
+        ]
       }
+    }
+  },
+  "assets": {
+    "found_one": "Also found {{tickers}}: {{rows}} entry",
+    "found_other": "Also found {{tickers}}: {{rows}} entries",
+    "foundBody": "This wallet imports Bitcoin only, so these crypto assets were skipped.",
+    "tickersMore": "{{list}} and {{count}} more",
+    "track": "Also track these assets",
+    "tracked": "Other crypto assets are tracked for this wallet.",
+    "untrack": "Track Bitcoin only",
+    "pickAgain": "Other crypto assets are now tracked. Choose the same file again and import it to add them; entries already imported are not duplicated.",
+    "excluded_one": "Not imported: {{tickers}} ({{rows}} entry). Stocks, ETFs and metals stay out of the book.",
+    "excluded_other": "Not imported: {{tickers}} ({{rows}} entries). Stocks, ETFs and metals stay out of the book.",
+    "unread_one": "Not imported: {{tickers}} ({{rows}} entry). Kassiber reads only Bitcoin from this exchange; record other coins yourself with a generic CSV or JSON import.",
+    "unread_other": "Not imported: {{tickers}} ({{rows}} entries). Kassiber reads only Bitcoin from this exchange; record other coins yourself with a generic CSV or JSON import.",
+    "swapPairs_one": "{{pairs}} crypto-to-crypto swap paired",
+    "swapPairs_other": "{{pairs}} crypto-to-crypto swaps paired",
+    "confirm": {
+      "trackTitle": "Track other crypto assets for this wallet?",
+      "trackBody": {
+        "sync": "Kassiber then syncs this exchange again and keeps the other crypto assets as well. Entries already imported are not duplicated.",
+        "import": "Kassiber then imports the same file again and keeps the other crypto assets as well. Entries already imported are not duplicated.",
+        "pick_file": "Kassiber keeps other crypto assets from the next import on. Kassiber did not keep the file's location, so choose the same file again afterwards. Entries already imported are not duplicated."
+      },
+      "trackButton": {
+        "sync": "Track and sync now",
+        "import": "Track and import again",
+        "pick_file": "Track other assets"
+      },
+      "untrackTitle": "Track Bitcoin only again?",
+      "untrackBody": "Later syncs and imports skip other crypto assets again. Entries already imported stay in the book; exclude them on the Transactions page if you don't want them in your reports.",
+      "untrackButton": "Track Bitcoin only",
+      "passphrase": "Database passphrase",
+      "ack": "Type {{ack}} to confirm the change",
+      "errorPassphrase": "Enter the database passphrase.",
+      "errorAck": "Type {{ack}} to confirm the change.",
+      "errorDenied": "The passphrase was not accepted.",
+      "cancel": "Cancel"
+    }
+  },
+  "reimport": {
+    "new_one": "{{count}} new",
+    "new_other": "{{count}} new",
+    "known_one": "{{count}} already in the book",
+    "known_other": "{{count}} already in the book",
+    "updated_one": "{{count}} updated",
+    "updated_other": "{{count}} updated",
+    "corrections_one": "{{count}} value in the export differs from the book; the book's value was kept.",
+    "corrections_other": "{{count}} values in the export differ from the book; the book's values were kept.",
+    "keptRows_one": "{{count}} row kept as the book has it.",
+    "keptRows_other": "{{count}} rows kept as the book has them.",
+    "importedRows_one": "{{count}} row that looked like a row in the book imported as a new transaction.",
+    "importedRows_other": "{{count}} rows that looked like rows in the book imported as new transactions.",
+    "toast": "{{label}}: {{counts}}",
+    "refusal": {
+      "title": "Some rows look like rows the book already has",
+      "reidentified_one": "This export lists {{count}} row the book already has under another ID.",
+      "reidentified_other": "This export lists {{count}} rows the book already has under another ID.",
+      "corrected_one": "{{count}} row has the ID of a row the book has, with another amount or fee.",
+      "corrected_other": "{{count}} rows have the ID of a row the book has, with another amount or fee.",
+      "body": "Nothing was imported. Kassiber does not decide on suspicion whether they are the same transactions. To take the export's values instead, roll back the earlier import on the connection's page and import this file again.",
+      "skip": "Keep the book's rows",
+      "import": "Import them as new transactions",
+      "bodySync": "Nothing was imported. Kassiber does not decide on suspicion whether they are the same transactions. To take the exchange's values instead, roll back the earlier sync on the connection's page and sync again.",
+      "syncToastTitle": "Sync paused",
+      "syncToastBody": "{{label}}: some rows look like rows the book already has. Answer on the connection's page."
+    },
+    "choice": {
+      "title": "Which assets should this wallet track?",
+      "found_one": "The export also holds {{tickers}}: {{rows}} entry.",
+      "found_other": "The export also holds {{tickers}}: {{rows}} entries.",
+      "crypto": "Bitcoin and other crypto",
+      "cryptoBody": "Imports these assets too.",
+      "bitcoin": "Bitcoin only",
+      "bitcoinBody": "Skips the other crypto assets. You can track them later on the connection's page.",
+      "bitcoinRefused": "Not possible for this export: it records trades of Bitcoin against other crypto assets.",
+      "stocks": "Stocks, ETFs and metals stay out of the book either way.",
+      "checking": "Checking which assets the export holds…",
+      "bitcoinRefusedHistory": "Not possible for this account: its history has trades of Bitcoin against other crypto assets.",
+      "foundHistory_one": "The account's history also holds {{tickers}}: {{rows}} entry.",
+      "foundHistory_other": "The account's history also holds {{tickers}}: {{rows}} entries.",
+      "checkingHistory": "Checking which assets the account holds…",
+      "cryptoRefused": "These assets cannot be tracked from this export, so only Bitcoin is imported: {{reason}}",
+      "stale": "The source changed after the check. Kassiber checked it again; answer for what it holds now.",
+      "staleImport": "The file changed after the check and was not imported. Choose it again on the connection's page to import it."
     }
   }
 }
