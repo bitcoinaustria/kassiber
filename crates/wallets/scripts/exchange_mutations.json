@@ -898,13 +898,13 @@
   },
   {
     "id": "bisq-read-under-write-lock",
-    "file": "crates/wallets/src/file_import.rs",
-    "find": "        kassiber_store::begin_write_savepoint(conn, \"wallet_file_import\")\n            .map_err(database_error)?;\n        savepoint.open = true;\n        let mut parsed = bisq::read(",
-    "replace": "        let mut parsed = bisq::read(",
+    "file": "crates/store/src/write_lock.rs",
+    "find": "        begin_write_savepoint(conn, name)?;\n        Ok(Self {",
+    "replace": "        conn.execute_batch(&format!(\"SAVEPOINT {name}\"))?;\n        Ok(Self {",
     "expect_failing": [
       "bisq_checks_the_book_under_the_write_lock"
     ],
-    "rule": "A Bisq export is checked against the book under the import's write lock, so a concurrent import of the same trade refuses."
+    "rule": "A WriteLock holds the writer lock from its first statement, and a Bisq export is only checked under one (bisq::Book takes &WriteLock), so a concurrent import of the same trade refuses."
   },
   {
     "id": "bisq-cleared-hold-needs-legs",

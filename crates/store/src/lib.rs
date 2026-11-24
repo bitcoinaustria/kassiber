@@ -31,7 +31,7 @@ pub fn schema_fingerprint(conn: &rusqlite::Connection) -> Result<String> {
     schema::fingerprint(conn)
 }
 pub use write_lock::{
-    begin_write_savepoint, debug_assert_no_write, write_savepoint, write_transaction,
+    begin_write_savepoint, debug_assert_no_write, write_savepoint, write_transaction, WriteLock,
 };
 
 /// Seed SQLite's random generator (`randomblob`, which every random row id
