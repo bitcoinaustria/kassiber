@@ -1,0 +1,12 @@
+#,DESCRIPTION,CURRENCY,AMOUNT,BALANCE,DATE,WALLET
+11,Deposit (US DOLLAR) #307 on wallet exchange,USD,500,500,2024-01-06 00:00:00,exchange
+10,Bitcoin Withdrawal #303 on wallet exchange,BTC,-0.001,0.02358,2024-01-06 00:00:00,exchange
+9,Crypto Withdrawal fee on wallet exchange,BTC,-0.0004,0.02458,2024-01-05 00:00:00,exchange
+8,Bitcoin Withdrawal #302 on wallet exchange,BTC,-0.01,0.02498,2024-01-05 00:00:00,exchange
+7,Margin Funding Payment on wallet funding,BTC,0.0000123,0.0200123,2024-01-04 01:00:00,funding
+6,Transfer of 0.02 BTC from wallet Exchange to Funding on wallet funding,BTC,0.02,0.02,2024-01-04 00:00:00,funding
+5,Transfer of 0.02 BTC from wallet Exchange to Funding on wallet exchange,BTC,-0.02,0.03498,2024-01-04 00:00:00,exchange
+4,Exchange -0.005 BTC for USD @ 40000.0 on wallet exchange,BTC,-0.005,0.05498,2024-01-03 00:00:00,exchange
+3,Trading fees for 0.01 BTC (BTCUSD) @ 42000.0 on BFX (0.2%) on wallet exchange,BTC,-0.00002,0.05998,2024-01-02 00:00:00,exchange
+2,Exchange 0.01 BTC for USD @ 42000.0 on wallet exchange,BTC,0.01,0.06,2024-01-02 00:00:00,exchange
+1,Deposit (BITCOIN) #301 on wallet exchange,BTC,0.05,0.05,2024-01-01 00:00:00,exchange

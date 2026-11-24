@@ -10,8 +10,12 @@ pub(crate) enum StatusPolicy {
     Backend,
     Core,
     Return,
-    /// As `Backend`, but these statuses are answered rather than raised.
-    Accept(&'static [u16]),
+    /// An exchange read: as `Backend`, but these statuses are answered
+    /// rather than raised. The request's credentials are remembered for
+    /// error display, a successful body that echoes one is noted (never
+    /// rewritten), and error bodies are scrubbed after their JSON escapes
+    /// are decoded. docs/reference/credential-echo.md.
+    Exchange(&'static [u16]),
 }
 
 pub struct HttpClient {
@@ -19,6 +23,17 @@ pub struct HttpClient {
     pub(crate) gate: Gate,
     pub(crate) version: String,
     pub(crate) withheld: Vec<String>,
+    pub(crate) met: Mutex<Met>,
+}
+/// What this client's exchange reads met.
+#[derive(Default)]
+pub(crate) struct Met {
+    /// Every credential the requests carried, at any length (URL and proxy
+    /// userinfo, credential headers, computed signatures).
+    seen: Vec<String>,
+    /// A successful body carried one of at least
+    /// [`kassiber_credentials::MIN_EXACT_CREDENTIAL_CHARS`] characters.
+    echoed: bool,
 }
 impl HttpClient {
     /// `request_with_retry(url, opener, source_label=source, withheld=...)`
@@ -38,7 +53,7 @@ impl HttpClient {
                 url,
                 consent,
                 deadline,
-                StatusPolicy::Backend,
+                StatusPolicy::Exchange(&[]),
                 build,
                 RESPONSE_LIMIT,
             )
@@ -68,7 +83,7 @@ impl HttpClient {
             url,
             consent,
             deadline,
-            StatusPolicy::Accept(accepted),
+            StatusPolicy::Exchange(accepted),
             build,
             RESPONSE_LIMIT,
         )
@@ -85,6 +100,7 @@ impl HttpClient {
             gate,
             version: version.into(),
             withheld: vec![],
+            met: Mutex::default(),
         }
     }
     /// The literal credentials this client's requests carry. An error body
@@ -95,6 +111,28 @@ impl HttpClient {
     }
     pub fn backend(&self) -> &Backend {
         &self.backend
+    }
+    /// Every credential an error from this client's exchange reads must
+    /// withhold, at any length: its own and every one its requests carried.
+    pub fn display_credentials(&self) -> Vec<String> {
+        let met = self.met.lock().unwrap_or_else(|e| e.into_inner());
+        let mut values: Vec<String> = self.withheld.iter().chain(&met.seen).cloned().collect();
+        values.retain(|value| !value.is_empty());
+        values.sort();
+        values.dedup();
+        values
+    }
+    /// Whether a successful exchange body echoed a request credential.
+    pub fn echoed(&self) -> bool {
+        self.met.lock().unwrap_or_else(|e| e.into_inner()).echoed
+    }
+    /// The credentials one request carries, with the client's own.
+    fn credentials(&self, url: &str, headers: &[(String, String)]) -> Vec<String> {
+        let proxy = self.backend.proxy_url();
+        let mut found =
+            kassiber_credentials::request_credentials(Some(url), headers, proxy.as_deref());
+        found.extend(self.withheld.iter().cloned());
+        found
     }
     /// Optional cache anchor, read only under the caller's exact sync grant.
     /// A missing or malformed tip disables reuse; it never means an empty chain.
@@ -283,27 +321,45 @@ impl HttpClient {
             check()?;
             let request = build()?;
             let headers = request.headers().to_vec();
-            let response = self.send(request, consent, deadline, cap)?;
+            let credentials = self.credentials(url, &headers);
+            let exchange = match policy {
+                StatusPolicy::Exchange(accepted) => Some(accepted),
+                _ => None,
+            };
+            if exchange.is_some() {
+                let mut met = self.met.lock().unwrap_or_else(|e| e.into_inner());
+                for value in &credentials {
+                    if !value.is_empty() && !met.seen.contains(value) {
+                        met.seen.push(value.clone());
+                    }
+                }
+            }
+            let mut response = self.send(request, consent, deadline, cap)?;
             drop(slot);
             if !matches!(response.status, 429 | 503) {
-                if (200..300).contains(&response.status)
+                if let Some(accepted) = exchange {
+                    if (200..300).contains(&response.status) {
+                        if echoes(&response.body, &credentials) {
+                            self.met.lock().unwrap_or_else(|e| e.into_inner()).echoed = true;
+                        }
+                        return Ok(response);
+                    }
+                    let withheld = kassiber_credentials::credential_forms(&credentials);
+                    response.body = scrub_error_body(&response.body, &withheld);
+                    if accepted.contains(&response.status) {
+                        return Ok(response);
+                    }
+                } else if (200..300).contains(&response.status)
                     || (matches!(policy, StatusPolicy::Core)
                         && matches!(response.status, 400 | 404 | 500))
                     || matches!(policy, StatusPolicy::Return)
-                    || matches!(policy, StatusPolicy::Accept(statuses) if statuses.contains(&response.status))
                 {
                     return Ok(response);
                 }
+                let withheld = kassiber_credentials::credential_forms(&credentials);
                 // The body is the server's text: withhold every credential
                 // the request carried, and the client's own (an exchange key
                 // and secret), before the cut, as Python does.
-                let mut credentials = kassiber_credentials::request_credentials(
-                    Some(url),
-                    &headers,
-                    self.backend.proxy_url().as_deref(),
-                );
-                credentials.extend(self.withheld.iter().cloned());
-                let withheld = kassiber_credentials::credential_forms(credentials);
                 let detail = kassiber_credentials::withhold(
                     &String::from_utf8_lossy(&response.body),
                     &withheld,
@@ -417,6 +473,89 @@ pub fn withhold_credentials(text: &str, credentials: &[&str]) -> String {
     }
     text
 }
+/// Whether a successful exchange body carries a request credential of at
+/// least the exact-match length, as written or in its decoded JSON strings
+/// and keys. Shorter values are ordinary data and never match.
+fn echoes(body: &[u8], credentials: &[String]) -> bool {
+    let forms: Vec<String> = credentials
+        .iter()
+        .flat_map(|c| kassiber_credentials::exact_forms(c))
+        .collect();
+    let found = |text: &str| forms.iter().any(|form| text.contains(form.as_str()));
+    fn any(value: &kassiber_pyjson::Value, found: &dyn Fn(&str) -> bool) -> bool {
+        use kassiber_pyjson::{Key, Value as Py};
+        match value {
+            Py::Str(text) => found(&lossy(text)),
+            Py::List(items) => items.iter().any(|item| any(item, found)),
+            Py::Dict(items) => items.iter().any(|(key, item)| {
+                matches!(key, Key::Str(name) if found(&lossy(name))) || any(item, found)
+            }),
+            _ => false,
+        }
+    }
+    let text = String::from_utf8_lossy(body);
+    found(&text)
+        || (text.contains('\\')
+            && kassiber_pytext::loads(&text).is_ok_and(|parsed| any(&parsed, &found)))
+}
+fn lossy(text: &kassiber_pyjson::PyStr) -> String {
+    let points = text.code_points();
+    points
+        .map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))
+        .collect()
+}
+/// An exchange error body for display: a JSON body has every decoded
+/// string and key withheld (so an escape cannot hide a credential) and is
+/// written back only when something changed; any other body is withheld
+/// as text. A JSON body is then withheld as text too, for what its decoded
+/// strings do not show (a duplicate key's dropped value), with forms of at
+/// least [`TEXT_FORM_CHARS`] characters only: numbers stay, so an error code
+/// survives a short credential.
+fn scrub_error_body(body: &[u8], forms: &kassiber_credentials::Forms) -> Vec<u8> {
+    fn walk(value: &mut kassiber_pyjson::Value, forms: &kassiber_credentials::Forms) -> bool {
+        use kassiber_pyjson::{Key, PyStr, Value as Py};
+        let clean = |text: &mut PyStr| {
+            let plain = lossy(text);
+            let withheld = kassiber_credentials::withhold(&plain, forms);
+            let changed = withheld != plain;
+            if changed {
+                *text = PyStr::from(withheld.as_str());
+            }
+            changed
+        };
+        match value {
+            Py::Str(text) => clean(text),
+            Py::List(items) => items
+                .iter_mut()
+                .fold(false, |c, item| walk(item, forms) | c),
+            Py::Dict(items) => items.iter_mut().fold(false, |c, (key, item)| {
+                let key = match key {
+                    Key::Str(name) => clean(name),
+                    _ => false,
+                };
+                walk(item, forms) | key | c
+            }),
+            _ => false,
+        }
+    }
+    let text = String::from_utf8_lossy(body);
+    if let Ok(mut parsed) = kassiber_pytext::loads(&text) {
+        let long = forms.at_least(TEXT_FORM_CHARS);
+        if !walk(&mut parsed, forms) {
+            let withheld = kassiber_credentials::withhold(&text, &long);
+            return match withheld == text {
+                true => body.to_vec(),
+                false => withheld.into_bytes(),
+            };
+        }
+        if let Ok(dumped) = kassiber_pyjson::dumps(&parsed, &Default::default()) {
+            return kassiber_credentials::withhold(&dumped, &long).into_bytes();
+        }
+    }
+    kassiber_credentials::withhold(&text, forms).into_bytes()
+}
+/// The shortest credential form a JSON error body is withheld of as text.
+const TEXT_FORM_CHARS: usize = 4;
 /// `str(UnicodeDecodeError)` for `bytes.decode("utf-8")`.
 pub fn utf8_error(bytes: &[u8], error: &std::str::Utf8Error) -> String {
     let at = error.valid_up_to();
@@ -595,4 +734,137 @@ fn host_limiter(url: &str) -> Result<Arc<Limiter>> {
         .entry(host)
         .or_default()
         .clone())
+}
+
+#[cfg(test)]
+mod exchange_tests {
+    use super::*;
+    use kassiber_net::test_support::{HandledProvider, HandledRequest};
+    use std::time::{Duration, Instant};
+
+    const KEY: &str = "synthetic-key-0123456789";
+    const SIGNATURE: &str = "0123456789abcdefsignature";
+
+    /// What a JSON error body's decoded strings do not show is withheld as
+    /// text too: a duplicate key's dropped value. Text-level forms are at
+    /// least four characters, so a numeric code survives a short credential.
+    #[test]
+    fn json_error_bodies_withhold_what_the_decoded_strings_drop() {
+        let forms = kassiber_credentials::credential_forms([KEY, "123"]);
+        let scrub =
+            |body: &str| String::from_utf8(scrub_error_body(body.as_bytes(), &forms)).unwrap();
+        let duplicate = format!(r#"{{"error": "{KEY}", "error": "denied", "code": 123}}"#);
+        assert_eq!(
+            scrub(&duplicate),
+            r#"{"error": "<redacted>", "error": "denied", "code": 123}"#
+        );
+        // Unchanged bodies keep their bytes; a short credential leaves the code.
+        let plain = r#"{"error":"denied","code":123}"#;
+        assert_eq!(scrub(plain), plain);
+    }
+
+    /// One exchange read carrying `KEY` and `SIGNATURE` headers from a
+    /// loopback server answering `status` with `body`.
+    fn read(
+        status: u16,
+        accepted: &'static [u16],
+        withheld: &[&str],
+        proxy: Option<&str>,
+        body: impl Fn(&HandledRequest) -> String + Send + 'static,
+    ) -> (HttpClient, Result<HttpResponse>) {
+        let server = HandledProvider::start(move |request| (status, body(request))).unwrap();
+        let mut config = json!({"name": "fixture", "url": server.base(), "timeout": 5});
+        if let Some(proxy) = proxy {
+            config["tor_proxy"] = json!(proxy);
+        }
+        let backend = Backend::new(&config, false).unwrap();
+        let consent = kassiber_net::Consent::explicit_trigger(backend.request());
+        let gate = Gate::new(
+            || kassiber_net::Offline::Online,
+            kassiber_net::Ledger::default(),
+        );
+        let client = HttpClient::new(backend, gate, "test").withholding(withheld);
+        let url = format!("{}/v2/x", server.base());
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let response = client.authenticated_response(
+            &url,
+            Some(&consent),
+            deadline,
+            "Fixture",
+            accepted,
+            || {
+                let request = HttpRequest::new("GET", &url).map_err(|e| e.app_error())?;
+                let request = request
+                    .header("Bitvavo-Access-Key", KEY)
+                    .map_err(|e| e.app_error())?;
+                request
+                    .header("Bitvavo-Access-Signature", SIGNATURE)
+                    .map_err(|e| e.app_error())
+            },
+        );
+        (client, response)
+    }
+
+    /// Accepted and raised error bodies withhold every request credential at
+    /// any length (the client's short `pw7` too), after JSON escapes are
+    /// decoded, so another hex case behind `\u0041` cannot pass. Numbers stay.
+    #[test]
+    fn exchange_error_bodies_withhold_every_request_credential_at_any_length() {
+        let echo = |request: &HandledRequest| {
+            let key = request.header("Bitvavo-Access-Key").unwrap();
+            let signature = request.header("Bitvavo-Access-Signature").unwrap();
+            format!(
+                r#"{{"errorCode":305,"error":"bad {key} {signature} pw7 \u0041BCDEF0123456789ABCDEF"}}"#
+            )
+        };
+        let withheld = ["pw7", "abcdef0123456789abcdef"];
+        let (_, accepted) = read(403, &[403], &withheld, None, echo);
+        assert_eq!(
+            String::from_utf8(accepted.unwrap().body).unwrap(),
+            r#"{"errorCode": 305, "error": "bad <redacted> <redacted> <redacted> <redacted>"}"#
+        );
+        let (_, raised) = read(500, &[], &withheld, None, echo);
+        let message = raised.err().unwrap().message;
+        assert!(
+            message.ends_with(r#"bad <redacted> <redacted> <redacted> <redacted>"}"#),
+            "{message}"
+        );
+        let (_, raised) = read(500, &[], &["pw7"], None, |_| "proxy says pw7".into());
+        assert!(raised
+            .err()
+            .unwrap()
+            .message
+            .ends_with("proxy says <redacted>"));
+    }
+
+    /// A successful body is data: it comes back byte for byte. An echoed
+    /// request credential (escaped too) is noted; short values never match.
+    #[test]
+    fn successful_exchange_bodies_are_kept_and_echoes_noted() {
+        let plain = r#"{"id":"DEADBEEF-1","amount":1,"a":"x"}"#;
+        let (client, response) = read(200, &[], &["1", "a", "deadbeef"], None, |_| plain.into());
+        assert_eq!(response.unwrap().body, plain.as_bytes());
+        assert!(!client.echoed());
+        // The signature's `s` behind a JSON escape: only decoding finds it.
+        let escaped = format!(
+            r#"{{"address":"{}"}}"#,
+            SIGNATURE.replacen('s', "\\u0073", 1)
+        );
+        let body = escaped.clone();
+        let (client, response) = read(200, &[], &[], None, move |_| body.clone());
+        assert_eq!(response.unwrap().body, escaped.as_bytes());
+        assert!(client.echoed());
+    }
+
+    /// Every credential an exchange request carried (here the proxy's short
+    /// password and the signature) is kept for error display, even when the
+    /// request then fails.
+    #[test]
+    fn exchange_reads_keep_every_request_credential_for_display() {
+        let proxy = "socks5h://proxyuser:pw@127.0.0.1:9";
+        let (client, _) = read(200, &[], &[], Some(proxy), |_| "{}".into());
+        let shown = client.display_credentials();
+        assert!(shown.iter().any(|c| c == "pw"), "{shown:?}");
+        assert!(shown.iter().any(|c| c == SIGNATURE), "{shown:?}");
+    }
 }

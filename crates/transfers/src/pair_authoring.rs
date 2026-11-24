@@ -295,12 +295,30 @@ pub(super) fn execute(
     sources: &dyn Sources,
 ) -> Result<Value> {
     atomic(c, || match operation {
-        "transfers.pair" => create(c, scope, args, sources),
+        "transfers.pair" => create(c, scope, args, sources, false),
         "transfers.update" => update(c, scope, args, sources),
         _ => delete(c, scope, args, sources),
     })
 }
-fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources) -> Result<Value> {
+/// Authors the pair an import found for a swap its provider reported as one
+/// trade: `pair_source` `provider`, which no caller of `transfers.pair` may
+/// set.
+pub(super) fn create_provider_swap(
+    c: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    sources: &dyn Sources,
+) -> Result<Value> {
+    atomic(c, || create(c, scope, args, sources, true))
+}
+
+fn create(
+    c: &Connection,
+    scope: &Scope<'_>,
+    args: &Value,
+    sources: &dyn Sources,
+    provider_swap: bool,
+) -> Result<Value> {
     let out = resolve(c, scope, &value(args, "tx_out"), "outbound")?;
     let inbound = resolve(c, scope, &value(args, "tx_in"), "inbound")?;
     let kind = present(args, "kind")
@@ -315,9 +333,9 @@ fn create(c: &Connection, scope: &Scope<'_>, args: &Value, sources: &dyn Sources
         .cloned()
         .unwrap_or_else(|| s("manual"));
     // `provider` is set only by an import pairing the two legs of a swap the
-    // provider reported as one trade (docs/plan/24-crypto-assets.md); it is
-    // not a user choice, so the choices users see stay as they were.
-    if source != s("provider") {
+    // provider reported as one trade (docs/plan/24-crypto-assets.md), through
+    // `pair_provider_swap`; it is not a user choice.
+    if !(provider_swap && source == s("provider")) {
         validate_choice(
             &source,
             "pair_source",

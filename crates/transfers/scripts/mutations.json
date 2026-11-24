@@ -772,8 +772,8 @@
   {
     "id": "pair-service-atomic",
     "file": "crates/transfers/src/pair_authoring.rs",
-    "find": "    atomic(c, || match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })",
-    "replace": "    (|| match operation {\n        \"transfers.pair\" => create(c, scope, args, sources),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })()",
+    "find": "    atomic(c, || match operation {\n        \"transfers.pair\" => create(c, scope, args, sources, false),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })",
+    "replace": "    (|| match operation {\n        \"transfers.pair\" => create(c, scope, args, sources, false),\n        \"transfers.update\" => update(c, scope, args, sources),\n        _ => delete(c, scope, args, sources),\n    })()",
     "expect_failing": [
       "pair_revisions_keep_immutability_triggers_and_outer_transaction_ownership",
       "pair_final_invalidation_refusals_are_atomic"

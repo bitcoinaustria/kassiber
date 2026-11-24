@@ -1,7 +1,7 @@
 use super::river::{abs, arithmetic, nonnegative, positive, repr, truth, zero};
 use super::*;
 pub mod template;
-mod xlsx;
+pub(in crate::file_import) mod xlsx;
 pub struct ColumnMap {
     pub(super) raw: Json,
     type_order: Vec<String>,

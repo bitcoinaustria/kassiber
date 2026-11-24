@@ -259,6 +259,33 @@ A later component can use the same label as `untracked_wallet` for its source
 leg and route the value into current wallets. Transaction-less owned legs must
 always name a wallet and an `occurred_at` timestamp.
 
+A transaction-less `retained` or `destination` leg is a stop on a route: the
+same component must carry its value on to an observed wallet, or journals hold
+the source (`custody_component_claim_compile`, "route ends without an observed
+or classified sink"). When the value stays in an owned wallet Kassiber does
+not track, mark the retained leg as reviewed retained custody with the note
+guided gap review writes for that classification. This works for any asset,
+so an exchange ETH withdrawal to the owner's own wallet (no ETH chain observer
+exists) is no disposal; only its fee is spent:
+
+```json
+{
+  "legs": [
+    {"role": "source", "transaction": "kraken:W1", "amount_msat": 50100000000},
+    {"role": "fee", "asset": "ETH", "occurred_at": "2025-03-01T10:00:00Z",
+     "amount_msat": 100000000},
+    {"role": "retained", "untracked_wallet": "My ETH wallet", "asset": "ETH",
+     "notes": "reviewed_residual:retained_custody",
+     "occurred_at": "2025-03-01T10:00:00Z", "amount_msat": 50000000000}
+  ]
+}
+```
+
+The source leg covers the complete debit (amount plus fee). The withdrawal
+still needs a price for its fee. The assistant authors the same component
+through `ui.transfers.components.plan` (or a review plan's
+`custody_component`) and the usual consented apply.
+
 ## N:M allocations
 
 For authored components, one-source fan-out and many-source consolidation are

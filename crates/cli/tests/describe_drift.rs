@@ -17,7 +17,18 @@ use kassiber_pyjson::{dumps, Options, Value};
 /// (`docs/reference/rust-shell.md#rust-only-commands`): every other byte
 /// must still be Python's.
 /// Each Rust-only leaf and the Python leaf it is described like.
-const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[("sync-bitpanda", "sync-binance")];
+const RUST_ONLY_SIBLINGS: &[(&str, &str)] = &[
+    ("sync-bitpanda", "sync-binance"),
+    ("import-binance-history", "import-river"),
+    ("sync-bitvavo", "sync-bitpanda"),
+    ("import-bitvavo", "import-strike"),
+    ("sync-bitstamp", "sync-bitvavo"),
+    ("import-bitstamp", "import-bitvavo"),
+    ("sync-bitfinex", "sync-bitstamp"),
+    ("import-bitfinex", "import-bitstamp"),
+    ("sync-bitcoinde", "sync-bitfinex"),
+    ("import-bitcoinde", "import-bitfinex"),
+];
 /// Rust-only leaves with a grammar of their own and the Python leaf they
 /// follow: Python has nothing to compare, so they describe themselves.
 const RUST_ONLY_OWN: &[(&str, &str)] = &[("import-bisq", "import-strike")];
@@ -68,6 +79,25 @@ fn python_catalog() -> Value {
             .position(|c| compact(c).contains(&format!("\"kind\":\"{after}\"")))
             .expect("preceding leaf");
         commands.insert(at + 1, kassiber_pytext::loads(entry).unwrap());
+    }
+    // `--changed-rows` is a Rust-only flag, the last argument of each leaf
+    // that takes it (docs/reference/imports.md#re-importing-a-newer-export).
+    let flag = kassiber_pytext::loads(&format!(
+        r#"{{"name":"changed_rows","flags":["--changed-rows"],"positional":false,"required":false,"repeatable":false,"choices":["skip","import"],"secret_input":false,"help":{}}}"#,
+        dumps(&Value::Str(kassiber_cli::spec::CHANGED_ROWS_HELP.into()), &Options::new()).unwrap()
+    ))
+    .unwrap();
+    for command in commands.iter_mut() {
+        let Some(Value::Str(kind)) = get(command, "kind").cloned() else {
+            continue;
+        };
+        if !kassiber_cli::spec::CHANGED_ROWS_LEAVES.contains(&kind.as_str().unwrap()) {
+            continue;
+        }
+        let Value::List(arguments) = field(command, "arguments") else {
+            panic!("arguments")
+        };
+        arguments.push(flag.clone());
     }
     // The Rust-only backend kinds are extra, sorted `--kind` choices.
     for command in commands.iter_mut() {

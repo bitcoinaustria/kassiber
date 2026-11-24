@@ -1,10 +1,13 @@
 //! Bitpanda's public API (`api.public.bitpanda.com`), Rust only: Python has
 //! no reference importer. Reads only: a key that can trade is refused, then
-//! BTC's asset id, the fiat currencies and every `/v1/operations` page are
-//! read and mapped. Bitpanda does not document its operation and transaction
-//! type values, so BTC legs are mapped by structure where structure decides
-//! and fail closed otherwise. docs/reference/bitpanda.md records the API, the
-//! mapping and every refusal.
+//! the asset list, the fiat currencies and every `/v1/operations` page are
+//! read and mapped. BTC is always imported; other crypto assets only in the
+//! wallet's `crypto` asset scope (docs/plan/24-crypto-assets.md), and
+//! securities, metals and indices never. Bitpanda does not document its
+//! operation and transaction type values, so legs are mapped by structure
+//! where structure decides and fail closed otherwise.
+//! docs/reference/bitpanda.md records the API, the mapping and every refusal.
+use super::assets::Class;
 use super::*;
 use std::collections::BTreeSet;
 
@@ -22,30 +25,60 @@ const NAMED: [&str; 5] = ["deposit", "withdrawal", "reward", "buy", "sell"];
 /// Bitpanda's BTC quantities must be whole msat.
 const BTC_DECIMALS: usize = 11;
 
-pub(super) struct Fetched {
-    pub records: Vec<Py>,
-    /// Operations left out on purpose, by reason; reported in the envelope.
-    pub skipped: Py,
-}
+pub(super) static EXCHANGE: Descriptor = Descriptor {
+    kind: "bitpanda",
+    provider: "Bitpanda",
+    reads: contract::Reads::AllAssets,
+    default_url: "https://api.public.bitpanda.com",
+    key_only: true,
+    fetch,
+    probe,
+    skipped: Some(&[
+        "fiat_only_operations",
+        "non_btc_operations",
+        "internal_btc_moves",
+    ]),
+    files: &[],
+    shared_ids: true,
+    same_second_tags: false,
+    after_insert: None,
+    before_insert: None,
+    after_sync: None,
+};
+/// What [`reported`] sums: each BTC wallet's balance after its latest BTC
+/// transaction.
+const BALANCE_SCOPE: &str = "wallets_balance_after_latest_transaction";
 
-pub(super) fn fetch(client: &Client<'_>) -> Result<Fetched, AppError> {
+fn fetch(client: &Client<'_>, mapper: &mut Mapper) -> Result<Option<Balance>, AppError> {
     refuse_trading_keys(client)?;
     let mut budget = Budget::default();
-    let btc = btc_asset(&pages(
-        client,
-        "/v1/assets",
-        &[("symbol", "BTC")],
-        &mut budget,
-    )?)?;
+    // Every listed asset, so other assets are named by their own ticker (and
+    // imported in crypto scope); BTC is the one crypto asset `BTC`.
+    let assets = pages(client, "/v1/assets", &[], &mut budget)?;
+    let btc = btc_asset(&assets)?;
+    let listed = listing(&assets);
     let currencies = currencies(&read(client, "/v1/currencies")?)?;
     let operations = pages(client, "/v1/operations", &[], &mut budget)?;
-    normalize(&operations, &btc, &currencies, &[client.key, client.secret])
+    let context = Context {
+        btc: &btc,
+        listed: &listed,
+        currencies: &currencies,
+        secrets: &[client.key, client.secret],
+        scope: mapper.scope(),
+    };
+    let msat = normalize(&operations, &context, mapper)?;
+    let as_of = utc_iso(now()?.as_secs() as f64)?;
+    Ok(Some(Balance {
+        msat,
+        as_of,
+        scope: BALANCE_SCOPE,
+    }))
 }
 
 /// The desktop key check: the write-scope refusal, then one read each with
 /// the two scopes the sync needs (`Trade (Read)` for currencies,
 /// `Transaction` for operations).
-pub(super) fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
+fn probe(client: &Client<'_>) -> Result<Option<bool>, AppError> {
     refuse_trading_keys(client)?;
     currencies(&read(client, "/v1/currencies")?)?;
     let page = read(client, "/v1/operations?page_size=1")?;
@@ -84,33 +117,39 @@ fn headers<'a>(client: &'a Client<'_>) -> [(&'static str, &'a str); 2] {
 fn read(client: &Client<'_>, path: &str) -> Result<Py, AppError> {
     let url = format!("{}{path}", client.base);
     let response = client.response(&url, &headers(client), REFUSED)?;
-    if REFUSED.contains(&response.status) {
-        return Err(refused(client, response.status, &response.body));
-    }
-    std::str::from_utf8(&response.body)
+    let payload = std::str::from_utf8(&response.body)
         .ok()
-        .and_then(|text| kassiber_pytext::loads(text).ok())
-        .ok_or_else(|| AppError::new("protocol_error", "Bitpanda response was not JSON"))
+        .and_then(|text| kassiber_pytext::loads(text).ok());
+    if REFUSED.contains(&response.status) {
+        return Err(refused(response.status, payload.unwrap_or(Py::Null)));
+    }
+    payload.ok_or_else(|| AppError::new("protocol_error", "Bitpanda response was not JSON"))
 }
 
+/// Error keys Kassiber reports by name. Bitpanda does not document its keys;
+/// these are the ones its 401/403 answers are known to use. Anything else is
+/// reported as unknown, never as Bitpanda's own string.
+const KNOWN_ERRORS: [&str; 7] = [
+    "expired_api_key",
+    "forbidden",
+    "insufficient_scope",
+    "invalid_api_key",
+    "missing_api_key",
+    "rate_limit_exceeded",
+    "unauthorized",
+];
+
 /// 401/403: the key is wrong, expired, IP-restricted or lacks a scope. The
-/// server's error code is kept, with any echoed credential withheld.
-fn refused(client: &Client<'_>, status: u16, body: &[u8]) -> AppError {
-    let code = std::str::from_utf8(body)
-        .ok()
-        .and_then(|text| kassiber_pytext::loads(text).ok())
-        .and_then(|payload| match get(&payload, "error") {
-            Some(error @ Py::Dict(_)) => match at(error, "code") {
-                Py::Str(code) => Some(lossy(code)),
-                _ => None,
-            },
-            _ => None,
-        })
-        .map(|code| {
-            let code = kassiber_chain::withhold_credentials(&code, &[client.key, client.secret]);
-            s(code.chars().take(100).collect::<String>())
-        })
-        .unwrap_or(Py::Null);
+/// server's `{"error": {"code": "..."}}` key is reported only as one of
+/// [`KNOWN_ERRORS`] or "unknown", never as Bitpanda's own string.
+fn refused(status: u16, payload: Py) -> AppError {
+    let code = match get(&payload, "error") {
+        Some(error @ Py::Dict(_)) => match at(error, "code") {
+            Py::Str(code) => known_code(&lossy(code), &KNOWN_ERRORS),
+            _ => s("unknown"),
+        },
+        _ => Py::Null,
+    };
     AppError::new(
         "auth_error",
         format!("Bitpanda refused the API key (HTTP {status})"),
@@ -250,6 +289,51 @@ pub(super) fn btc_asset(rows: &[Py]) -> Result<String, AppError> {
     }
 }
 
+/// How Bitpanda lists an asset.
+struct Listed {
+    /// The canonical ticker.
+    code: String,
+    /// Bitpanda types it as crypto (`type` crypto, or `group` cryptocoin or
+    /// stablecoin); anything else (stocks, ETFs, ETCs, metals, indices,
+    /// leveraged products) is never imported.
+    crypto: bool,
+    /// Another listed crypto asset has the same ticker: it cannot be imported
+    /// under that ticker without mixing two assets.
+    shared: bool,
+}
+
+/// `/v1/assets`: asset ids to how Bitpanda lists them.
+fn listing(rows: &[Py]) -> BTreeMap<String, Listed> {
+    let mut listed: BTreeMap<String, Listed> = BTreeMap::new();
+    for row in rows {
+        let Some(asset_id) = id(at(row, "id")) else {
+            continue;
+        };
+        let code = asset(at(row, "symbol"));
+        if code.is_empty() {
+            continue;
+        }
+        let crypto = folded(at(row, "type")) == "crypto"
+            || ["cryptocoin", "stablecoin"].contains(&folded(at(row, "group")).as_str());
+        listed.insert(
+            asset_id,
+            Listed {
+                code,
+                crypto,
+                shared: false,
+            },
+        );
+    }
+    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
+    for entry in listed.values().filter(|l| l.crypto) {
+        *seen.entry(entry.code.clone()).or_default() += 1;
+    }
+    for entry in listed.values_mut().filter(|l| l.crypto) {
+        entry.shared = seen[&entry.code] > 1;
+    }
+    listed
+}
+
 /// `/v1/currencies`: fiat currency ids to their codes.
 pub(super) fn currencies(payload: &Py) -> Result<BTreeMap<String, String>, AppError> {
     let Py::List(rows) = at(payload, "data") else {
@@ -270,33 +354,65 @@ pub(super) fn currencies(payload: &Py) -> Result<BTreeMap<String, String>, AppEr
 /// What one amount object holds.
 #[derive(Clone, PartialEq, Debug)]
 enum Holding {
-    Btc,
+    /// A listed asset: its ticker, and whether it is BTC, another crypto
+    /// asset or excluded (securities, metals, indices).
+    Asset(String, Class),
     /// A fiat currency code (empty when the id is not a listed currency).
     Fiat(String),
-    /// Any other asset: altcoins, BEST, metals, stocks, ETFs, indices.
-    Other,
+    /// An asset id Bitpanda does not list (a delisted asset, say).
+    Unlisted(String),
     Unknown,
 }
+impl Holding {
+    fn is_btc(&self) -> bool {
+        matches!(self, Holding::Asset(_, Class::Bitcoin))
+    }
+    /// The ticker (or unlisted id) of an asset holding.
+    fn code(&self) -> &str {
+        match self {
+            Holding::Asset(code, _) | Holding::Unlisted(code) | Holding::Fiat(code) => code,
+            Holding::Unknown => "an unknown asset",
+        }
+    }
+}
 
-struct Scope<'a> {
+pub(super) struct Context<'a> {
     btc: &'a str,
+    listed: &'a BTreeMap<String, Listed>,
     currencies: &'a BTreeMap<String, String>,
     secrets: &'a [&'a str],
+    /// The wallet's asset scope: whether other crypto assets are imported.
+    scope: assets::Scope,
 }
-impl Scope<'_> {
+impl Context<'_> {
+    fn asset(&self, asset: &str) -> Holding {
+        if asset == self.btc {
+            return Holding::Asset("BTC".into(), Class::Bitcoin);
+        }
+        match self.listed.get(asset) {
+            Some(listed) if listed.crypto => Holding::Asset(listed.code.clone(), Class::Crypto),
+            Some(listed) => Holding::Asset(listed.code.clone(), Class::Excluded),
+            None => Holding::Unlisted(asset.into()),
+        }
+    }
     fn holding(&self, amount: &Py) -> Holding {
         if let Some(asset) = id(at(amount, "asset_id")) {
-            return if asset == self.btc {
-                Holding::Btc
-            } else {
-                Holding::Other
-            };
+            return self.asset(&asset);
         }
         match id(at(amount, "currency_id")) {
             Some(currency) => {
                 Holding::Fiat(self.currencies.get(&currency).cloned().unwrap_or_default())
             }
             None => Holding::Unknown,
+        }
+    }
+    /// Whether the wallet imports this holding: BTC always, another crypto
+    /// asset in `crypto` scope.
+    fn admitted(&self, holding: &Holding) -> bool {
+        match holding {
+            Holding::Asset(_, Class::Bitcoin) => true,
+            Holding::Asset(_, Class::Crypto) => self.scope == assets::Scope::Crypto,
+            _ => false,
         }
     }
     /// Server text in an error, with any echoed credential withheld.
@@ -327,7 +443,7 @@ struct Leg<'a> {
 
 struct Refusal<'a> {
     operation: &'a PyStr,
-    context: &'a Scope<'a>,
+    context: &'a Context<'a>,
 }
 impl Refusal<'_> {
     fn because(&self, reason: impl std::fmt::Display, hint: &str) -> AppError {
@@ -403,10 +519,18 @@ fn leg<'a>(raw: &'a Py, refuse: &Refusal<'_>) -> Result<Leg<'a>, AppError> {
     }
     let amount = quantity(at(amount_object, "value"))
         .ok_or_else(|| refuse.malformed("an amount that is not a plain non-negative decimal"))?;
-    if holding == Holding::Btc
-        && (amount.is_zero() || fraction_digits(at(amount_object, "value")) > BTC_DECIMALS)
-    {
+    let finer = fraction_digits(at(amount_object, "value")) > BTC_DECIMALS;
+    if holding.is_btc() && (amount.is_zero() || finer) {
         return Err(refuse.malformed("a BTC amount that is zero or finer than a millisatoshi"));
+    }
+    if refuse.context.admitted(&holding) && (amount.is_zero() || finer) {
+        return Err(refuse.because(
+            format!(
+                "has a {} amount that is zero or finer than 11 decimal places",
+                holding.code()
+            ),
+            REVIEW,
+        ));
     }
     let inbound = match folded(at(raw, "flow")).as_str() {
         "incoming" => true,
@@ -448,20 +572,28 @@ fn leg<'a>(raw: &'a Py, refuse: &Refusal<'_>) -> Result<Leg<'a>, AppError> {
     })
 }
 
-/// Whether an operation touches BTC anywhere: a leg, its own asset or a fee.
-fn touches_btc(transactions: &[Py], btc: &str) -> bool {
-    transactions.iter().any(|tx| {
-        [
+/// The assets an operation names anywhere: a leg, its own asset or a fee.
+fn named_assets(transactions: &[Py], context: &Context<'_>) -> Vec<Holding> {
+    let mut named = vec![];
+    for tx in transactions {
+        for value in [
             at(tx, "asset_id"),
             at(at(tx, "asset_amount"), "asset_id"),
             at(at(tx, "fee_amount"), "asset_id"),
-        ]
-        .into_iter()
-        .any(|value| id(value).as_deref() == Some(btc))
-    })
+        ] {
+            if let Some(asset) = id(value) {
+                let holding = context.asset(&asset);
+                if !named.contains(&holding) {
+                    named.push(holding);
+                }
+            }
+        }
+    }
+    named
 }
 
-/// Every BTC leg's time, balance after and id, by Bitpanda wallet.
+/// Every imported leg's time, balance after and id, by Bitpanda wallet (each
+/// Bitpanda wallet holds one asset).
 type Ledger = BTreeMap<String, Vec<(i64, Option<Decimal>, PyStr)>>;
 
 /// A BTC-touching operation, read and checked as a whole.
@@ -471,17 +603,13 @@ struct Operation<'a> {
     legs: Vec<Leg<'a>>,
 }
 
+/// Every operation to its events, and Bitpanda's BTC balance as the history
+/// states it (or why it is unknown).
 pub(super) fn normalize(
     operations: &[Py],
-    btc: &str,
-    currencies: &BTreeMap<String, String>,
-    secrets: &[&str],
-) -> Result<Fetched, AppError> {
-    let context = Scope {
-        btc,
-        currencies,
-        secrets,
-    };
+    context: &Context<'_>,
+    mapper: &mut Mapper,
+) -> Result<Result<i64, &'static str>, AppError> {
     // A page boundary may repeat an operation; a repeat must be identical.
     let mut unique: Vec<(&PyStr, &Py)> = vec![];
     for operation in operations {
@@ -508,27 +636,69 @@ pub(super) fn normalize(
             None => unique.push((id, operation)),
         }
     }
-    let (mut fiat_only, mut other, mut internal) = (0i64, 0i64, 0i64);
     let mut relevant = vec![];
     for (id, operation) in unique {
         let refuse = Refusal {
             operation: id,
-            context: &context,
+            context,
         };
         let Py::List(transactions) = at(operation, "transactions") else {
             return Err(refuse.malformed("no transaction list"));
         };
-        if !touches_btc(transactions, btc) {
-            let fiat = !transactions.is_empty()
-                && transactions
-                    .iter()
-                    .all(|tx| matches!(context.holding(at(tx, "asset_amount")), Holding::Fiat(_)));
-            if fiat {
-                fiat_only += 1;
-            } else {
-                other += 1;
+        let named = named_assets(transactions, context);
+        // An asset Bitpanda no longer lists cannot be named or classified;
+        // in crypto scope it may be crypto the user held, so an operation
+        // only in such assets is refused rather than left out unseen.
+        let unlisted = named.iter().find_map(|holding| match holding {
+            Holding::Unlisted(asset) => Some(asset),
+            _ => None,
+        });
+        if let (Some(asset), assets::Scope::Crypto) = (unlisted, context.scope) {
+            if !named.iter().any(|holding| context.admitted(holding)) {
+                return Err(refuse.because(
+                    format!(
+                        "names asset '{}', which Bitpanda does not list",
+                        context.shown(&s(asset.as_str()))
+                    ),
+                    REVIEW,
+                ));
+            }
+        }
+        let classed: Vec<(&str, Class)> = named
+            .iter()
+            .filter_map(|holding| match holding {
+                Holding::Asset(code, class) => Some((code.as_str(), *class)),
+                Holding::Unlisted(asset) => Some((asset.as_str(), Class::Crypto)),
+                _ => None,
+            })
+            .collect();
+        if !mapper.admit_classed(&classed) {
+            if classed.is_empty() {
+                // Only fiat, or nothing Bitpanda names by asset.
+                let fiat = !transactions.is_empty()
+                    && transactions.iter().all(|tx| {
+                        matches!(context.holding(at(tx, "asset_amount")), Holding::Fiat(_))
+                    });
+                mapper.leave(fiat);
             }
             continue;
+        }
+        if let Some(shared) = named.iter().find_map(|holding| match holding {
+            Holding::Asset(code, Class::Crypto)
+                if context.admitted(holding)
+                    && context
+                        .listed
+                        .values()
+                        .any(|l| l.crypto && l.shared && &l.code == code) =>
+            {
+                Some(code)
+            }
+            _ => None,
+        }) {
+            return Err(refuse.because(
+                format!("trades {shared}, a ticker several Bitpanda assets share"),
+                REVIEW,
+            ));
         }
         let legs = transactions
             .iter()
@@ -540,10 +710,14 @@ pub(super) fn normalize(
             legs,
         });
     }
-    // Every BTC leg per wallet, oldest first, for withdrawal fee checks.
+    // Every imported leg per wallet, for withdrawal fee checks.
     let mut ledger = Ledger::new();
     for operation in &relevant {
-        for leg in operation.legs.iter().filter(|l| l.holding == Holding::Btc) {
+        for leg in operation
+            .legs
+            .iter()
+            .filter(|l| context.admitted(&l.holding))
+        {
             if let Some(wallet) = &leg.wallet {
                 ledger.entry(wallet.clone()).or_default().push((
                     leg.occurred,
@@ -553,41 +727,111 @@ pub(super) fn normalize(
             }
         }
     }
-    let mut records = vec![];
     for operation in &relevant {
-        match classify(operation, &context, &ledger)? {
-            Some(record) => records.push(record),
-            None => internal += 1,
+        let events = classify(operation, context, &ledger)?;
+        if events.is_empty() {
+            mapper.internal();
+        }
+        for event in events {
+            mapper.push(event)?;
         }
     }
-    Ok(Fetched {
-        records,
-        skipped: dict([
-            ("fiat_only_operations", Py::from(fiat_only)),
-            ("non_btc_operations", Py::from(other)),
-            ("internal_btc_moves", Py::from(internal)),
-        ]),
-    })
+    Ok(reported(&relevant, context.btc))
 }
 
-const REVIEW: &str = "Kassiber imports only plain BTC buys, sells, deposits, withdrawals and rewards from Bitpanda; record this operation yourself (generic ledger import) after checking it in Bitpanda.";
+/// Bitpanda's BTC balance: over its BTC wallets, the `asset_balance_after`
+/// of each wallet's latest BTC transaction. The whole history was read, so
+/// that is the current balance; it is unknown, never guessed, when a leg
+/// names no wallet, a latest leg lacks a whole-msat BTC balance, or two legs
+/// at a wallet's latest time disagree.
+fn reported(relevant: &[Operation<'_>], btc: &str) -> Result<i64, &'static str> {
+    let mut latest: BTreeMap<&str, (i64, Vec<&Leg<'_>>)> = BTreeMap::new();
+    let legs = relevant
+        .iter()
+        .flat_map(|operation| &operation.legs)
+        .filter(|leg| leg.holding.is_btc());
+    for leg in legs {
+        let Some(wallet) = leg.wallet.as_deref() else {
+            return Err("a BTC transaction names no Bitpanda wallet");
+        };
+        let entry = latest.entry(wallet).or_insert((leg.occurred, vec![]));
+        if leg.occurred > entry.0 {
+            *entry = (leg.occurred, vec![leg]);
+        } else if leg.occurred == entry.0 {
+            entry.1.push(leg);
+        }
+    }
+    if latest.is_empty() {
+        return Err("Bitpanda listed no BTC transactions");
+    }
+    // A BTC fee on another asset's operation moves BTC without a BTC
+    // transaction; at or after a wallet's latest BTC transaction no reported
+    // balance is known to include it.
+    let covered = latest.values().map(|(at, _)| *at).min().unwrap_or(i64::MIN);
+    let uncovered = relevant
+        .iter()
+        .flat_map(|operation| &operation.legs)
+        .any(|leg| {
+            !leg.holding.is_btc()
+                && leg
+                    .fee
+                    .as_ref()
+                    .is_some_and(|(holding, _)| holding.is_btc())
+                && leg.occurred >= covered
+        });
+    if uncovered {
+        return Err("a BTC fee after a BTC wallet's latest transaction is in no reported balance");
+    }
+    let mut total = 0i64;
+    for (_, legs) in latest.values() {
+        let mut balance: Option<&Decimal> = None;
+        for leg in legs {
+            let raw = at(leg.raw, "asset_balance_after");
+            let whole = fraction_digits(at(raw, "value")) <= BTC_DECIMALS;
+            let foreign = id(at(raw, "asset_id")).is_some_and(|asset| asset != btc)
+                || id(at(raw, "currency_id")).is_some();
+            let (Some(value), true, false) = (&leg.balance_after, whole, foreign) else {
+                return Err("a BTC wallet's latest transaction has no whole-msat BTC balance");
+            };
+            match balance {
+                Some(seen) if seen != value => {
+                    return Err("a BTC wallet's latest transactions show different balances")
+                }
+                _ => balance = Some(value),
+            }
+        }
+        let msat = balance.map(crate::file_import::msat);
+        let Some(Ok(msat)) = msat else {
+            return Err("a BTC wallet's latest transaction has no whole-msat BTC balance");
+        };
+        let Some(sum) = total.checked_add(msat) else {
+            return Err("Bitpanda's BTC balances overflow");
+        };
+        total = sum;
+    }
+    Ok(total)
+}
 
-/// One BTC-touching operation to its record, `None` for an internal move.
+const REVIEW: &str = "Kassiber imports plain buys, sells, swaps, deposits, withdrawals and rewards from Bitpanda; record this operation yourself (generic CSV/JSON import) after checking it in Bitpanda.";
+const SCOPE: &str = "This operation involves another crypto asset. To import it, set the wallet's asset_scope to crypto (kassiber wallets update --wallet <wallet> --config '{\"asset_scope\": \"crypto\"}') and sync again.";
+
+/// One operation that touches an imported asset to its records: none for a
+/// move between the user's own Bitpanda wallets.
 fn classify(
     operation: &Operation<'_>,
-    context: &Scope<'_>,
+    context: &Context<'_>,
     ledger: &Ledger,
-) -> Result<Option<Py>, AppError> {
+) -> Result<Vec<Event>, AppError> {
     let refuse = Refusal {
         operation: operation.id,
         context,
     };
     let kind = folded(operation.kind);
     let shown_kind = context.shown(operation.kind);
-    let btc: Vec<&Leg> = operation
+    let held: Vec<&Leg> = operation
         .legs
         .iter()
-        .filter(|l| l.holding == Holding::Btc)
+        .filter(|l| context.admitted(&l.holding))
         .collect();
     let fiat: Vec<&Leg> = operation
         .legs
@@ -600,9 +844,37 @@ fn classify(
     }) {
         return Err(refuse.because("reverses an earlier transaction", REVIEW));
     }
-    if btc.is_empty() || btc.len() + fiat.len() != operation.legs.len() {
+    if let Some(other) = operation
+        .legs
+        .iter()
+        .find(|l| !context.admitted(&l.holding) && !matches!(l.holding, Holding::Fiat(_)))
+    {
+        let code = other.holding.code();
+        let hint = match other.holding {
+            Holding::Asset(_, Class::Crypto) => SCOPE,
+            _ => REVIEW,
+        };
         return Err(refuse.because(
-            format!("(type '{shown_kind}') involves BTC only as a fee or alongside another asset"),
+            format!("(type '{shown_kind}') involves {code} alongside another asset"),
+            hint,
+        ));
+    }
+    if held.is_empty() {
+        let code = named_assets(
+            &operation
+                .legs
+                .iter()
+                .map(|l| l.raw.clone())
+                .collect::<Vec<_>>(),
+            context,
+        )
+        .into_iter()
+        .find(|holding| context.admitted(holding))
+        .map_or_else(|| "BTC".to_owned(), |holding| holding.code().to_owned());
+        return Err(refuse.because(
+            format!(
+                "(type '{shown_kind}') involves {code} only as a fee or alongside another asset"
+            ),
             REVIEW,
         ));
     }
@@ -619,33 +891,56 @@ fn classify(
             ));
         }
     }
-    if btc.iter().any(|l| l.trade.is_some()) {
-        return trade(operation, &refuse, &btc, &fiat, &kind, &shown_kind).map(Some);
+    if held.iter().any(|l| l.trade.is_some()) {
+        if MOVEMENTS.contains(&kind.as_str()) {
+            return Err(refuse.because(
+                format!("has type '{shown_kind}' but carries trade details"),
+                REVIEW,
+            ));
+        }
+        return match (held.as_slice(), fiat.as_slice()) {
+            ([leg], [cash]) => trade(operation, context, &refuse, leg, cash),
+            ([a, b], []) if a.holding != b.holding => swap(operation, context, &refuse, [a, b]),
+            _ => {
+                let code = held[0].holding.code();
+                Err(refuse.because(
+                    format!("(type '{shown_kind}') is not one {code} leg against one cash leg or one leg of another asset"),
+                    REVIEW,
+                ))
+            }
+        };
     }
     if !fiat.is_empty() {
+        let code = held[0].holding.code();
         return Err(refuse.because(
-            format!("(type '{shown_kind}') moves BTC and cash without trade details"),
+            format!("(type '{shown_kind}') moves {code} and cash without trade details"),
             REVIEW,
         ));
     }
-    if btc.len() > 1 {
+    if held.len() > 1 {
         // Both sides of a move between the user's own Bitpanda wallets: the
-        // account's BTC does not change.
+        // account's holding does not change.
+        let code = held[0].holding.code();
         let total = |inbound: bool| {
-            btc.iter()
+            held.iter()
                 .filter(|l| l.inbound == inbound)
                 .try_fold(Decimal::zero(), |sum, l| sum.add(&l.amount, &CTX))
                 .map_err(decimal_error)
         };
-        if btc.iter().all(|l| l.fee.is_none()) && total(true)? == total(false)? {
-            return Ok(None);
+        if held
+            .iter()
+            .all(|l| l.holding == held[0].holding && l.fee.is_none())
+            && total(true)? == total(false)?
+        {
+            return Ok(vec![]);
         }
         return Err(refuse.because(
-            format!("(type '{shown_kind}') has several BTC transactions that do not balance"),
+            format!("(type '{shown_kind}') has several {code} transactions that do not balance"),
             REVIEW,
         ));
     }
-    let leg = btc[0];
+    let leg = held[0];
+    let code = leg.holding.code().to_owned();
     let (inbound, record_kind) = match kind.as_str() {
         "deposit" => (true, "deposit"),
         "withdrawal" => (false, "withdrawal"),
@@ -668,7 +963,9 @@ fn classify(
     }
     let (amount, fee) = match &leg.fee {
         None => (leg.amount.clone(), Decimal::zero()),
-        Some((Holding::Btc, fee)) if !inbound => withdrawal_fee(leg, fee, ledger, &refuse)?,
+        Some((holding, fee)) if !inbound && *holding == leg.holding => {
+            withdrawal_fee(leg, fee, ledger, &refuse)?
+        }
         Some(_) => {
             return Err(refuse.because(
                 format!("(type '{shown_kind}') charges a fee Kassiber cannot place"),
@@ -676,52 +973,98 @@ fn classify(
             ))
         }
     };
-    record(Entry {
-        provider: "Bitpanda",
-        external_id: concat(&["bitpanda:".into(), leg.id.clone()]),
+    let description = match record_kind {
+        "income" => "reward",
+        "deposit" => "deposit",
+        _ => "withdrawal",
+    };
+    let external_id = concat(&["bitpanda:".into(), leg.id.clone()]);
+    let kind = Kind::Movement(record_kind);
+    Ok(vec![Event {
         occurred_at: Some(occurred_at(leg.occurred)?),
-        inbound,
-        asset: "BTC".into(),
-        amount: PriceNumber::Finite(amount),
         fee: PriceNumber::Finite(fee),
-        kind: record_kind,
         raw: evidence(operation, leg, None),
-        description: Some(
-            match record_kind {
-                "income" => "Bitpanda reward",
-                "deposit" => "Bitpanda deposit",
-                _ => "Bitpanda withdrawal",
-            }
-            .into(),
-        ),
-        pricing: None,
-    })
-    .map(Some)
+        description: Some(if leg.holding.is_btc() {
+            format!("Bitpanda {description}").into()
+        } else {
+            format!("Bitpanda {code} {description}").into()
+        }),
+        ..Event::one(
+            external_id,
+            kind,
+            inbound,
+            code,
+            PriceNumber::Finite(amount),
+        )
+    }])
 }
 
-/// A BTC buy or sell: one BTC leg with trade details against one cash leg
+/// The trade's reference: its trade id, else the operation id.
+fn reference(operation: &Operation<'_>, leg: &Leg<'_>) -> PyStr {
+    match leg.trade.map(|trade| at(trade, "trade_id")) {
+        Some(Py::Str(id)) if id.code_points().next().is_some() => id.clone(),
+        _ => operation.id.clone(),
+    }
+}
+
+/// A fee in a third crypto asset (BEST, say): a separate outflow that cannot
+/// be part of either leg, so it is its own `fee` row, unpriced. A fee in the
+/// leg's own asset or in cash leaves it unknown whether the leg includes it.
+fn fees(
+    operation: &Operation<'_>,
+    context: &Context<'_>,
+    refuse: &Refusal<'_>,
+    legs: &[&Leg<'_>],
+) -> Result<Vec<Event>, AppError> {
+    let mut rows = vec![];
+    for leg in legs {
+        let Some((holding, fee)) = &leg.fee else {
+            continue;
+        };
+        let third = context.admitted(holding) && legs.iter().all(|other| other.holding != *holding);
+        if !third {
+            return Err(refuse.because(
+                "charges a separate fee; Kassiber cannot tell whether the cash amount includes it",
+                REVIEW,
+            ));
+        }
+        // A BTC fee must be whole msat: the record builder's exactness check
+        // skips Bitcoin, and the coordinator would round it.
+        if holding.is_btc() && crate::file_import::assets::exact_units("BTC", "fee", fee).is_err() {
+            return Err(refuse.because(
+                format!("charges a BTC fee of {fee}, finer than 1 msat"),
+                REVIEW,
+            ));
+        }
+        let external_id = concat(&["bitpanda:".into(), leg.id.clone(), ":fee".into()]);
+        let quantity = PriceNumber::Finite(fee.clone());
+        rows.push(Event {
+            occurred_at: Some(occurred_at(leg.occurred)?),
+            raw: evidence(operation, leg, None),
+            description: Some(format!("Bitpanda fee in {}", holding.code()).into()),
+            ..Event::one(
+                external_id,
+                Kind::Fee,
+                false,
+                holding.code().to_owned(),
+                quantity,
+            )
+        });
+    }
+    Ok(rows)
+}
+
+/// A buy or sell: one asset leg with trade details against one cash leg
 /// flowing the other way. The cash leg is what the user paid or received,
-/// so it is the exact execution value; a fee on either leg is ambiguous.
+/// so it is the exact execution value.
 fn trade(
     operation: &Operation<'_>,
+    context: &Context<'_>,
     refuse: &Refusal<'_>,
-    btc: &[&Leg],
-    fiat: &[&Leg],
-    kind: &str,
-    shown_kind: &str,
-) -> Result<Py, AppError> {
-    let ([leg], [cash]) = (btc, fiat) else {
-        return Err(refuse.because(
-            format!("(type '{shown_kind}') is not one BTC leg against one cash leg"),
-            REVIEW,
-        ));
-    };
-    if MOVEMENTS.contains(&kind) {
-        return Err(refuse.because(
-            format!("has type '{shown_kind}' but carries trade details"),
-            REVIEW,
-        ));
-    }
+    leg: &Leg<'_>,
+    cash: &Leg<'_>,
+) -> Result<Vec<Event>, AppError> {
+    let code = leg.holding.code().to_owned();
     let Holding::Fiat(currency) = &cash.holding else {
         unreachable!("cash leg")
     };
@@ -729,42 +1072,80 @@ fn trade(
         return Err(refuse.because("is quoted in a currency Kassiber does not price", REVIEW));
     }
     if leg.inbound == cash.inbound {
-        return Err(refuse.because("moves BTC and cash the same way", REVIEW));
+        return Err(refuse.because(format!("moves {code} and cash the same way"), REVIEW));
     }
-    if leg.fee.is_some() || cash.fee.is_some() {
-        return Err(refuse.because(
-            "charges a separate fee; Kassiber cannot tell whether the cash amount includes it",
-            REVIEW,
-        ));
-    }
+    let mut rows = fees(operation, context, refuse, &[leg, cash])?;
     if cash.amount.is_zero() {
         return Err(refuse.because("has no cash value", REVIEW));
     }
-    let trade = leg.trade.expect("trade details");
-    let reference = match at(trade, "trade_id") {
-        Py::Str(id) if id.code_points().next().is_some() => id.clone(),
-        _ => operation.id.clone(),
-    };
-    let inbound = leg.inbound;
-    record(Entry {
-        provider: "Bitpanda",
-        external_id: concat(&["bitpanda:".into(), leg.id.clone()]),
-        occurred_at: Some(occurred_at(leg.occurred)?),
-        inbound,
-        asset: "BTC".into(),
-        amount: PriceNumber::Finite(leg.amount.clone()),
-        fee: PriceNumber::Finite(Decimal::zero()),
-        kind: if inbound { "buy" } else { "sell" },
-        raw: evidence(operation, leg, Some(cash)),
-        description: None,
-        pricing: Some(Pricing {
-            fiat_currency: currency.clone(),
-            fiat_value: PriceNumber::Finite(cash.amount.clone()),
-            fiat_rate: None,
-            method: "bitpanda_api",
-            external_ref: reference,
-        }),
-    })
+    let external_id = concat(&["bitpanda:".into(), leg.id.clone()]);
+    let amount = PriceNumber::Finite(leg.amount.clone());
+    rows.insert(
+        0,
+        Event {
+            occurred_at: Some(occurred_at(leg.occurred)?),
+            raw: evidence(operation, leg, Some(cash)),
+            pricing: Some(Pricing {
+                fiat_currency: currency.clone(),
+                fiat_value: PriceNumber::Finite(cash.amount.clone()),
+                fiat_rate: None,
+                method: "bitpanda_api",
+                external_ref: reference(operation, leg),
+            }),
+            ..Event::one(external_id, Kind::Trade, leg.inbound, code, amount)
+        },
+    );
+    Ok(rows)
+}
+
+/// A swap: two legs of different imported assets flowing opposite ways, one
+/// of them with trade details. Each leg is its own `swap` row sharing the
+/// trade's reference, so the import pairs them and the profile's country
+/// decides the tax treatment. Bitpanda states no exact fiat value for a
+/// swap, so both legs stay unpriced.
+fn swap(
+    operation: &Operation<'_>,
+    context: &Context<'_>,
+    refuse: &Refusal<'_>,
+    legs: [&Leg<'_>; 2],
+) -> Result<Vec<Event>, AppError> {
+    let [a, b] = legs;
+    if a.inbound == b.inbound {
+        return Err(refuse.because(
+            format!(
+                "moves {} and {} the same way",
+                a.holding.code(),
+                b.holding.code()
+            ),
+            REVIEW,
+        ));
+    }
+    let mut rows = fees(operation, context, refuse, &legs)?;
+    let traded = if a.trade.is_some() { a } else { b };
+    let reference = concat(&["bitpanda:".into(), reference(operation, traded)]);
+    let (out, into) = if a.inbound { (b, a) } else { (a, b) };
+    for leg in [out, into] {
+        let code = leg.holding.code().to_owned();
+        let external_id = concat(&["bitpanda:".into(), leg.id.clone()]);
+        let (kind, amount) = (
+            Kind::Swap(reference.clone()),
+            PriceNumber::Finite(leg.amount.clone()),
+        );
+        rows.push(Event {
+            occurred_at: Some(occurred_at(leg.occurred)?),
+            raw: evidence(operation, leg, None),
+            description: Some(
+                format!(
+                    "Bitpanda swap {} -> {}",
+                    out.holding.code(),
+                    into.holding.code()
+                )
+                .into(),
+            ),
+            ..Event::one(external_id, kind, leg.inbound, code, amount)
+        });
+    }
+    Ok(rows)
 }
 
 /// A withdrawal's BTC fee: whether `asset_amount` includes it is not

@@ -25,8 +25,13 @@ written.
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
 - Bisq 1 trade history and Funds > Transactions CSV exports (escrow ledger)
-- CoinTracking transaction CSV exports with complete history (Bitcoin rows)
-- Blockpit transaction CSV exports with filters cleared (Bitcoin rows)
+- Bitvavo transaction-history CSV exports and the Bitvavo read-only API sync
+- Bitfinex Reports trades, movements and ledgers CSV exports and the Bitfinex read-only API sync
+- Bitcoin.de BTC account statement CSV exports and the Bitcoin.de read-only API sync
+- CoinTracking transaction CSV exports with complete history (Bitcoin rows;
+  other crypto assets with the wallet's `asset_scope` set to `crypto`)
+- Blockpit transaction CSV exports with filters cleared (Bitcoin rows; other
+  crypto assets with `asset_scope` `crypto`)
 - prior tax-report files preserved as external evidence
 - bank statements (CAMT.053, bank CSV) preserved as source-of-funds evidence ([bank statements](bank-statements.md))
 - Samourai/Whirlpool descriptor and account-xpub source sets
@@ -45,6 +50,9 @@ Format references used by the dedicated importers:
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
 - Bisq 1 Portfolio > History and Funds > Transactions CSV exports, pinned from the source: <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/portfolio/closedtrades/ClosedTradesView.java> and <https://github.com/bisq-network/bisq/blob/7d6f5b089f2ef0e53d182805c74c3899f43f44ea/desktop/src/main/java/bisq/desktop/main/funds/transactions/TransactionsListItem.java> ([spec](../exchanges/bisq.md))
+- Bitvavo transaction-history CSV export (Transaction history → Export), layout pinned by public samples: <https://support.bitvavo.com/hc/en-us/articles/44936625205137-How-can-I-download-my-tax-report>; Bitvavo REST API: <https://docs.bitvavo.com/docs/rest-api/introduction/>
+- Bitfinex Reports CSV columns: `bfx-report` (<https://github.com/bitfinexcom/bfx-report>); API v2: <https://docs.bitfinex.com/docs/rest-auth>
+- Bitcoin.de BTC account statement CSV (mein Bitcoin.de → Kontoauszug), layout pinned by public samples; Trading API v4 as archived: <https://web.archive.org/web/20201202191159/https://www.bitcoin.de/de/api/tapi/v4/docu>
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
@@ -213,8 +221,30 @@ Generic wallet imports accept JSON arrays or CSV files with these fields:
 - `kind`
 - `description`
 - `counterparty`
+- `swap_ref` (optional): the reference both legs of one crypto-to-crypto swap
+  share; the import pairs the outgoing and the incoming leg with that
+  reference, so the profile's country decides the swap's tax treatment
+  ([plan 24](../plan/24-crypto-assets.md))
 
 `amount` should be positive. If you pass a negative amount, Kassiber normalizes it and infers direction when possible.
+
+A row without `txid`/`id` is identified by its date, direction, asset, amount
+and fee, plus its occurrence among identical rows of the file (River's
+reference-less rows the same way). The first occurrence keeps the identity
+earlier builds gave every copy, which merged identical rows into one; a
+re-import of such a file adds only the merged copies, never a second set. See
+[re-importing a newer export](#re-importing-a-newer-export).
+
+`asset` (default `BTC`) must be one the wallet holds
+([plan 24](../plan/24-crypto-assets.md)): `BTC`, `LBTC` or a 64-hex Liquid
+asset id in any wallet, another crypto ticker (`ETH`) only when the wallet's
+`asset_scope` is `crypto`. A fiat code (`EUR`), a Bitcoin unit (`SATS`) or a
+metal is never stored as a holding. The import refuses such a row, naming it
+(`csv row 3`) and, for another crypto asset, the command that sets the scope.
+A Bitcoin alias (`XBT`) is refused with a request to write `BTC`: earlier
+builds stored it as written, a separate asset.
+The same applies to BTCPay's `Currency`. A ticker cannot tell a coin from a
+stock (`AAPL`), so check what a `crypto`-scope generic file stores.
 
 If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
 the legacy numeric value and an exact decimal string plus pricing provenance.
@@ -264,14 +294,13 @@ overlap reconciliation. The provider CSV can stand alone when only the historica
 accounting record is available.
 
 The two CSV paths create ordinary rollback-capable import runs and preserve
-each original provider row in `transactions.raw_json` for audit. They are
-Bitcoin-scoped: BTC and L-BTC legs import, while unrelated
-asset-only rows are skipped. Straightforward trades, deposits, withdrawals,
-income, mining, staking, interest, gifts, fees, and losses map to Kassiber's
-existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
-events, collateral movements, and other labels whose tax meaning cannot be
-inferred safely fail closed. Review those rows and enter the resulting Bitcoin
-facts through the Generic ledger rather than relabeling them automatically.
+each original provider row in `transactions.raw_json` for audit.
+Straightforward trades, deposits, withdrawals, income, mining, staking,
+interest, gifts, fees, and losses map to Kassiber's existing transaction
+taxonomy. Complex loans, derivatives, liquidity-pool events, collateral
+movements, and other labels whose tax meaning cannot be inferred safely fail
+closed. Review those rows and enter the resulting facts through the Generic
+ledger rather than relabeling them automatically.
 Blockpit files built on the "Blockpit Excel" manual-import template, whose
 optional columns end in `(optional)`, import their fee, comment and
 transaction id the same way.
@@ -287,9 +316,69 @@ silently taxed as market sales.
 CoinTracking's non-taxable receipt variants import as acquisitions rather than
 income. Its non-taxable expense variant is retained as an outflow but goes to
 the existing non-sale-disposal review gate instead of being taxed as a sale.
-BTC/altcoin trades stop for explicit review: CoinTracking supplies account-
-currency values but not the currency code, so Kassiber will not guess that the
-source account currency matches the active profile's fiat currency.
+
+### Assets: Bitcoin by default, other crypto assets by choice
+
+Which rows import depends on the provider wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)). Both scopes report what they did in
+the result's `assets` field (`scope`, `skipped` and `excluded` rows by
+ticker, and with skipped assets a `next_step` naming the command that keeps
+them) and its `swap_pairs` count.
+
+- **`bitcoin`** (the default): BTC and L-BTC rows import as they always have.
+  Rows in other crypto assets are skipped and counted by ticker. A row that
+  trades BTC for another crypto asset, or pays a fee in a third asset, stops
+  the import. Its hint names
+  `kassiber wallets update --wallet W --config '{"asset_scope": "crypto"}'`,
+  which imports it.
+- **`crypto`**: every crypto asset imports, in the same 10^-11 unit as BTC.
+  Amounts finer than 11 decimals are refused, never rounded.
+  - Buys and sells against fiat carry the fiat leg as their exact execution
+    value, as for BTC. A fiat fee in the trade's currency is netted into that
+    value.
+  - Deposits, withdrawals, income, staking, mining, airdrops, forks, gifts
+    and losses import as for BTC, unpriced until priced in review.
+  - A crypto-to-crypto `Trade` becomes two unpriced `swap` legs (outbound
+    and inbound) that the import pairs with the policy the profile's country
+    recommends. Elsewhere the swap is taxable, and its legs wait in missing
+    price review. In Austria it is tax-neutral and carries the basis, but the
+    engine still needs both legs' prices. Until they are priced
+    (`journals quarantine resolve price-override`, or the desktop's price
+    review), `journals process` holds the pair as
+    `at_swap_basis_carry_unresolved` with `missing_spot_price`. The rate cache
+    prices only BTC.
+  - A fee in either leg's own asset stays on that leg, as a BTC fee does on a
+    BTC row. A fee in a third crypto asset becomes its own outbound `fee` row,
+    a fee-only spend (amount 0, the quantity as its fee) that the tax engine
+    books under the country's fee rule rather than as a sale.
+  - A fiat fee on a crypto-to-crypto trade is refused, because there is no
+    fiat leg for it to belong to.
+
+Neither export names the currency of its value columns. Blockpit's export
+has none. CoinTracking's transaction export and import template have only
+"Buy/Sell Value in Account Currency"; its Trade List view names the currency
+("Buy value in EUR"), but in a different column layout. So swaps stay
+unpriced rather than assuming the profile's currency.
+
+Tickers carry no asset type in these exports, so the `crypto` scope refuses
+what might not be a crypto asset, naming the row:
+- Bitcoin units such as SATS;
+- ISO 4217 currencies outside the supported fiat list, and metals such as XAU;
+- malformed tickers;
+- a two-asset row that is not a `Trade`.
+
+Re-imports deduplicate. Rows with a provider id (`Tx-ID`, `Trx. ID`) keep it
+as their external id. Blockpit fills that column with the exchange or chain
+id where it has one, otherwise with the user's own id. Rows without an id are
+identified by their date, asset, direction, amount and fee, plus their
+occurrence among identical rows. Neither format gives a swap an id that is
+certain to exist and be unique, so a swap's legs are identified the same way
+from the whole trade:
+`cointracking-swap:` or `blockpit-swap:`, then
+`<sha256 of its date, legs, fee and provider id>:<occurrence>` and `:out`,
+`:in` or `:fee`. Re-importing the same export, or turning the
+scope on and importing it again, adds only the rows that were not there and
+authors each swap's pair once.
 
 Command-line equivalents:
 
@@ -313,6 +402,41 @@ wallet kind, especially a descriptor wallet, so imported provider metadata can
 never overwrite the authoritative observation. A prior tax report is supporting
 evidence for the migration and later review, not a substitute for transaction
 history.
+
+### Choosing the assets before the first import
+
+`ui.wallets.import_preview` (`source_file`, `source_format`, `label?`;
+local, nothing stored) reads a provider file under both asset scopes before
+its wallet exists and answers `other_assets` (rows per crypto ticker the
+`bitcoin` scope would skip, the `assets.skipped` an import would report),
+`excluded` and `unread` (as an import reports them), `bitcoin_only` (with
+`bitcoin_only_error` when the `bitcoin` scope cannot import the file, such
+as a trade of BTC against another coin) and `choice` (whether there is
+anything to choose). Formats that keep no other crypto asset, and Bitfinex
+and Bitcoin.de, which read only BTC, offer no choice. When neither scope can
+read the file the preview returns the error the import would, before any
+wallet exists. A file the `crypto` scope cannot read names the reason in
+`crypto_error` (the other assets cannot be kept, so there is no choice).
+`ui.wallets.create` takes the answer as `asset_scope`. The preview's
+`preview_token` binds the book and the file's bytes: `ui.wallets.create` and
+`ui.wallets.import_file` with it refuse a file that changed since
+(`import_preview_stale`, nothing created or imported), so the answer always
+covers what is imported. On the command line, create the wallet with
+`--config '{"asset_scope": "crypto"}'` (or `wallets update` later).
+
+The desktop's **Add connection** asks before it creates a provider wallet
+whose file it imports right away and that holds other crypto assets, so the
+wallet is created with the chosen scope and the file is imported once:
+**Bitcoin and other crypto** (preselected) or **Bitcoin only**, naming the
+tickers and entry count and that stocks, ETFs and metals stay out either way
+(Bitcoin only is unavailable when the file trades Bitcoin against another
+coin). A file without other crypto assets asks nothing; one whose other assets
+the `crypto` scope cannot read says so with the reason before importing Bitcoin
+only. The answer stands even when the file is imported later (the box to import
+right away unticked). The import right after the create carries the preview's
+token: when the file changed after the check, the create asks again, and an
+import after the create refuses and says so. Existing wallets keep the import
+result's notice and its **Also track these assets** confirmation.
 
 ### Reconciliation with descriptor wallets
 
@@ -441,7 +565,7 @@ kassiber wallets import-ledger --workspace W --profile P --wallet WID --file led
 `ledger-template` does not need a database. The `.xlsx` template ships a
 `Transactions` sheet (with a `Type` dropdown) plus a `Legend` sheet; the `.csv`
 template is the header row with example rows. The importer reads `.xlsx` (via
-the `openpyxl` dependency) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
+the native Rust XLSX reader) and CSV/TSV (delimiter sniffed). Legacy binary `.xls`
 is not read — save as `.xlsx` or CSV first.
 
 The native Rust importer reads stored and DEFLATE-compressed XLSX members in
@@ -570,7 +694,7 @@ the AI-assisted path (below) is allowed to propose a plan at all.
 | `Fiat Value` | Fair-market value in the book currency. Use it for Income/Mining/Spend/Gift rows that have no cash leg. |
 | `Counterparty` | Optional. Exchange, merchant, or person. |
 | `Note` | Optional free text, stored as the transaction description. |
-| `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee), so two genuinely identical rows need a `Tx-ID` to be kept apart. |
+| `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee) and their occurrence among identical rows, so two identical rows stay two rows. Earlier builds merged them; re-importing such a file adds only the copies they merged. |
 
 Each row carries exactly **one Bitcoin leg** (`BTC`, `LBTC`, or `SATS`); the
 other side, when present, must use a supported fiat code such as EUR, USD or
@@ -826,6 +950,83 @@ none and order by their content.
 Deleting the whole connection (`wallets delete --cascade`, or the desktop
 connection's delete action) remains the blunt option when the wallet itself was
 a mistake.
+
+## Re-importing a newer export
+
+Importing the same file again, or a newer export that overlaps the old one,
+adds only the rows the book does not have: a row matches a stored row of the
+same wallet by its provider id (and direction, asset and amount), or, without
+an id, by its date, direction, asset, amount and fee. A matched row is never
+duplicated; the import may add a better price or fill an empty kind,
+description or counterparty, and counts it in `updated` (every format names
+`updated` when it is above zero; the list is always in `updated_records`).
+
+Two kinds of rows match nothing but look like a stored row. Kassiber does not
+guess which one the export means, so the import **refuses**, writes nothing,
+and names the count and the cause (`import_changed_rows`, with up to 20
+example rows in `details.rows`):
+
+- **Re-identified rows**: the same date, direction, asset, amount and fee as
+  a row an earlier run of the same file format stored in this wallet, under
+  another id. An optional id column that appeared or disappeared
+  (CoinTracking's `Tx-ID`, Coinfinity's `Order ID`, River's reference), or a
+  changed date format behind an ID-less row's synthetic id (Coinfinity,
+  Pocket, Ledger Live, Binance supplemental), re-identifies every row of an
+  export: "This export identifies 12 rows differently from the earlier
+  import". Only runs recorded as import batches count, so rows imported before
+  batches existed and API syncs (whose ids are the exchange's own) are not
+  compared this way. A date format that changes the instant (seconds
+  dropped, another time zone) cannot be recognized.
+- **Corrected rows**: the id, direction and asset of a stored row with
+  another amount or fee, from a file or an API sync: "1 row has the id of a
+  stored row with another amount or fee; first 'bitvavo:dep-btc': amount
+  0.005 in the book, 0.006 in the file". Earlier builds stored such a row as
+  a second transaction.
+
+A stored row answers for at most one row of the export, and a stored row the
+export matches exactly is not available to another; rows inserted by the same
+import never count. So a second payment under a shared transaction id, or a
+new fill of an order whose earlier fills all match, imports as before.
+
+Run the import again with the choice:
+
+- `--changed-rows skip`: the stored rows stay as they are and only the other
+  rows are imported. The skipped copies are not stored; the answer is
+  remembered for that stored row and that exact incoming row (wallet
+  `changed_rows_kept`, see [database compatibility](database-compatibility.md#remembered-re-import-answers)),
+  so the same export or the next API sync does not ask again and reports the
+  kept values in `corrections_ignored`. A new difference asks again, and so
+  does the same one after the import run that recorded the answer is rolled
+  back.
+- `--changed-rows import`: the rows are separate transactions (this also
+  overrides a remembered `skip`).
+
+Every identical copy of a row in the export gets the same answer.
+
+To take the export's values instead, roll back the earlier run
+([import runs](#import-runs-and-rolling-one-back)) and import the new file;
+for an exchange API sync, roll back the earlier sync and sync again (the
+refusal's hint names the CLI steps for each).
+`wallets sync` of a file wallet and the assistant's import have no choice to
+pass and keep refusing; import the file with the choice instead. The result
+of an import that met such rows has `changed_rows` (`action`, `reidentified`,
+`corrected`).
+
+The desktop shows the refusal in the Add connection dialog and on an
+exchange's Sync now card, with the counts and **Keep the book's rows**
+(`skip`) and **Import them as new transactions** (`import`); an answer applies
+only while the dialog still shows the source and wallet it was refused for, and
+changing them drops the question. A refused exchange sync also shows a short
+"Sync paused" note pointing to the card. Its import summary and sync toasts name
+the new rows, the rows already in the book, the updated rows and, in one line,
+the values the book kept.
+
+Values a matched row keeps where the import never overwrites them are
+reported, not dropped silently: `corrections_ignored` lists each
+(`transaction_id`, `external_id`, `field`, `stored`, `file`) for a fee an
+exchange price lets differ, a moved date or another kind under the same id,
+and the amount and fee of each corrected row the user chose to skip. Both
+keys appear only when there is something to report.
 
 ## Onboarding an unsupported exchange with the assistant
 
@@ -1346,6 +1547,10 @@ Behavior:
 - `Method`, `Source`, and `Destination` are preserved in the description/note
 - machine output includes inserted/updated transaction summaries so desktop
   imports can show what changed
+- rows without a `Transaction ID` are identified by their date, direction,
+  amount and fee and their occurrence among identical rows, so identical
+  reference-less rows stay separate rows (earlier builds merged them; a
+  re-import adds only the merged copies)
 
 You can also create a wallet whose source file is a River export:
 
@@ -1401,6 +1606,11 @@ Behavior:
 
 - Bitcoin/Liquid/Lightning -> fiat rows become outbound `sell` transactions
 - fiat -> Bitcoin/Liquid/Lightning rows become inbound `buy` transactions
+- Kassiber reads only BTC from Bull Bitcoin: an order in another crypto asset
+  (for example USDT) is left out and counted in the result's `assets.unread`
+  when the wallet's asset scope is `bitcoin`, and refused by the coin's name
+  when it is `crypto`; BTC paid with or for another crypto asset refuses the
+  import naming the CSV line, because it has no fiat price to keep
 - formatted amounts may include an `LBTC` suffix without losing decimal precision
 - payout/payin fiat amounts are stored as exact `exchange_execution` pricing
   from provider `Bull Bitcoin`
@@ -1653,6 +1863,9 @@ Behavior:
   present
 - relevant imports are match-existing-only and never create standalone
   transactions; full imports create excluded evidence rows
+- another crypto asset's orders follow the wallet's `asset_scope` (see
+  [Binance supplemental CSV](#binance-api-and-supplemental-csv)), and a row
+  whose `Type` is neither `buy` nor `sell` is refused, naming the row
 
 ## 21bitcoin
 
@@ -1833,8 +2046,13 @@ kassiber wallets import-ledger-live \
 ```
 
 You can also store `source_format="ledgerlive_csv"` on a wallet and use
-`wallets sync`. Non-BTC/LBTC assets are skipped. Unsupported Ledger operation
-types fail with `AppError` instead of being guessed.
+`wallets sync`. Other assets follow the wallet's `asset_scope` (see
+[Binance supplemental CSV](#binance-api-and-supplemental-csv)): counted in
+the `bitcoin` scope, deposits and withdrawals of that asset in the `crypto`
+scope. A send of another asset with a fee is refused, naming the row: the
+export does not say which asset pays it (a token's fee is paid in its
+chain's coin). Unsupported Ledger operation types fail with `AppError`
+instead of being guessed.
 
 ## DALI/RP2-Inspired Exchange Imports
 
@@ -1843,7 +2061,7 @@ depending on DALI at runtime. Exchange/order evidence stays separate from later
 self-custody wallet sync evidence.
 
 In the desktop (Rust backend), Add connection → Exchanges sets up Kraken,
-Coinbase, Binance and Bitpanda with a read-only key, a Test connection and
+Coinbase, Binance, Bitpanda, Bitvavo, Bitstamp, Bitfinex and Bitcoin.de with a read-only key, a Test connection and
 Sync now, storing the same backend and wallet the commands below do; see
 [exchange connections in the desktop](exchange-desktop.md).
 
@@ -1873,6 +2091,62 @@ quote fail safe. A trade row without `price` takes its cost / volume, which is
 what Kraken's price is; one without a cost stays unpriced, and `journals
 process` holds it as `missing_spot_price`.
 
+**Other crypto assets** follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)) as a filter over the same events
+([exchange contract](exchange-contract.md)): every sync reads the same two
+histories and groups the ledger into events (the rows of one `refid`
+together, every other row alone). An event that moves BTC or LBTC is mapped
+the same way in every scope; in the default `bitcoin` scope an event without
+Bitcoin is left out and counted per ticker in `assets.skipped`, with the
+`next_step` command that turns the scope on (`kassiber wallets update --wallet
+Kraken --config '{"asset_scope": "crypto"}'`), and in the `crypto` scope it is
+mapped too. `skipped` counts fiat-only entries, other-asset entries and
+internal moves.
+
+**Changed 2026-11-18:** a `bitcoin`-scope Kraken wallet now books BTC Buy
+Crypto (`spend`/`receive`) and BTC staking and earn rewards (`XBT.M`,
+`XBT.S`, ...) as the `crypto` scope always did; it used to refuse the former
+and leave the latter out. A BTC trade against another crypto asset is still
+refused there with the command that sets the `crypto` scope, and a fee row in
+a third asset (`KFEE`) is left out and counted, as before. The mapping:
+
+| Ledger rows | Imported as |
+| --- | --- |
+| `deposit`, `withdrawal` | wallet movement, unpriced, fee in the row's asset |
+| `trade` rows sharing a `refid`, one crypto leg | buy or sell priced from `TradesHistory`, exactly as for BTC; a crypto leg whose pair is not fiat-quoted is refused |
+| `trade` rows sharing a `refid`, two crypto legs (one out, one in) | `crypto` scope: two `swap` rows with `swap_ref` `kraken:<refid>`, paired by the import; unpriced, each with its own fee. `bitcoin` scope: a BTC leg against another crypto asset is refused |
+| `spend` + `receive` (Buy Crypto) sharing a `refid` | a buy valued at the fiat spent, or a sell valued at the fiat received net of its fee; two crypto legs are a swap |
+| a trade row with no amount and a fee in a third asset (`KFEE` fee credits) | `crypto` scope: its own outbound `fee` row in that asset; `bitcoin` scope: left out and counted, unless the fee is in BTC. The scope filters a trade by the assets it trades, never by such a fee row: another asset's trade with a BTC fee row books only that BTC `fee` row in the `bitcoin` scope, the same row the `crypto` scope books next to the trade |
+| `staking`, `earn` with subtype `reward` | `income`, unpriced until reviewed |
+| `transfer` (`spottostaking`, `stakingfromspot`, `stakingtospot`, `spotfromstaking`), `earn` (`allocation`, `deallocation`, `autoallocation`, `migration`) | skipped: moves between the user's own Kraken balances, counted in `skipped.internal_moves`; one that charges a fee is refused |
+| fiat rows outside a trade | skipped: fiat is not a holding |
+| `aclass` `tokenized_asset` (xStocks) | never imported, counted in `assets.excluded`; paid for with crypto, the trade is refused |
+
+The ledger grouped by `refid` is the base because it is Kraken's complete
+account history: every balance change, including staking, earn, Buy Crypto
+and fee credits, has a ledger row, while `TradesHistory` only covers order
+book trades. `TradesHistory` still prices a fiat-quoted trade, so a BTC trade
+gets the same row in both scopes and turning the scope on re-imports nothing
+that was already stored. A BTC row of a type the table does not map is refused
+with the reference's own message (`Kraken BTC ledger row ... has unsupported
+type ...`).
+
+Kraken's asset codes are mapped exactly: the legacy codes `XXBT`/`XBT`
+(BTC), `XXDG`/`XDG` (DOGE), `XETH`, `XETC`, `XLTC`, `XXLM`, `XXMR`, `XXRP`,
+`XZEC`, `XREP`, `XMLN`, `XICN`, `XNMC`, `XXVN`, `XDAO`, and the fiat codes
+`ZEUR`, `ZUSD`, `ZGBP`, `ZCAD`, `ZJPY`, `ZAUD`, `ZCHF`; any other code is its
+own ticker (`ZEUS` stays `ZEUS`). The balance suffixes `.S`, `.M`, `.F`,
+`.B`, `.P` and `.HOLD` name the same asset (`DOT.S` is DOT), and the bonded
+codes `ATOM21`, `DOT28`, `FLOW14`, `KAVA21`, `KSM07`, `SCRT21` and `SOL03`
+drop their bonding days. `ETH2` stays its own asset. A suffixed code whose
+last two characters are digits but is not in that list (bonding days or part
+of the ticker?), any other suffix, an asset class other than `currency` or
+`tokenized_asset`, a ledger type or subtype not listed above, a trade with
+more than two crypto legs, a swap that also moves fiat, a separate fee row
+in a traded asset, a reward that is not a positive credit, and an amount
+finer than 11 decimals are refused, naming the ledger row, and nothing is
+imported.
+
 ### Coinbase API
 
 Create a backend with `kind=coinbase`; store the API key in `token` and the
@@ -1890,11 +2164,27 @@ kassiber wallets sync-coinbase \
 BTC account `buy`, `sell`, `trade`, and `advanced_trade_fill` rows import as
 exact execution evidence when Coinbase supplies a usable fiat native amount;
 the unit rate is that amount over the BTC amount, positive for buys and sells.
-BTC sends/exchange transfers import as wallet movement without exact execution
-pricing. Unsupported BTC row types raise validation errors rather than guessing.
+BTC sends, receives and exchange transfers import as wallet movement without
+exact execution pricing. Unsupported row types raise validation errors rather
+than guessing.
 A send's `network` is an object (`hash`, `status`, and fee/link fields), not a
 network declaration, so the book-network check ignores it for Coinbase wallets
 and the row stays unscoped.
+
+Other crypto assets follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)) as a filter
+([exchange contract](exchange-contract.md)): every sync reads every crypto
+account named by `/v2/accounts` (fiat accounts never are). In the default
+`bitcoin` scope BTC rows are imported and every other crypto asset's rows are
+counted in the result's `assets.skipped`. With `asset_scope` `crypto`,
+trades against fiat import as priced buys and sells, crypto-to-crypto converts
+and crypto-quoted Advanced Trade fills as two paired `swap` legs (by
+`trade.id`, or by `order_id`), rewards as income, and a trade fee in a third
+crypto asset as its own `fee` row. [Coinbase](../exchanges/coinbase.md) lists
+the mapping and refusals.
+
+Coinbase expired the legacy API keys this sync signs with in February 2025;
+see [known gaps](../exchanges/coinbase.md#known-gaps).
 
 ### Bitpanda API
 
@@ -1912,11 +2202,100 @@ kassiber wallets sync-bitpanda --workspace W --profile P --backend bitpanda-main
 The importer reads Bitpanda's public API (`/v1/operations` and the asset and
 currency lookups) and imports BTC buys and sells (including savings plans)
 with the cash leg as exact `exchange_execution` pricing (`pricing_method =
-"bitpanda_api"`), BTC deposits, withdrawals and rewards. Fiat-only and
-non-BTC operations (altcoins, BEST, metals, stocks, ETFs) are skipped and
-counted; swaps, index trades, reversals, separate trade fees and unknown
-types fail safe. [Bitpanda](bitpanda.md) records the API, the full mapping
+"bitpanda_api"`), BTC deposits, withdrawals and rewards. With the wallet's
+`asset_scope` set to `crypto` ([plan 24](../plan/24-crypto-assets.md)) it
+imports the same for every other crypto asset, crypto swaps as two paired
+`swap` rows, and fees in a third asset (BEST) as `fee` rows. Fiat-only
+operations, other crypto in the default `bitcoin` scope, and metals, stocks
+and ETFs in any scope are skipped and counted by ticker in the result's
+`assets`; index trades, reversals, ambiguous fees and unknown types fail
+safe. The result's `provider_balance` compares Bitpanda's own BTC
+balance, read from the fetched history, with the wallet's book balance.
+[Bitpanda](bitpanda.md) records the API, the full mapping, the balance check
 and every refusal.
+
+### Bitvavo API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitvavo`, a
+View-only key in a `bitvavo` backend) and the transaction-history CSV
+(`wallets import-bitvavo`, active custodial ledger in `full` mode) land in
+one `bitvavo` wallet with one id per transaction, `bitvavo:<transaction id>`,
+so importing both in either order keeps one record each; the CSV covers
+history from before the key existed. Both follow the wallet's
+`asset_scope`: in `bitcoin` scope, transactions without BTC are skipped and
+counted by ticker in `assets`, and a BTC trade against another crypto asset
+or a Convert with BTC is refused naming the scope command; in `crypto` scope
+every crypto asset is kept, crypto-quoted trades and Converts as paired
+`swap` legs. Buys and sells for fiat get exact `exchange_execution` pricing;
+deposits, withdrawals, staking and affiliate rewards import unpriced;
+fiat-only transactions are skipped. Margin, loan and any type Kassiber does
+not map refuse the whole import by name. The sync reports the BTC spot
+balance as `reported_balance`.
+[Bitvavo](bitvavo.md) records the key setup, API, CSV layout, mapping and
+every refusal.
+
+### Bitstamp API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitstamp`, a key
+with only Account balance and User transactions in a `bitstamp` backend)
+and the RFC 4180 transaction CSV (`wallets import-bitstamp`, active
+custodial ledger in `full` mode) land in one `bitstamp` wallet with one id
+per transaction, `bitstamp:<id>`, so importing both in either order keeps one
+record each. Both follow the wallet's `asset_scope`: in `bitcoin` scope rows
+without BTC are skipped and counted by ticker in `assets`, and a BTC trade
+against another crypto asset is refused naming the scope command; in
+`crypto` scope every crypto asset is kept, trades between two of them as
+paired `swap` legs and a CSV fee in a third asset as a fee-only row. Buys
+and sells for fiat get exact `exchange_execution` pricing; deposits,
+withdrawals, transfers between Bitstamp accounts and referral rewards import
+unpriced. Staking, conversions, derivatives and any undocumented type of a
+kept asset refuse the whole import by name. The sync reports the account's
+BTC balance as `reported_balance`.
+[Bitstamp](bitstamp.md) records the key setup, API, CSV layout, mapping and
+every refusal.
+
+### Bitfinex API and Reports CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitfinex`, a key
+with only read permissions in a `bitfinex` backend; a key that can write is
+refused) and the Bitfinex Reports exports (`wallets import-bitfinex`, the
+Reports zip or one CSV, active custodial ledger in `full` mode) share one
+mapping and the ids `bitfinex:trade:<id>` and `bitfinex:movement:<id>`, so
+both in one wallet keep one record each. BTC spot trades against USD, EUR,
+GBP or JPY get exact `exchange_execution` pricing; completed BTC deposits
+and withdrawals import unpriced with the on-chain txid in `raw_json`, margin
+funding payments as `lending_interest`; transfers between the exchange and
+funding wallets are skipped when both legs pair. Every other BTC ledger
+entry must pair one-to-one with its trade, fee or movement; margin,
+derivatives, other funding entries, BTC against another coin, unknown ledger
+entries and anything ambiguous refuse the whole import by name. Kassiber
+reads only BTC from Bitfinex: in `bitcoin` scope both name the other assets
+they left out in `assets.unread` and `assets.next_step`; a wallet whose
+`asset_scope` is `crypto` is refused (the sync before any request, the import at the first
+row in another crypto asset). A
+withdrawal without ledger entries requested before the ledger's first entry
+keeps its movement fee, tagged `bitfinex-fee-unchecked`. Export with
+the `YYYY-MM-DD` date format in UTC, all three exports in one zip.
+[Bitfinex](bitfinex.md) records the key setup, API, CSV, mapping and every
+refusal.
+
+### Bitcoin.de API and CSV
+
+Rust backend only. The read-only API sync (`wallets sync-bitcoinde`, a key
+granted only showPermissions, showAccountLedger and showMyTrades in a
+`bitcoinde` backend; a key that can write is refused) and the BTC account
+statement CSV (`wallets import-bitcoinde`, `full` mode) share one mapping and
+land in one `bitcoinde` wallet. BTC/EUR trades get exact `exchange_execution`
+pricing at the euros that changed hands; deposits, payouts with their network
+fee and affiliate, kickback and welcome credits import unpriced. Bookings
+without a trade id are named by their second and running balance, which must
+chain from zero in one order; imports are append-only, and a stored trade's
+price never changes. Kassiber reads only BTC from Bitcoin.de: in `bitcoin`
+scope the CSV skips another coin's statement or row and names it in
+`assets.unread` and `assets.next_step`; a wallet whose `asset_scope` is `crypto` is refused (the
+sync before any request, the CSV naming the coin). Unmapped types and
+anything Kassiber cannot book exactly refuse the whole import by name. [Bitcoin.de](bitcoinde.md) records the key setup,
+API, CSV layout, mapping and every refusal.
 
 ### Binance API and Supplemental CSV
 
@@ -1932,11 +2311,47 @@ kassiber wallets sync-binance \
   --workspace W --profile P --backend binance-main
 ```
 
-The native API importer covers BTC fiat-payment buys, BTC deposits,
-withdrawals, and BTC income/dividend rows. Binance spot pair crawling,
-altcoin/BNB dust conversions, staking-lock principal bookkeeping, and mining
-subaccounts that require an extra username are intentionally deferred because
-they are either altcoin-heavy or need additional provider-specific controls.
+The API sync reads only BTC, in either asset scope: BTC card buys, BTC
+deposits, withdrawals and income/dividend rows, and BTC Convert orders against
+fiat. All reads are signed `GET`s, bounded by the shared page, row and
+one-hour limits:
+
+| Read | Window and paging | Imported as |
+| --- | --- | --- |
+| `/sapi/v1/fiat/payments` (`transactionType=0`) | July 2017 to now, pages of `rows=500` until the answer's `total` is read | completed BTC card buys, priced at the fiat paid; another coin's buy is counted in `assets.unread` |
+| `/sapi/v1/capital/deposit/hisrec?coin=BTC` | 89-day windows (Binance allows less than 90) from July 2017, each paged by `offset` with `limit=1000` | settled BTC deposits (status 1, or 6: credited) |
+| `/sapi/v1/capital/withdraw/history?coin=BTC` | as deposits, one read a little over six seconds apart (18,000 of the endpoint's 180,000 UID weight a minute) | completed BTC withdrawals (status 6), fee in BTC |
+| `/sapi/v1/asset/assetDividend?asset=BTC` | 179-day windows, `limit=500`; Binance has no cursor, so a window that comes back full, or whose `total` is more than it returned, is read again as two halves, down to one minute | `income` (or `mining` when Binance says so), unpriced |
+| `/sapi/v1/convert/tradeFlow` | 29-day windows, `limit=1000`, halved while `moreData` is true; one read a little over a second apart (3,000 of the account's 180,000 weight a minute) | `SUCCESS` orders between BTC and fiat: a buy or sell priced at the fiat side (Convert's price includes its fee); an order without BTC is counted in `assets.unread` |
+| `/api/v3/account` (last) | one request | the spot account's BTC, `free` plus `locked`, for `provider_balance` and `reported_balance` (`scope: "spot_free_plus_locked"`) |
+
+A sync therefore takes about six minutes, mostly pacing the withdrawal and
+Convert reads; a faster scan would run into HTTP 429 part way through. A window that is still full at one minute fails closed
+(`protocol_error`) rather than drop rows, and so does an answer without its
+paging field (`total` for card buys and dividends, `moreData` for Convert).
+Deposit and withdrawal statuses are read per direction from Binance's tables:
+a pending, rejected or unconfirmed deposit (0, 2, 7, 8) and a withdrawal that
+was not completed (0 to 5, including 1: cancelled) are left out, and a status
+Binance does not document refuses the sync, naming the transfer. The Python
+reference's words keep their reading where they name a settled transfer
+(`success`, `completed`, and `credited` for a deposit), and so does a row
+without a status. A Convert between BTC and another
+coin is refused in either scope, naming the order: the API never books the
+other coin, so the BTC leg alone would be a fiat-priced sale or purchase of a
+swap. Import the Transaction History CSV into a `crypto`-scope wallet instead.
+
+**Spot trades are not read.** Binance serves spot trade history only per
+market (`/api/v3/myTrades?symbol=BTCEUR`) and has no read that lists the
+markets an account traded; delisted markets disappear from its market list,
+so no read could prove the trades complete. Every sync says so in
+`assets.next_step` and names the Transaction History CSV export, Binance's
+complete ledger. The `provider_balance` check compares the spot balance with
+the book after the sync, so trades the API did not read show as a
+`mismatch`; the spot balance leaves out Funding and Earn wallets.
+
+Other coins are never imported from the API: a card buy or Convert order
+without BTC is counted per coin in `assets.unread`. The deposit and withdrawal
+reads name BTC, so other coins' transfers are not requested.
 
 Binance deposit and withdraw history rows name the coin's transfer rail in
 `network`. On a BTC row in a Binance wallet, `"BTC"` (exact case) is Bitcoin on
@@ -1946,11 +2361,76 @@ regtest book. Any other rail, such as `LIGHTNING` or a token network like
 `BSC`, is refused as a contradicting network rather than guessed, and refuses
 the whole batch. The stored raw row keeps Binance's own value.
 
+### Binance Transaction History CSV
+
+Binance's Transaction History export (Orders → Transaction History → Export,
+all statements; Binance limits one file to a year) is the account's complete
+ledger: one row per balance change of every Binance wallet, spot trades
+included. Import each file unchanged into a Binance wallet without a backend:
+
+```bash
+kassiber wallets create --workspace W --profile P --label "Binance" --kind binance \
+  --config '{"source_format": "binance_history_csv"}'
+kassiber wallets import-binance-history --workspace W --profile P \
+  --wallet Binance --file /path/to/binance-transaction-history.csv
+```
+
+The columns must be exactly `User_ID,UTC_Time,Account,Operation,Coin,Change,Remark`
+and `UTC_Time` a `YYYY-MM-DD HH:MM:SS` UTC time. It goes through the
+[exchange contract](exchange-contract.md): every asset is read, and the
+wallet's `asset_scope` filters events before their operation is read, so an
+operation Kassiber does not map in another coin never stops a `bitcoin`
+wallet; it is counted in `assets.skipped`.
+
+| Operations | Imported as |
+| --- | --- |
+| `Buy`, `Sell`, `Transaction Buy/Spend/Revenue/Sold/Related`, `Binance Convert`, `Large OTC trading`, `Small Assets Exchange BNB`, with `Fee`/`Transaction Fee` rows | one trade per second and account (several fills of one side of one pair summed): against fiat a buy valued at the fiat spent plus a fiat fee, or a sale valued at the fiat received net of it; between two coins two `swap` legs sharing a `swap_ref`; a fee in the received coin is netted from what arrived; a fee in a third coin is its own fee-only row where the scope keeps that coin and counted in `assets.skipped` where not. The scope filters a trade by the coins it trades, never by its fee: a BTC trade that pays its fee in BNB imports in the `bitcoin` scope with the BNB counted, and another coin's trade that pays its fee in BTC books only that BTC fee-only row there, the same row the `crypto` scope books next to the trade |
+| `Deposit`, `Withdraw` | wallet movements (a withdrawal's change is what left the account) |
+| Simple Earn, savings, staking, Launchpool, airdrop, distribution, referral and cashback credits | `income` (`Super BNB Mining`, `Pool Distribution`: `mining`), unpriced |
+| moves between Binance wallets and into or out of Earn, savings and staking | skipped when each debit has a credit of the same user, coin, second and amount in the export (the coin stays the user's); a side without its match refuses by name |
+| `Fiat Deposit`, `Fiat Withdraw` | skipped: fiat is not a holding |
+
+A second whose trade rows are not one pair (one coin out and one in), a
+second that buys and sells the same coin (the export does not say which rows
+belong together, so they are never netted), a margin, futures, isolated or
+options account or operation, a P2P trade (paid outside Binance), an
+operation not listed, a row whose BTC change is finer than a millisatoshi (or
+another coin's finer than its stored units), checked row by row before rows
+are summed, and a row that moves the other way than its operation are
+refused, naming the row. The export has no ids: each record's identity is
+the row's own time, account, operation, coin and change (`binance:csv:...`,
+a trade by its pair), numbered for identical rows, so importing the same file
+or an overlapping one again adds nothing. Because those identities cannot be
+matched to the API's, an export is refused in a wallet that syncs the Binance
+API or holds rows of another Binance source (an API sync, also one run with
+an explicit `--backend` that left the wallet's configuration empty, or a
+supplemental CSV), and an API sync in a wallet that holds the export's rows.
+The check reads the wallet's stored rows inside the import's write.
+
 Supplemental Binance CSV import currently supports:
 
 - autoinvest BTC rows funded by fiat (`binance_supplemental_csv`) as exact
   execution evidence
 - BTC dividend/mining-style rows as income without exact fiat pricing
+
+In a wallet import these three formats (Coinfinity, Ledger Live, Binance
+supplemental CSV) follow the wallet's `asset_scope`
+([plan 24](../plan/24-crypto-assets.md)): the default `bitcoin` scope counts
+each row of another crypto asset in the result's `assets.skipped` and names
+the command that keeps them; the `crypto` scope imports it as that asset.
+A row whose asset is not a crypto asset (a fiat code, a Bitcoin unit such as
+`SATS`) is refused, and every refusal names its row.
+
+Earlier builds left some rows out of a `bitcoin`-scope import without a word;
+they now stop the import in either scope, naming the row: a Coinfinity row
+whose `Type` is neither `buy` nor `sell`, a Binance dividend row paid in a
+fiat code (`EUR` cashback), and a Binance autoinvest row whose base symbol and
+amount suffix name different assets (`ETH` and `SOL`).
+
+In the `crypto` scope a Ledger Live row of another asset with no amount but a
+fee (a token send's gas, a failed transaction, a contract call) is refused,
+because the export does not say what it moved or which asset paid; a BTC row
+like it is still skipped.
 
 ID-less autoinvest and dividend rows use their economic tuple plus the count
 of identical occurrences within the file. Prepending newer rows to a cumulative
@@ -1978,8 +2458,10 @@ kassiber wallets import-binance-supplemental \
   --file /path/to/binance-supplemental.csv
 ```
 
-Crypto-funded Binance autoinvest/cross-asset rows fail validation and should be
-entered through the generic ledger with explicit review. DALI's Pionex, Nexo,
+Crypto-funded Binance autoinvest rows (funded by USDT, FDUSD or another
+coin) are swaps and fail validation, naming the row; record both legs in a
+`crypto`-scope wallet with the generic CSV/JSON import and a shared
+`swap_ref`, since the generic ledger refuses another asset's cash leg. DALI's Pionex, Nexo,
 BlockFi, and Trezor-family plugins are deferred for Kassiber: they are
 obsolete, altcoin-heavy, or add less value than descriptor/wallet sync plus the
 generic ledger for BTC-side edge cases.

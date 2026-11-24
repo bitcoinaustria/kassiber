@@ -124,6 +124,8 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.source_funds.bank_lines.accept",
     "ui.source_funds.bank_lines.reject",
     "ui.diagnostics.replay_bundle.export",
+    "ui.wallets.import_preview",
+    "ui.connections.exchange.preview",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -254,6 +256,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.push("ui.wallets.document_import.import");
     kinds.push("ui.wallets.import_samourai");
     kinds.push("ui.wallets.ledger_preview");
+    kinds.push("ui.wallets.import_preview");
     kinds.push("ui.wallets.analyze_file");
     kinds.extend(imports::KINDS);
     kinds.extend(

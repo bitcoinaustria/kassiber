@@ -65,7 +65,7 @@ const STATUSES: [&str; 4] = ["synced", "syncing", "idle", "error"];
 
 /// `kindFilterOptions`: the distinct kind categories in declaration order, then "Liquid".
 pub fn kind_options() -> Vec<&'static str> {
-    const KINDS: [&str; 23] = [
+    const KINDS: [&str; 26] = [
         "xpub",
         "address",
         "descriptor",
@@ -80,6 +80,9 @@ pub fn kind_options() -> Vec<&'static str> {
         "bitstamp",
         "coinbase",
         "bitpanda",
+        "bitvavo",
+        "bitfinex",
+        "bitcoinde",
         "river",
         "bullbitcoin",
         "coinfinity",

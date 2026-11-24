@@ -59,17 +59,29 @@ fn assets_follow_normalize_asset_code_and_exchange_aliases() {
         (s(" XXBT "), "BTC"),
         (s("l-btc"), "LBTC"),
         (s("L-BTC"), "LBTC"),
-        (s("zeur"), "EUR"),
         (s("XETH"), "ETH"),
         (s("xeth"), "ETH"),
         (s("uſd"), "USD"),
         (s("BTCs"), "BTCS"),
-        (s("Zé12"), "É12"),
         (s(""), ""),
         (Py::Null, ""),
         (Py::from(0), ""),
     ] {
         assert_eq!(asset(&raw), expected, "{raw:?}");
+        assert_eq!(fiat_code(asset(&raw)), expected, "{raw:?}");
+    }
+    // Kraken's `Z` prefix applies to fiat fields only: ZETA is a ticker.
+    for (raw, other, kraken) in [
+        ("zeur", "ZEUR", "EUR"),
+        ("Zé12", "ZÉ12", "É12"),
+        ("ZETA", "ZETA", "ETA"),
+    ] {
+        assert_eq!(
+            (asset(&s(raw)), fiat_code(asset(&s(raw)))),
+            (other.to_owned(), kraken.to_owned()),
+            "{raw}"
+        );
+        assert_eq!(asset_code(raw), other);
     }
     assert_eq!(asset(&s("A".repeat(64))), "a".repeat(64));
 }
@@ -189,8 +201,18 @@ fn division_by_an_infinity_is_a_signed_subnormal_zero() {
     assert_eq!(repr(&divide(&zero, &amount).unwrap()), "-0E+4");
 }
 
+/// The vectors whose Python output Kassiber departs from on purpose, with
+/// the reason and the output it gives instead
+/// (`tests/vectors/python_exchange_api_departures.json`). Every entry must
+/// still differ from Python's output; the vectors file itself stays frozen.
+const DEPARTURES: &str = "tests/vectors/python_exchange_api_departures.json";
+
 /// Every Python normalizer vector, replayed through the Rust normalizer that
 /// receives the same assembled payload. `raw_json` is compared by digest.
+/// A vector listed in [`DEPARTURES`] must give that file's output.
+/// `KASSIBER_GOLDEN_WRITE=1` (refused under `CI`) writes every differing
+/// vector's output to the departures file, with `KASSIBER_GOLDEN_REASON` as
+/// the reason of a new entry (docs/reference/testing.md#changing-a-frozen-golden).
 #[test]
 fn normalizers_match_python_reference_vectors() {
     let vectors = kassiber_pytext::loads(include_str!(
@@ -201,13 +223,42 @@ fn normalizers_match_python_reference_vectors() {
         panic!("vector list")
     };
     assert!(vectors.len() > 4000);
+    let write = std::env::var_os("KASSIBER_GOLDEN_WRITE").is_some_and(|v| v == "1");
+    assert!(
+        !(write && std::env::var_os("CI").is_some()),
+        "KASSIBER_GOLDEN_WRITE is refused in CI"
+    );
+    let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
+    let Py::List(departures) = kassiber_pytext::loads(include_str!(
+        "../../../tests/vectors/python_exchange_api_departures.json"
+    ))
+    .unwrap() else {
+        panic!("departure list")
+    };
+    let key = |exchange: &str, name: &str| format!("{exchange} {name}");
+    let mut listed: BTreeMap<String, (Py, String)> = departures
+        .iter()
+        .map(|entry| {
+            let text = |field: &str| kassiber_envelope::py_str(at(entry, field));
+            (
+                key(&text("exchange"), &text("name")),
+                (at(entry, "reason").clone(), dump(at(entry, "expected"))),
+            )
+        })
+        .collect();
+    assert_eq!(listed.len(), departures.len(), "a vector is listed twice");
+    let mut written: Vec<String> = vec![];
     let mut failures = vec![];
     for vector in &vectors {
         let exchange = kassiber_envelope::py_str(at(vector, "exchange"));
         let name = kassiber_envelope::py_str(at(vector, "name"));
         let payload = at(vector, "payload");
-        let result = match exchange.as_str() {
-            "kraken" => kraken::normalize(at(payload, "ledgers"), at(payload, "trades")),
+        let exchange = contract::registry::by_kind(&exchange).expect("exchange");
+        let mut mapper = Mapper::new(exchange, assets::Scope::Bitcoin, "W");
+        let result = match exchange.kind {
+            "kraken" => {
+                kraken::normalize(at(payload, "ledgers"), at(payload, "trades"), &mut mapper)
+            }
             "coinbase" => {
                 let Py::List(accounts) = payload else {
                     panic!("accounts")
@@ -224,10 +275,11 @@ fn normalizers_match_python_reference_vectors() {
                         (text(&pair[0]), rows.clone())
                     })
                     .collect();
-                coinbase::records(&accounts)
+                coinbase::records(&accounts, &mut mapper)
             }
-            _ => binance::normalize_payload(payload),
-        };
+            _ => binance::normalize_payload(payload, &mut mapper),
+        }
+        .map(|()| mapper.finish().records);
         let actual = match result {
             Ok(records) => dict([(
                 "records",
@@ -260,15 +312,51 @@ fn normalizers_match_python_reference_vectors() {
                 ]),
             )]),
         };
-        let dump = |value: &Py| kassiber_pyjson::dumps(value, &Default::default()).unwrap();
-        if dump(&actual) != dump(at(vector, "expected")) {
+        let python = dump(at(vector, "expected"));
+        let departure = listed.remove(&key(exchange.kind, &name));
+        if write {
+            if dump(&actual) != python {
+                let reason = departure.map(|(reason, _)| reason).unwrap_or_else(|| {
+                    s(std::env::var("KASSIBER_GOLDEN_REASON").expect("KASSIBER_GOLDEN_REASON"))
+                });
+                written.push(dump(&dict([
+                    ("exchange", s(exchange.kind)),
+                    ("name", s(name.as_str())),
+                    ("reason", reason),
+                    ("expected", actual),
+                ])));
+            }
+            continue;
+        }
+        let expected = match departure {
+            Some((_, expected)) => {
+                assert_ne!(
+                    python, expected,
+                    "{} {name} is listed as a departure but Python gives the same output",
+                    exchange.kind
+                );
+                expected
+            }
+            None => python,
+        };
+        if dump(&actual) != expected {
             failures.push(format!(
-                "{exchange} {name}\n  rust:   {}\n  python: {}",
+                "{} {name}\n  rust:     {}\n  expected: {expected}",
+                exchange.kind,
                 dump(&actual),
-                dump(at(vector, "expected"))
             ));
         }
     }
+    if write {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(DEPARTURES);
+        std::fs::write(path, format!("[\n{}\n]\n", written.join(",\n"))).unwrap();
+        return;
+    }
+    assert!(
+        listed.is_empty(),
+        "departures name no vector: {:?}",
+        listed.keys()
+    );
     assert!(
         failures.is_empty(),
         "{} of {} vectors differ:\n{}",
@@ -346,6 +434,59 @@ mod loopback {
             }
             // Bitpanda reads carry the key alone, and only GET is ever sent.
             "bitpanda" => method == "GET" && header("x-api-key") == KEY && body.is_empty(),
+            // Bitvavo signs timestamp + method + path (with /v2 and the
+            // query) + body; only GET with an empty body is ever sent.
+            "bitvavo" => {
+                let stamp = header("Bitvavo-Access-Timestamp");
+                let expected =
+                    hmac_sha256_hex(SECRET.as_bytes(), format!("{stamp}GET{target}").as_bytes());
+                method == "GET"
+                    && body.is_empty()
+                    && header("Bitvavo-Access-Key") == KEY
+                    && header("Bitvavo-Access-Window") == "10000"
+                    && stamp.len() == 13
+                    && header("Bitvavo-Access-Signature") == expected
+            }
+            // Bitstamp v2: a form POST (no Content-Type without a body),
+            // signed over host, path, nonce, timestamp and body.
+            "bitstamp" => {
+                let body = std::str::from_utf8(body).unwrap();
+                let (content_type, nonce) = (header("Content-Type"), header("X-Auth-Nonce"));
+                let stamp = header("X-Auth-Timestamp");
+                let host = header("Host");
+                let expected = bitstamp::signature(
+                    SECRET,
+                    [KEY, method, host, target, content_type, nonce, stamp, body],
+                );
+                method == "POST"
+                    && header("X-Auth") == format!("BITSTAMP {KEY}")
+                    && header("X-Auth-Version") == "v2"
+                    && nonce.len() == 36
+                    && stamp.len() == 13
+                    && (content_type == "application/x-www-form-urlencoded") == !body.is_empty()
+                    && header("X-Auth-Signature") == expected
+            }
+            // Bitfinex signs `/api/` + path + nonce + body with HMAC-SHA384.
+            "bitfinex" => {
+                let (nonce, body) = (header("bfx-nonce"), std::str::from_utf8(body).unwrap());
+                method == "POST"
+                    && header("bfx-apikey") == KEY
+                    && header("bfx-signature")
+                        == bitfinex::signature(SECRET, &target[1..], nonce, body)
+            }
+            // Bitcoin.de signs `GET#URL#KEY#NONCE#MD5("")` with the full URL.
+            "bitcoinde" => {
+                let nonce = header("X-API-NONCE");
+                let signed = format!(
+                    "GET#http://{}{target}#{KEY}#{nonce}#d41d8cd98f00b204e9800998ecf8427e",
+                    header("Host")
+                );
+                method == "GET"
+                    && body.is_empty()
+                    && header("X-API-KEY") == KEY
+                    && header("X-API-SIGNATURE")
+                        == hmac_sha256_hex(SECRET.as_bytes(), signed.as_bytes())
+            }
             _ => {
                 let query = target.split_once('?').map(|(_, q)| q).unwrap_or("");
                 let Some((unsigned, signature)) = query.rsplit_once("&signature=") else {
@@ -364,18 +505,36 @@ mod loopback {
         kind: &'static str,
         reply: impl Fn(usize, &str, &str) -> (u16, String) + Send + 'static,
     ) -> Fake {
+        serve_seeing(kind, move |ordinal, method, target, _| {
+            reply(ordinal, method, target)
+        })
+    }
+
+    /// As [`serve`], with the request headers, for a server that echoes them.
+    pub fn serve_seeing(
+        kind: &'static str,
+        reply: impl Fn(usize, &str, &str, &[(String, String)]) -> (u16, String) + Send + 'static,
+    ) -> Fake {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let log = seen.clone();
+        let last_nonce = Mutex::new(0u64);
         let server = HandledProvider::start(move |request| {
             let (method, target) = (request.method.as_str(), request.target.as_str());
             let path = target.split('?').next().unwrap();
-            let is_signed = signed(
+            let mut is_signed = signed(
                 kind,
                 method,
                 if kind == "kraken" { path } else { target },
                 &request.headers,
                 &request.body,
             );
+            // Bitcoin.de refuses a nonce not above the key's previous one.
+            if kind == "bitcoinde" {
+                let nonce = request.header("X-API-NONCE").and_then(|n| n.parse().ok());
+                let mut last = last_nonce.lock().unwrap();
+                is_signed &= nonce.is_some_and(|n: u64| n > *last);
+                *last = (*last).max(nonce.unwrap_or(0));
+            }
             // A form body is shown as the query it encodes.
             let shown = if method == "POST" {
                 format!("{target}?{}", String::from_utf8_lossy(&request.body))
@@ -391,7 +550,7 @@ mod loopback {
                 log.len() - 1
             };
             if is_signed {
-                reply(ordinal, method, &shown)
+                reply(ordinal, method, &shown, &request.headers)
             } else {
                 (401, "{\"error\":[\"EAPI:Invalid key\"]}".into())
             }
@@ -445,6 +604,19 @@ mod loopback {
         conn.execute_batch("UPDATE profiles SET fiat_currency='EUR';
             INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,asset,created_at) VALUES('treasury','ws','p','treasury','Treasury','asset','BTC','fixed');").unwrap();
         prepare(&conn);
+        let result = sync(&conn, backend, expected, wallet, consent, offline);
+        Run { result, conn }
+    }
+
+    /// One `execute` on an existing book, as a re-sync.
+    pub fn sync(
+        conn: &Connection,
+        backend: &Json,
+        expected: &str,
+        wallet: &str,
+        consent: bool,
+        offline: Arc<AtomicBool>,
+    ) -> Result<Py, AppError> {
         let flag = offline.clone();
         let gate = Gate::new(
             move || {
@@ -456,8 +628,8 @@ mod loopback {
             },
             Ledger::default(),
         );
-        let result = execute(
-            &conn,
+        execute(
+            conn,
             "p",
             wallet,
             backend,
@@ -466,13 +638,23 @@ mod loopback {
             "test",
             &mut |route| consent.then(|| Consent::explicit_trigger(route.request())),
             None,
-        );
-        Run { result, conn }
+        )
     }
 }
 
+mod binance_api;
+#[rustfmt::skip]
+mod bitfinex_api;
+#[rustfmt::skip]
+mod bitcoinde_api;
 mod bitpanda_api;
+mod coinbase_api;
+#[rustfmt::skip]
+mod bitstamp_api;
+#[rustfmt::skip]
+mod bitvavo_api;
 mod desktop_api;
+mod kraken_api;
 
 use loopback::{backend, run, serve};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -626,6 +808,26 @@ fn kraken_errors_keep_permission_codes_and_withhold_credentials() {
         details.contains("Permission denied for <redacted>"),
         "{details}"
     );
+    // The shared scrub withholds over code points: a lone surrogate the
+    // item carries survives beside the withheld key, as in Python.
+    let fake = serve("kraken", |_, _, _| {
+        (
+            200,
+            format!(
+                "{{\"error\":[\"EGeneral:Invalid \\ud800 {}\"]}}",
+                loopback::KEY
+            ),
+        )
+    });
+    let error = run(&backend("kraken", &fake.url), "kraken", "", true, online())
+        .result
+        .unwrap_err();
+    let details =
+        kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap();
+    assert!(
+        details.contains(r#""EGeneral:Invalid \ud800 <redacted>""#),
+        "{details}"
+    );
 }
 
 #[test]
@@ -745,25 +947,83 @@ fn coinbase_signs_pages_follows_its_collection_and_keeps_coinbase_network_metada
     );
 }
 
+/// Whether a windowed Binance read (`startTime`/`endTime`) covers `ms`.
+fn binance_window(target: &str, ms: u64) -> bool {
+    let param = |name: &str| {
+        target
+            .split(['?', '&'])
+            .find_map(|p| p.strip_prefix(&format!("{name}=")))
+            .and_then(|v| v.parse::<u64>().ok())
+    };
+    matches!((param("startTime"), param("endTime")), (Some(start), Some(end)) if start <= ms && ms <= end)
+}
+
+/// A Binance fake: the four BTC histories (each row only in the window that
+/// holds it), Convert orders and the spot account; `rows` overrides a path.
+fn binance_body(target: &str, rows: &[(&str, u64, &str)]) -> String {
+    let path = target.split('?').next().unwrap();
+    let hits: Vec<&str> = rows
+        .iter()
+        .filter(|(at, ms, _)| {
+            let windowed = !matches!(path, "/sapi/v1/fiat/payments" | "/api/v3/account");
+            *at == path && (!windowed || binance_window(target, *ms))
+        })
+        .map(|(_, _, row)| *row)
+        .collect();
+    let (list, total) = (hits.join(","), hits.len());
+    match path {
+        "/sapi/v1/fiat/payments" => format!(r#"{{"data":[{list}],"total":{total}}}"#),
+        "/sapi/v1/capital/deposit/hisrec" | "/sapi/v1/capital/withdraw/history" => {
+            format!("[{list}]")
+        }
+        "/sapi/v1/asset/assetDividend" => format!(r#"{{"rows":[{list}],"total":{total}}}"#),
+        "/sapi/v1/convert/tradeFlow" => format!(r#"{{"list":[{list}],"moreData":false}}"#),
+        "/api/v3/account" => format!(r#"{{"balances":[{list}]}}"#),
+        _ => "{}".into(),
+    }
+}
+
 #[test]
 fn binance_signs_each_history_query_in_reference_order() {
     let fake = serve("binance", |_, _, target| {
-        let path = target.split('?').next().unwrap();
-        let body = match path {
-            "/sapi/v1/fiat/payments" => {
-                r#"{"data":[{"orderNo":"F1","status":"Completed","cryptoCurrency":"BTC","fiatCurrency":"EUR","obtainAmount":"0.01","sourceAmount":"-400.5","createTime":1700000000123}]}"#
-            }
-            "/sapi/v1/capital/deposit/hisrec" => {
-                r#"[{"coin":"BTC","status":"Confirming","amount":"0.005","insertTime":1700000100000,"txId":"d1"}]"#
-            }
-            "/sapi/v1/capital/withdraw/history" => {
-                r#"[{"coin":"BTC","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}]"#
-            }
-            _ => {
-                r#"{"rows":[{"id":7,"asset":"BTC","amount":"0.0000123","divTime":1700000700000,"enInfo":"BTC Mining Pool"}]}"#
-            }
-        };
-        (200, body.into())
+        let rows = [
+            (
+                "/sapi/v1/fiat/payments",
+                0,
+                r#"{"orderNo":"F1","status":"Completed","cryptoCurrency":"BTC","fiatCurrency":"EUR","obtainAmount":"0.01","sourceAmount":"-400.5","createTime":1700000000123}"#,
+            ),
+            (
+                "/sapi/v1/capital/deposit/hisrec",
+                1700000100000,
+                r#"{"coin":"BTC","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}"#,
+            ),
+            (
+                "/sapi/v1/capital/withdraw/history",
+                1700000500000,
+                r#"{"coin":"BTC","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}"#,
+            ),
+            (
+                "/sapi/v1/asset/assetDividend",
+                1700000700000,
+                r#"{"id":7,"asset":"BTC","amount":"0.0000123","divTime":1700000700000,"enInfo":"BTC Mining Pool"}"#,
+            ),
+            (
+                "/sapi/v1/convert/tradeFlow",
+                1700000800000,
+                r#"{"orderId":"C1","orderStatus":"SUCCESS","fromAsset":"EUR","fromAmount":"100","toAsset":"BTC","toAmount":"0.0025","createTime":1700000800000}"#,
+            ),
+            (
+                "/sapi/v1/convert/tradeFlow",
+                1700000900000,
+                r#"{"orderId":"C2","orderStatus":"SUCCESS","fromAsset":"ETH","fromAmount":"1","toAsset":"USDT","toAmount":"2000","createTime":1700000900000}"#,
+            ),
+            (
+                "/api/v3/account",
+                0,
+                r#"{"asset":"BTC","free":"0.0135","locked":"0.0001"}"#,
+            ),
+        ];
+        (200, binance_body(target, &rows))
     });
     let run = run(
         &backend("binance", &fake.url),
@@ -772,25 +1032,57 @@ fn binance_signs_each_history_query_in_reference_order() {
         true,
         online(),
     );
-    assert_eq!(at(&run.result.unwrap(), "imported"), &Py::from(4));
+    let result = run.result.unwrap();
+    // The card buy, deposit, withdrawal, dividend and BTC-for-EUR convert;
+    // the ETH-for-USDT convert is counted, never booked.
+    assert_eq!(at(&result, "imported"), &Py::from(5), "{result:?}");
+    let assets = kassiber_pyjson::dumps(at(&result, "assets"), &Default::default()).unwrap();
+    assert!(
+        assets.contains(r#""unread": {"ETH": 1, "USDT": 1}"#),
+        "{assets}"
+    );
+    assert!(
+        assets.contains("does not read Binance spot trades"),
+        "{assets}"
+    );
+    // 0.01 + 0.005 - 0.004 - 0.0001 + 0.0000123 + 0.0025 BTC in the book.
+    assert_eq!(
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap(),
+        r#"{"status": "mismatch", "asset": "BTC", "provider_msat": 1360000000, "book_msat": 1341230000, "difference_msat": -18770000}"#
+    );
     let seen = fake.seen.lock().unwrap().clone();
     assert!(seen.iter().all(|r| r.signed), "{seen:?}");
-    let paths: Vec<_> = seen
-        .iter()
-        .map(|r| r.target.split('?').next().unwrap().to_owned())
-        .collect();
+    let mut paths: Vec<String> = vec![];
+    for r in &seen {
+        let path = r.target.split('?').next().unwrap().to_owned();
+        if paths.last() != Some(&path) {
+            paths.push(path);
+        }
+    }
     assert_eq!(
         paths,
         [
             "/sapi/v1/fiat/payments",
             "/sapi/v1/capital/deposit/hisrec",
             "/sapi/v1/capital/withdraw/history",
-            "/sapi/v1/asset/assetDividend"
+            "/sapi/v1/asset/assetDividend",
+            "/sapi/v1/convert/tradeFlow",
+            "/api/v3/account"
         ]
     );
     assert!(seen[0]
         .target
         .contains("transactionType=0&beginTime=1498867200000&endTime="));
+    // Only BTC's own histories are read.
+    for r in &seen {
+        let path = r.target.split('?').next().unwrap();
+        if path.contains("capital") {
+            assert!(r.target.contains("coin=BTC&startTime="), "{}", r.target);
+        }
+        if path.contains("assetDividend") {
+            assert!(r.target.contains("asset=BTC&startTime="), "{}", r.target);
+        }
+    }
     assert_eq!(
         count(
             &run.conn,
@@ -803,17 +1095,25 @@ fn binance_signs_each_history_query_in_reference_order() {
 /// One Binance sync whose deposit and withdrawal name `rail`.
 fn binance_rail_run(rail: &'static str) -> loopback::Run {
     let fake = serve("binance", move |_, _, target| {
-        let body = match target.split('?').next().unwrap() {
-            "/sapi/v1/capital/deposit/hisrec" => format!(
-                r#"[{{"coin":"BTC","network":"{rail}","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}}]"#
+        let deposit = format!(
+            r#"{{"coin":"BTC","network":"{rail}","status":1,"amount":"0.005","insertTime":1700000100000,"txId":"d1"}}"#
+        );
+        let withdrawal = format!(
+            r#"{{"coin":"BTC","network":"{rail}","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}}"#
+        );
+        let rows = [
+            (
+                "/sapi/v1/capital/deposit/hisrec",
+                1700000100000,
+                deposit.as_str(),
             ),
-            "/sapi/v1/capital/withdraw/history" => format!(
-                r#"[{{"coin":"BTC","network":"{rail}","status":6,"amount":"0.004","transactionFee":"0.0001","applyTime":1700000500000,"id":"w-1"}}]"#
+            (
+                "/sapi/v1/capital/withdraw/history",
+                1700000500000,
+                withdrawal.as_str(),
             ),
-            "/sapi/v1/fiat/payments" => r#"{"data":[]}"#.to_owned(),
-            _ => r#"{"rows":[]}"#.to_owned(),
-        };
-        (200, body)
+        ];
+        (200, binance_body(target, &rows))
     });
     run(
         &backend("binance", &fake.url),
@@ -857,8 +1157,13 @@ fn non_finite_amounts_report_before_the_rows_price_currency_check() {
         let (status, body) = kraken_page(ordinal, target);
         (
             status,
-            body.replace("\"amount\":\"0.01\"", "\"amount\":\"Infinity\"")
-                .replace("XXBTZEUR", "XXBTZUSD"),
+            // The sell's fee stays a non-finite Decimal until its
+            // fingerprint; the sell is also priced in USD in an EUR book.
+            body.replace(
+                "\"amount\":\"-0.001\",\"fee\":\"0.000001\"",
+                "\"amount\":\"-0.001\",\"fee\":\"Infinity\"",
+            )
+            .replace("\"pair\":\"XBTEUR\"", "\"pair\":\"XBTUSD\""),
         )
     });
     let error = run(
@@ -931,4 +1236,217 @@ fn http_error_bodies_withhold_credentials_before_truncation() {
         .starts_with("HTTP 400 from backend for http://<redacted-host>: "));
     assert!(error.message.ends_with("x<reda"), "{}", error.message);
     assert!(!error.message.contains("synth"), "{}", error.message);
+}
+
+/// The stored secret each exchange's requests carry (Kraken's is base64).
+fn stored_secret(kind: &str) -> String {
+    backend(kind, "http://127.0.0.1:9")["auth_header"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// A successful page, in each exchange's documented shape, that echoes the
+/// key and secret in a field Kassiber maps (the row's id) or one it keeps
+/// only as evidence refuses the whole sync: nothing is stored, and the
+/// error names no value.
+#[test]
+fn every_exchange_refuses_a_page_that_echoes_a_credential() {
+    for kind in ["kraken", "coinbase", "binance", "bitvavo", "bitstamp"] {
+        for mapped in [true, false] {
+            let echo = format!("{} {}", loopback::KEY, stored_secret(kind));
+            let id = if mapped { loopback::KEY } else { "row-1" };
+            let fake = serve(kind, move |_, _, target| {
+                let body = match (kind, target.split('?').next().unwrap()) {
+                    ("kraken", "/0/private/Ledgers") => {
+                        json!({"error": [], "result": {"count": 1, "ledger": {
+                        id: {"time": "1700000200", "type": "withdrawal", "asset": "BTC", "amount": "-0.002", "fee": "0.00001", "echo": echo}}}})
+                    }
+                    ("kraken", _) => json!({"error": [], "result": {"count": 0, "trades": {}}}),
+                    ("coinbase", "/v2/accounts") => {
+                        json!({"data": [{"id": "btc", "currency": {"code": "BTC"}}], "pagination": {}})
+                    }
+                    ("coinbase", _) => {
+                        json!({"data": [{"id": id, "type": "send", "created_at": "2024-01-03T03:04:05Z",
+                        "amount": {"amount": "-0.001", "currency": "BTC"}, "echo": echo}], "pagination": {}})
+                    }
+                    ("binance", "/sapi/v1/capital/deposit/hisrec") => {
+                        let row = json!({"coin": "BTC", "network": "BTC", "status": 1,
+                        "amount": "0.005", "insertTime": 1700000100000_i64, "txId": id, "echo": echo});
+                        let row = row.to_string();
+                        let body = binance_body(
+                            target,
+                            &[("/sapi/v1/capital/deposit/hisrec", 1700000100000, &row)],
+                        );
+                        serde_json::from_str(&body).unwrap()
+                    }
+                    ("binance", path) => {
+                        serde_json::from_str(&binance_body(&format!("{path}?"), &[])).unwrap()
+                    }
+                    ("bitvavo", "/v2/account/history") => {
+                        json!({"items": [{"transactionId": id, "type": "deposit",
+                        "executedAt": "2024-01-03T00:00:00Z", "receivedCurrency": "BTC", "receivedAmount": "0.001", "address": echo}],
+                        "currentPage": 1, "totalPages": 1})
+                    }
+                    ("bitvavo", _) => json!([]),
+                    ("bitstamp", "/api/v2/user_transactions/") => {
+                        json!([{"id": 1, "datetime": "2024-01-03 00:00:00", "type": "0", "fee": "0",
+                        "btc": "0.001", "order_id": echo}])
+                    }
+                    ("bitstamp", _) => {
+                        json!({"currency": "btc", "total": "0", "available": "0", "reserved": "0"})
+                    }
+                    _ => json!({"rows": []}),
+                };
+                (200, body.to_string())
+            });
+            let run = run(&backend(kind, &fake.url), kind, "", true, online());
+            let error = run.result.unwrap_err();
+            assert_eq!(error.code, "credential_echo", "{kind}: {}", error.message);
+            let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+            assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
+            assert!(!shown.contains(&stored_secret(kind)), "{kind}: {shown}");
+            assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
+        }
+    }
+}
+
+/// Kraken answers errors in a 200 body; one that echoes the request's
+/// `API-Sign` (a credential only the request carried) shows it withheld.
+#[test]
+fn a_kraken_error_echoing_its_signature_withholds_it() {
+    let fake = loopback::serve_seeing("kraken", |_, _, _, headers| {
+        let sign = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("API-Sign"))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+        let body = json!({"error": [format!("EAPI:Invalid signature {sign}")]});
+        (200, body.to_string())
+    });
+    let error = run(&backend("kraken", &fake.url), "kraken", "", true, online())
+        .result
+        .unwrap_err();
+    let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+    assert!(
+        shown.contains("EAPI:Invalid signature <redacted>"),
+        "{shown}"
+    );
+}
+
+/// Provider error codes reach an error only as Kassiber's own values: a code
+/// from the adapter's table, else "unknown"; never the provider's string,
+/// so a code that echoes the API key cannot pass.
+#[test]
+fn provider_codes_are_local_values_never_the_providers_string() {
+    let bitpanda = serve("bitpanda", |_, _, target| {
+        match target.split('?').next().unwrap() {
+            "/v1/trading-limits" => (401, r#"{"error":{"code":"insufficient_scope"}}"#.into()),
+            _ => (
+                401,
+                format!(r#"{{"error":{{"code":"{}"}}}}"#, loopback::KEY),
+            ),
+        }
+    });
+    let bitvavo = serve("bitvavo", |_, _, _| {
+        (403, r#"{"errorCode":987654,"error":"x"}"#.into())
+    });
+    let bitstamp = serve("bitstamp", |_, _, _| {
+        let body = json!({"status": "error", "code": loopback::KEY, "reason": "x"});
+        (403, body.to_string())
+    });
+    for (kind, fake, field) in [
+        ("bitpanda", bitpanda, "bitpanda_error"),
+        ("bitvavo", bitvavo, "bitvavo_error_code"),
+        ("bitstamp", bitstamp, "bitstamp_code"),
+    ] {
+        let error = run(&backend(kind, &fake.url), kind, "", true, online())
+            .result
+            .unwrap_err();
+        let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
+        assert!(!shown.contains(loopback::KEY), "{shown}");
+        assert_eq!(
+            at(error.details.as_ref().unwrap(), field),
+            &s("unknown"),
+            "{kind}"
+        );
+    }
+}
+
+/// Every sync error is shown with every request credential withheld at any
+/// length; a numeric detail equal to one is dropped; the hint is Kassiber's.
+#[test]
+fn sync_errors_withhold_every_request_credential() {
+    let error = AppError::new("auth_error", "refused pw7 here")
+        .with_hint("keep pw7")
+        .with_details(dict([
+            ("http_status", Py::from(401)),
+            ("code", Py::from(305)),
+            ("text", Py::List(vec![s("echo pw7")])),
+        ]));
+    let error = scrub_error(error, &["pw7".into(), "305".into()]);
+    assert_eq!(error.message, "refused <redacted> here");
+    assert_eq!(error.hint.as_deref(), Some("keep pw7"));
+    assert_eq!(
+        kassiber_pyjson::dumps(error.details.as_ref().unwrap(), &Default::default()).unwrap(),
+        r#"{"http_status": 401, "code": null, "text": ["echo <redacted>"]}"#
+    );
+}
+
+/// BTC amounts are whole msat by their own digits, never rounded; decimals
+/// are read only as written plainly.
+#[test]
+fn exact_amounts_are_whole_msat_by_their_own_digits() {
+    let d = |v: &str| v.parse::<Decimal>().unwrap();
+    for (amount, msat) in [
+        ("0.00000000001", Some(1)),
+        ("0.100000000000000", Some(10_000_000_000)),
+        ("0.000000000001", None),
+        ("0.100000000000000000000000000000000001", None),
+        ("-0.1", None),
+    ] {
+        assert_eq!(exact_msat(&d(amount)), msat, "{amount}");
+    }
+    assert_eq!(
+        exact_msat(&btc_decimal(399_990_000).unwrap()),
+        Some(399_990_000)
+    );
+    for (text, signed, plain) in [
+        ("1.5", false, true),
+        ("1e-05", false, false),
+        ("1e-05", true, true),
+        ("-1", false, false),
+        ("-1", true, true),
+        ("1.", true, false),
+        (".5", true, false),
+        ("NaN", true, false),
+        ("+1", true, false),
+    ] {
+        assert_eq!(strict_decimal(text, signed).is_some(), plain, "{text}");
+    }
+}
+
+/// Same-second tagging reads one second of one profile through the
+/// profile/time index, never by scanning the table.
+#[test]
+fn same_second_tagging_uses_the_profile_time_index() {
+    let conn = crate::file_import::tests::fixture();
+    let plan: Vec<String> = conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {SAME_SECOND_SQL}"))
+        .unwrap()
+        .query_map(["p", "w", "2024-01-01T00:00:00Z"], |r| r.get(3))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(
+        plan.iter()
+            .any(|step| step.contains("INDEX idx_transactions_profile_page")),
+        "{plan:?}"
+    );
+    assert!(
+        !plan
+            .iter()
+            .any(|step| step.starts_with("SCAN transactions")),
+        "{plan:?}"
+    );
 }

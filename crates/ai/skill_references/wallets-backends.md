@@ -377,6 +377,88 @@ observed trades are held, write nothing, and quarantine the transactions they
 name (`bisq_trade_review_required`) until a custody review covers them.
 Altcoin and BSQ markets refuse the import by name.
 
+Bitvavo transaction-history export (custodial ledger):
+
+```bash
+kassiber wallets import-bitvavo --file /path/to/bitvavo-transactions.csv
+```
+
+The export imports in full into the `Bitvavo` wallet, or `--wallet`, under the
+wallet's `asset_scope`. Buys and sells against EUR keep exact
+`exchange_execution` pricing from provider `Bitvavo`; deposits, withdrawals
+and staking import as wallet activity; fiat-only rows are skipped. In the
+default `bitcoin` scope rows without BTC are skipped and counted by ticker in
+`assets`, and a BTC trade against USDC or another crypto asset, or a Convert
+with BTC, refuses the file naming the command that sets the `crypto` scope;
+in `crypto` scope those become paired `swap` legs. A margin or loan row, or a
+row of any type Kassiber does not map, refuses the whole file by name: record
+it through the generic ledger instead. The user's own
+`wallets sync-bitvavo` (a View-only key in a `bitvavo` backend) shares the
+same transaction ids, so importing both keeps one record per transaction. The
+assistant cannot run exchange API syncs.
+
+Bitstamp transaction history (RFC 4180 export, custodial ledger):
+
+```bash
+kassiber wallets import-bitstamp --file /path/to/bitstamp-transactions.csv
+```
+
+The export imports in full into the `Bitstamp` wallet, or `--wallet`, under
+the wallet's `asset_scope`. Trades against fiat keep exact execution value
+with the fiat fee; deposits, withdrawals and referral rewards import. In the
+default `bitcoin` scope rows without BTC are skipped and counted by ticker in
+`assets`, and BTC traded against another coin or a stablecoin refuses the
+file naming the command that sets the `crypto` scope; in `crypto` scope such
+trades become paired `swap` legs and a fee in a third coin a fee-only row.
+The legacy export without transaction IDs, unsigned transfers between
+Bitstamp accounts and any row of a type Kassiber does not map refuse the
+whole file by name. Rows share their ids with the user's own `wallets
+sync-bitstamp`, so both keep one record per transaction; the API sync is set
+up by the user in the desktop or CLI, never in chat.
+
+Bitfinex Reports exports (custodial ledger):
+
+```bash
+kassiber wallets import-bitfinex --file /path/to/bitfinex-reports.zip
+```
+
+Import the Reports zip holding the Trades, Movements and Ledgers exports
+(full mode, into the `Bitfinex` wallet), exported with the `YYYY-MM-DD` date
+format in UTC. BTC spot trades against USD, EUR, GBP or JPY keep exact
+execution pricing; BTC deposits and withdrawals import as BTC activity,
+funding-wallet interest as `lending_interest`; paired transfers between the
+exchange and funding wallets and rows without BTC are left out (other coins
+named in `assets.unread`; Kassiber reads only BTC from Bitfinex, so a
+wallet whose `asset_scope` is `crypto` is refused). Every other
+BTC ledger entry must pair with its trade, fee or movement: margin,
+derivatives, other funding entries, BTC traded against another coin, unknown
+ledger entries, a trades file without its ledger, a withdrawal fee the
+ledger does not prove, and anything ambiguous refuse the whole file by name.
+Only a withdrawal with no ledger rows, requested before the ledgers export's
+first row (or with no ledgers file at all), keeps its movement fee, tagged
+`bitfinex-fee-unchecked` for review. The user's own
+`wallets sync-bitfinex` shares the ids; the assistant cannot run it.
+
+Bitcoin.de BTC account statement (custodial ledger, `;`-separated, German or
+English export of mein Bitcoin.de → Kontoauszug → BTC, type all, whole period):
+
+```bash
+kassiber wallets import-bitcoinde --file /path/to/kontoauszug-btc.csv
+```
+
+The statement imports in full into the `Bitcoin.de` wallet, or `--wallet`.
+BTC/EUR trades keep exact `exchange_execution` pricing from provider
+`Bitcoin.de`; deposits, payouts with their network fee and affiliate,
+kickback and welcome credits import as BTC activity. It must cover the whole
+history from a zero balance and later imports may only add newer bookings.
+Another coin's statement or row is skipped and named in `assets.unread`
+(Kassiber reads only BTC from Bitcoin.de, so a wallet whose `asset_scope` is
+`crypto` is refused). An unmapped type, or a booking Kassiber cannot book
+exactly, refuses the whole file by name: record it through the generic
+ledger. The user's own `wallets sync-bitcoinde` (a read-only key in a
+`bitcoinde` backend) maps the same bookings to the same records. The
+assistant cannot run exchange API syncs.
+
 CoinTracking / Blockpit migration history:
 
 ```bash

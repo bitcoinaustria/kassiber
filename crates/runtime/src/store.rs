@@ -757,6 +757,7 @@ pub trait Book: Send {
         _wallet: &str,
         _backend: &str,
         _kind: &str,
+        _changed_rows: Option<kassiber_wallets::file_import::ChangedRows>,
     ) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "exchange API import"))
     }

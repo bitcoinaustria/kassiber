@@ -1013,8 +1013,8 @@
   {
     "id": "echo-backend-headers-ignored",
     "file": "crates/chain/src/http.rs",
-    "find": "                    &headers,\n",
-    "replace": "                    &[] as &[(String, String)],\n",
+    "find": "let credentials = self.credentials(url, &headers);",
+    "replace": "let credentials = self.credentials(url, &[]);",
     "expect_failing": [
       "backend_error_bodies_withhold_the_credentials_the_request_carried"
     ],
@@ -1281,5 +1281,75 @@
       "bark_pages_match_python"
     ],
     "rule": "A Bark page's fingerprint covers each row's fee."
+  },
+  {
+    "id": "http-accepted-error-bodies-scrubbed",
+    "file": "crates/chain/src/http.rs",
+    "find": "                    response.body = scrub_error_body(&response.body, &withheld);\n",
+    "replace": "",
+    "expect_failing": [
+      "exchange_error_bodies_withhold_every_request_credential_at_any_length"
+    ],
+    "rule": "An accepted exchange error body reaches its caller with every request credential withheld."
+  },
+  {
+    "id": "http-exchange-error-json-decoded",
+    "file": "crates/chain/src/http.rs",
+    "find": "        if !walk(&mut parsed, forms) {",
+    "replace": "        if !walk(&mut parsed, forms) || true {",
+    "expect_failing": [
+      "exchange_error_bodies_withhold_every_request_credential_at_any_length"
+    ],
+    "rule": "An exchange error body is withheld on its decoded JSON strings, so an escape cannot hide a credential."
+  },
+  {
+    "id": "http-successful-exchange-echoes-noted",
+    "file": "crates/chain/src/http.rs",
+    "find": "self.met.lock().unwrap_or_else(|e| e.into_inner()).echoed = true;",
+    "replace": "let _ = &self.met;",
+    "expect_failing": [
+      "successful_exchange_bodies_are_kept_and_echoes_noted"
+    ],
+    "rule": "A successful exchange body is kept as it came, and an echoed request credential is noted."
+  },
+  {
+    "id": "http-successful-exchange-escaped-echoes",
+    "file": "crates/chain/src/http.rs",
+    "find": "        || (text.contains('\\\\')",
+    "replace": "        || (false",
+    "expect_failing": [
+      "successful_exchange_bodies_are_kept_and_echoes_noted"
+    ],
+    "rule": "An echo spelled with JSON escapes is found in the decoded strings."
+  },
+  {
+    "id": "http-exchange-credentials-remembered",
+    "file": "crates/chain/src/http.rs",
+    "find": "                        met.seen.push(value.clone());\n",
+    "replace": "",
+    "expect_failing": [
+      "exchange_reads_keep_every_request_credential_for_display"
+    ],
+    "rule": "Every credential an exchange request carried (proxy userinfo, signatures) is kept for error display, at any length."
+  },
+  {
+    "id": "http-json-error-body-text-withheld",
+    "file": "crates/chain/src/http.rs",
+    "find": "let withheld = kassiber_credentials::withhold(&text, &long);",
+    "replace": "let withheld = text.to_string();",
+    "expect_failing": [
+      "json_error_bodies_withhold_what_the_decoded_strings_drop"
+    ],
+    "rule": "A JSON error body is withheld as text too, so a credential its decoded strings drop (a duplicate key) never reaches the error."
+  },
+  {
+    "id": "http-json-error-body-keeps-short-codes",
+    "file": "crates/chain/src/http.rs",
+    "find": "const TEXT_FORM_CHARS: usize = 4;",
+    "replace": "const TEXT_FORM_CHARS: usize = 1;",
+    "expect_failing": [
+      "json_error_bodies_withhold_what_the_decoded_strings_drop"
+    ],
+    "rule": "The text-level pass over a JSON error body skips credential forms under four characters, so a numeric error code survives a short credential."
   }
 ]

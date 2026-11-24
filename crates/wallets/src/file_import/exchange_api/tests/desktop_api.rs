@@ -253,9 +253,47 @@ fn bitpanda_check_refuses_trading_keys_then_reads_with_both_scopes() {
     }
 }
 
+/// Bitvavo's documented shapes: an empty BTC balance and one empty page.
+fn bitvavo() -> loopback::Fake {
+    serve("bitvavo", |_, _, target| {
+        match target.split('?').next().unwrap() {
+            "/v2/balance" => (200, "[]".into()),
+            "/v2/account/history" => (
+                200,
+                r#"{"items":[],"currentPage":1,"totalPages":0,"maxItems":1}"#.into(),
+            ),
+            _ => (
+                404,
+                r#"{"errorCode":110,"error":"Invalid endpoint."}"#.into(),
+            ),
+        }
+    })
+}
+
+#[test]
+fn bitvavo_check_reads_the_balance_and_one_history_row_and_cannot_tell_the_scope() {
+    let fake = bitvavo();
+    let result = check(&backend("bitvavo", &fake.url), true, false)
+        .0
+        .unwrap();
+    // Bitvavo does not reveal a key's permissions.
+    assert_eq!(at(&result, "read_only"), &Py::Null);
+    assert!(fake.seen.lock().unwrap().iter().all(|r| r.signed));
+    assert_eq!(targets(&fake), ["/v2/balance", "/v2/account/history"]);
+    let seen = fake.seen.lock().unwrap()[1].target.clone();
+    assert!(seen.ends_with("&page=1&maxItems=1"), "{seen}");
+}
+
 #[test]
 fn checks_need_consent_an_open_gate_and_credentials() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda"] {
+    for kind in [
+        "kraken",
+        "coinbase",
+        "binance",
+        "bitpanda",
+        "bitvavo",
+        "bitcoinde",
+    ] {
         let fake = serve(kind, |_, _, _| (500, "{}".into()));
         let refused = check(&backend(kind, &fake.url), false, false)
             .0
@@ -280,7 +318,14 @@ fn checks_need_consent_an_open_gate_and_credentials() {
 
 #[test]
 fn checks_withhold_an_echoed_key_and_secret() {
-    for kind in ["kraken", "coinbase", "binance", "bitpanda"] {
+    for kind in [
+        "kraken",
+        "coinbase",
+        "binance",
+        "bitpanda",
+        "bitvavo",
+        "bitcoinde",
+    ] {
         let stored = backend(kind, "http://127.0.0.1:9");
         // The secret as the backend stores it (Kraken's is base64).
         // Bitpanda has none: it authenticates with the key alone.
@@ -292,15 +337,24 @@ fn checks_withhold_an_echoed_key_and_secret() {
         let fake = serve(kind, move |_, _, _| {
             (
                 401,
-                json!({"error": {"code": format!("bad {} {echoed}", loopback::KEY)}, "msg": loopback::KEY})
-                    .to_string(),
+                if kind == "bitvavo" {
+                    // Bitvavo's error shape: a code and a message.
+                    json!({"errorCode": 309, "error": format!("bad {} {echoed}", loopback::KEY)})
+                } else {
+                    json!({"error": {"code": format!("bad {} {echoed}", loopback::KEY)}, "msg": loopback::KEY})
+                }
+                .to_string(),
             )
         });
         let error = check(&backend(kind, &fake.url), true, false).0.unwrap_err();
         let shown = kassiber_pyjson::dumps(&error.envelope(None), &Default::default()).unwrap();
         assert!(!shown.contains(loopback::KEY), "{kind}: {shown}");
         assert!(!shown.contains(&secret), "{kind}: {shown}");
-        assert!(shown.contains("<redacted>"), "{kind}: {shown}");
+        // Bitpanda, Bitvavo and Bitcoin.de keep only a known error code, so their free
+        // text (and the echo in it) is dropped rather than shown redacted.
+        if !matches!(kind, "bitpanda" | "bitvavo" | "bitcoinde") {
+            assert!(shown.contains("<redacted>"), "{kind}: {shown}");
+        }
     }
 }
 
@@ -396,6 +450,12 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
     for (kind, label) in [("bitpanda", "Bitpanda"), ("kraken", "Kraken 2")] {
         desktop::create_wallet(&conn, "p", label, kind, &format!("{kind}-b"), None).unwrap();
     }
+    // A chain wallet that names a backend is no exchange connection either.
+    conn.execute_batch(
+        r#"INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+            ('chain-backend','ws','p','Chain','descriptor','{"backend": "kraken-b"}','2025-01-01');"#,
+    )
+    .unwrap();
     let listed: Vec<_> = desktop::targets(&conn, "p")
         .unwrap()
         .into_iter()
@@ -418,14 +478,17 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
         (target.kind.as_str(), target.label.as_str()),
         ("kraken", "Kraken 2")
     );
-    // The fixture's custom wallet is not an exchange connection.
-    assert_eq!(
-        desktop::sync_target(&conn, "p", "Source")
-            .err()
-            .unwrap()
-            .code,
-        "validation"
-    );
+    // Neither the fixture's custom wallet nor the chain wallet with a
+    // backend is an exchange connection.
+    for label in ["Source", "Chain"] {
+        let error = desktop::sync_target(&conn, "p", label).err().unwrap();
+        assert_eq!(error.code, "validation", "{label}");
+        assert!(
+            error.message.ends_with("is not an exchange API connection"),
+            "{}",
+            error.message
+        );
+    }
     assert_eq!(
         desktop::create_wallet(&conn, "p", "X", "esplora", "b", None)
             .err()
@@ -433,4 +496,65 @@ fn sync_targets_are_the_profiles_exchange_wallets() {
             .code,
         "validation"
     );
+}
+
+/// A wallet of an exchange kind that imports a file (the Bitvavo or Binance
+/// CSV, or a Kraken wallet with a source file) is not an API connection
+/// until the user attaches a backend to it: its sync stays the file's.
+#[test]
+fn file_wallets_of_an_exchange_kind_are_api_connections_only_once_attached() {
+    let conn = book();
+    conn.execute_batch(
+        r#"INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+            ('csv-bitvavo','ws','p','Bitvavo','bitvavo','{"source_format": "bitvavo_csv"}','2025-01-01'),
+            ('csv-binance','ws','p','Binance','binance','{"source_format": "binance_supplemental_csv"}','2025-01-01'),
+            ('file-kraken','ws','p','Kraken file','kraken','{"source_file": "k.csv", "source_format": "csv"}','2025-01-01'),
+            ('hybrid-kraken','ws','p','Kraken both','kraken','{"backend": "kraken-b", "source_file": "k.csv", "source_format": "csv"}','2025-01-01'),
+            ('custom-backend','ws','p','Custom','custom','{"backend": "kraken-b"}','2025-01-01');"#,
+    )
+    .unwrap();
+    // The configured source decides, for any exchange kind: a backend makes
+    // an API connection (beside a file, too); a file alone does not, and a
+    // backend on a non-exchange kind does not either.
+    let listed: Vec<String> = desktop::targets(&conn, "p")
+        .unwrap()
+        .into_iter()
+        .map(|t| t.label)
+        .collect();
+    assert_eq!(listed, ["Kraken both"]);
+    for label in ["Bitvavo", "Binance", "Kraken file"] {
+        let error = desktop::sync_target(&conn, "p", label).err().unwrap();
+        assert_eq!(error.code, "validation", "{label}");
+        assert!(
+            error.message.contains("no exchange API key attached"),
+            "{}",
+            error.message
+        );
+    }
+    // Attaching keeps the file source and adds the backend.
+    let wallet = desktop::attach_backend(&conn, "p", "Bitvavo", "bitvavo", "bitvavo-main").unwrap();
+    assert_eq!(wallet.label, "Bitvavo");
+    let config: String = conn
+        .query_row(
+            "SELECT config_json FROM wallets WHERE id='csv-bitvavo'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let config: Json = serde_json::from_str(&config).unwrap();
+    assert_eq!(config["backend"], json!("bitvavo-main"));
+    assert_eq!(config["source_format"], json!("bitvavo_csv"));
+    let target = desktop::sync_target(&conn, "p", "Bitvavo").unwrap();
+    assert_eq!(target.backend.as_deref(), Some("bitvavo-main"));
+    // Only a wallet of the same exchange, without a backend yet.
+    for (wallet, kind, code) in [
+        ("Binance", "bitvavo", "validation"),
+        ("Bitvavo", "bitvavo", "conflict"),
+        ("Source", "bitvavo", "validation"),
+    ] {
+        let error = desktop::attach_backend(&conn, "p", wallet, kind, "x")
+            .err()
+            .unwrap();
+        assert_eq!(error.code, code, "{wallet}");
+    }
 }

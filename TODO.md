@@ -743,6 +743,112 @@ projections stay Python. Progress and remaining work for this slice:
 - [ ] Bitpanda follow-ups: confirm the undocumented `operation_type` /
   `transaction_type` values and fee semantics against a real account, then
   widen the mapping; a CSV importer once the export's fee semantics are known.
+- [x] One [exchange contract](docs/reference/exchange-contract.md) for every
+  exchange: a registry of exchanges replaces per-name dispatch, and the asset
+  scope is a filter over each exchange's events. Bitpanda, Kraken and
+  Coinbase read every asset (Coinbase every crypto account, in either scope);
+  Binance's API reads BTC only (windowed BTC histories, BTC Convert orders,
+  the spot BTC balance); its spot trades need the Transaction History CSV,
+  which `wallets import-binance-history` imports for every asset. A `bitcoin`-scope Kraken wallet now books BTC Buy Crypto and BTC
+  staking/earn rewards (owner decision 2026-11-18).
+  Every sync reports `assets` (other coins as `unread` from a BTC-only
+  reader) and `swap_pairs`, and an exchange that states its BTC balance
+  reports both `provider_balance` and `reported_balance`.
+- [ ] Binance fiat paging: refuse rows > total (a server that ignores `page`
+  would answer every page with the same rows, which Kassiber would then store
+  as duplicates instead of refusing the sync).
+- [x] Add the Rust-only Bitvavo API sync (`wallets sync-bitvavo`, View-only
+  key, `/v2/account/history` plus the BTC spot balance as
+  `reported_balance`) and transaction-history CSV import
+  (`wallets import-bitvavo`) on one mapping with shared ids, altcoin and
+  stablecoin refusals by name, desktop cards and named mutation killers. See
+  [Bitvavo](docs/reference/bitvavo.md).
+- [x] Bitvavo follows the wallet's `asset_scope` in the API and the CSV
+  (skip tally by ticker in `assets`, crypto-quoted trades and Converts as
+  paired swap legs, third-asset fees as fee-only rows; `bitcoin` scope
+  refuses BTC-altcoin trades naming the scope command). See
+  [Bitvavo](docs/reference/bitvavo.md#mapping).
+- [x] Bitstamp follows the wallet's `asset_scope` in the API and the CSV
+  (skip tally by ticker in `assets`, trades between two crypto assets as
+  paired swap legs, a CSV third-asset fee as a fee-only row; `bitcoin` scope
+  refuses BTC-altcoin trades naming the scope command). See
+  [Bitstamp](docs/reference/bitstamp.md#mapping).
+- [ ] Framework: a sub-second tie-break for same-second rows across import
+  batches. Stored times are whole seconds and source positions cover one
+  batch, so a later import's row precedes or follows an earlier one's by
+  import order, not time. This changes journal ordering for every importer,
+  so it needs a semantics bump. Bitvavo tags such rows
+  `same-second-order-uncertain` meanwhile ([Bitvavo](docs/reference/bitvavo.md)).
+- [x] Add the Rust-only Bitstamp API sync (`wallets sync-bitstamp`,
+  `user_transactions` by `since_id` plus the BTC balance as
+  `reported_balance`) and RFC 4180 CSV import (`wallets import-bitstamp`) on
+  one mapping with shared ids; altcoin trades, third-asset fees and
+  undocumented types refused by name. See [Bitstamp](docs/reference/bitstamp.md).
+- [ ] Bitstamp follow-ups: confirm with a real account that the CSV `ID` is
+  the API id, that a withdrawal's fee is charged on top and the API fee is in
+  the trade's quote currency (also for crypto-quoted swaps); map further
+  types (staking 25-27, unknown CSV types such as `Deposit reverted`) once a
+  real export pins them.
+- [ ] Bitvavo follow-ups: confirm with a real account that the CSV
+  `Transaction ID` is the API `transactionId`, that the API withdrawal
+  `sentAmount` excludes the fee and how trades state their quote amount
+  (ambiguous API trades import unpriced until then);
+  bundle the official SVG mark from the press kit; map further BTC types
+  (`rebate`, `distribution`, `withdrawal_cancelled`) once a real export pins
+  them (they refuse the import until then).
+- [x] Add the Rust-only, read-only Bitfinex API sync (`wallets sync-bitfinex`,
+  write-permission refusal, signed paged reads, the exchange and funding wallets' BTC as
+  `reported_balance`) and Reports CSV/zip import (`wallets import-bitfinex`)
+  on one mapping with shared ids, desktop cards and named mutation killers;
+  slimmed 2026-11-14 to exact one-to-one ledger pairing with ambiguity,
+  margin, derivatives, funding entries other than interest and paired
+  transfers, and unknown ledger entries refused by name; withdrawals without
+  ledger entries requested before the ledger's first entry keep their
+  movement fee, tagged `bitfinex-fee-unchecked`. See
+  [Bitfinex](docs/reference/bitfinex.md).
+- [ ] Bitfinex follow-ups: confirm the ledger description grammars and that a
+  withdrawal's `AMOUNT` excludes its fee against a real export (until then
+  withdrawals older than the ledger keep the movement's fee, tagged);
+  equal partial fills within 60 s and equal withdrawal fees close together
+  refuse as ambiguous; a later import does not add a txid to a stored
+  movement; read Lightning (`LNX`) movements; no `same-second-order-uncertain`
+  tagging yet; other crypto assets (a `crypto` asset scope is refused: the
+  sync reads only the BTC ledger and movements, and the ledger cross-checks
+  are BTC-only; both sources name what they leave out in `assets.next_step`).
+- [x] Add the Rust-only Bitcoin.de API sync (`wallets sync-bitcoinde`, a key
+  refused unless granted only reads; BTC statement plus BTC/EUR trades) and
+  BTC statement CSV import (`wallets import-bitcoinde`) on one mapping,
+  append-only and chained from zero; other coins and unmapped types refused
+  by name. See [Bitcoin.de](docs/reference/bitcoinde.md).
+- [ ] Bitcoin.de follow-ups: confirm with a real account that the API
+  statement and the CSV give the same balances and times; other coins (a
+  `crypto` asset scope is refused: the mapping chains the BTC balance, the
+  sync reads only BTC endpoints, and an append-only bind per wallet cannot
+  mix coins; the CSV names other-coin statements and rows it skips); a cross-process
+  nonce lock if concurrent CLI and desktop syncs of one key turn out common
+  (a refused nonce asks to sync again meanwhile).
+- [ ] Exchange contract follow-ups: bring Bull Bitcoin, Coinfinity, Pocket,
+  River, Strike and 21bitcoin onto the [exchange contract](docs/reference/exchange-contract.md)
+  where they are exchange-shaped (they keep their Python-pinned identities and
+  evidence matching for now); Kraken and Coinbase export parsers (a
+  parser-only job on the contract); fold Bitstamp's and Bitpanda's trade
+  shaping into one shared trade shaper with Bitvavo's; replace the legacy
+  underscore keys (`_tax_platform_row_identity`, `_match_existing_ignore_fee`,
+  `_exchange_evidence_match_by_economics`) with typed fields where no stored
+  identity moves; name the Binance Transaction History import in the
+  assistant's `wallets-backends` reference.
+- [ ] Read Binance's withdrawal `applyTime` as Binance sends it, a
+  `YYYY-MM-DD HH:MM:SS` UTC string: the API sync reads the time as a number
+  of milliseconds, as the Python reference did, and the fakes and vectors use
+  numbers; add a fixture with the string.
+- [ ] Map Binance's `network: "BTC"` rail on stored rows in
+  `network::guard_history` as `guard_import` does on import, so a wallet
+  update (an `asset_scope` change) is not refused by its own Binance API rows
+  (on main before the exchange contract).
+- [ ] Exchange error display: a very short request credential (a one- to
+  three-character proxy password) is withheld wherever it occurs, Kassiber's
+  own message text included, which garbles the error; consider refusing such
+  short proxy passwords at backend setup instead.
 - [x] Port Binance supplemental autoinvest/dividend core/CLI ingestion with
   frozen Python files, SQLite/SQLCipher full-book/wire parity, commercial
   coordination, reference-bug repros and named mutation killers. See the
@@ -2082,10 +2188,75 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [ ] Other crypto assets per [plan 24](docs/plan/24-crypto-assets.md).
+  Done: the foundation (`asset_scope`, the skip tally, exact units, swap
+  pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance
+  serves only per market; the sync result says so), Coinbase, CoinTracking
+  and Blockpit exports, the desktop toggle (exchange card and import result),
+  the per-asset overview backend, the choice before a new provider wallet's
+  first import (Add connection: provider files and read-only-key exchanges,
+  "Bitcoin and other crypto" preselected), and the importer triage: Binance
+  supplemental, Ledger Live and Coinfinity CSVs follow the scope, generic
+  CSV/JSON and BTCPay rows are screened against it, and the bitcoin scope
+  refuses a Coinbase convert's BTC leg. The summary PDF's BTC fee and
+  transfer volume count Bitcoin rows only, a correction that also reaches
+  BTC-only Liquid books: an issued asset (USDt) there now has null sats and
+  leaves the BTC volume instead of adding its raw units. The desktop app lists
+  other assets in its Holdings by Asset card. Open: the desktop's per-asset
+  transactions and wallets views, Binance spot trades (the user
+  would have to name markets), Ledger Live sends of another asset with a fee,
+  or with only a fee (refused: the export does not say which asset pays a
+  token's fee), the
+  bitcoin scope telling a Coinbase convert against fiat from one against
+  crypto (both refused today; the crypto scope reads both legs),
+  and an assistant tool that sets a wallet's asset scope under the usual
+  consent (AI tools must not see wallet configuration, so it needs its own
+  narrow tool). Bitvavo, Bitstamp, Bitfinex and Bitcoin.de are connected (API
+  and CSV; see their pages for which assets each reads). Then further sources
+  from the Rotki survey: Bison, Trade Republic and Crypto.com App (CSV; need
+  real samples), Revolut, Nexo, KuCoin, Bybit and OKX.
+- [ ] Re-importing newer exports ([imports](docs/reference/imports.md#re-importing-a-newer-export)).
+  Done: re-identified rows (an id column or date format changed) and
+  same-id corrections refuse until the user answers `--changed-rows
+  skip|import` (desktop buttons in Add connection and the exchange card),
+  `corrections_ignored`, `updated` named by every format, identical ID-less
+  generic/River rows kept apart compatibly. Open: the choice for `wallets
+  sync` of a file wallet and for the assistant's attachment import (both
+  refuse), taking the export's values without a rollback, the asset choice for
+  the exchange-evidence imports (Coinfinity, Binance supplemental), and a
+  desktop link from Bitcoin.de's partial-statement refusal to the import runs,
+  ID-less rows whose amount is spelled differently between exports (`0.1` vs
+  `0.10`, pre-existing), and a cancel button for the asset preview.
+- [ ] Bisq and `--changed-rows` (owner decision pending): `wallets import-bisq`
+  has no `--changed-rows`, so a Bisq import that the re-import check refuses
+  (`import_changed_rows`) can be answered only from the desktop, which sends
+  `changed_rows` for every format.
+- [ ] Desktop "import again" for Bisq (owner decision pending): the saved
+  re-import keeps only the file path, so re-importing a Bisq source refuses
+  for lack of the Funds > Transactions export and the time zone.
+- [ ] Coinbase API keys: Coinbase expired the legacy HMAC keys the sync
+  signs with in February 2025 and accepts only CDP keys, which sign a
+  short-lived JWT per request (ES256 or Ed25519), so `wallets sync-coinbase`
+  cannot authenticate against real Coinbase today, BTC-only included. Add CDP
+  key auth (likely a signing dependency, with a license review) and update
+  the desktop key guide. See [Coinbase](docs/exchanges/coinbase.md).
+- [ ] Price provider-reported crypto-to-crypto swaps without a Bitcoin leg.
+  Bitpanda, Kraken, CoinTracking and Blockpit state no fiat value for a swap;
+  a swap with a Bitcoin leg is now valued from the cached BTC rate
+  (counter-leg pricing, [plan 24](docs/plan/24-crypto-assets.md)), and
+  journals hold the others in review (`at_swap_link` in Austria,
+  `missing_spot_price` elsewhere) until the user prices both legs. Options:
+  per-asset rate sources (the rates crate is BTC-only) or a provider value
+  with a confirmed meaning (Bitpanda's `trade.to_eur_rate`).
 - [ ] Per-asset scale for large-supply tokens (SHIB, PEPE, BONK, BTTC): a
   row holds at most about 92 million units at 10^-11, so one such row stops a
   sync. Designed, not built, in [plan 24](docs/plan/24-crypto-assets.md#per-asset-scale-design-not-implemented);
   needs the owner's decision on the released-Python exception.
+- [ ] Keep historical valuations of an unpriced asset unknown: the balance
+  history (`crates/reports/src/history.rs`) still falls back to a zero rate
+  where the portfolio and summary now report `null`.
+- [ ] Describe per-asset quantities in the AI catalog's amount fields
+  (`crates/ai/src/data/catalog.json`), keeping sat/msat labels to Bitcoin.
 
 - [ ] Extend [exact exchange withdrawals](docs/reference/custody-resolution.md#exchange-withdrawals-that-name-their-txid)
   past Strike and River. Coinbase and Binance API rows name the txid, but the
@@ -2225,6 +2396,13 @@ See [tax countries](docs/reference/tax-countries.md) and
 - [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
   (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
   the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).
+- [ ] Two parts of the other-crypto-assets stack have no screen in the desktop app
+  yet and stay out of it until one exists: the source-of-funds view's guess that
+  a Bitvavo, Bitfinex or Bitcoin.de account is an exchange (the Tauri
+  `txNetwork` in `routes/source-funds/model.ts`), and the secret scanner's
+  exchange qualifier words (`lib/secretScanner.ts`, which would list `bitvavo`;
+  the desktop app relies on the backend's redaction instead). Neither changes
+  what the CLI or daemon do.
 
 - [ ] Let an agent request a brokered session that the user approves with
   Touch ID on signed macOS builds: allow `operator unlock --auth touch-id`

@@ -111,9 +111,11 @@ pub fn synthetic_csv_identity(external_id: &str, raw_json: &str) -> Option<(Stri
         return None;
     };
     let row = stored_row(&raw);
+    // Any stored asset: the identity of a row the crypto scope kept.
+    let (scope, tally) = (Some(assets::Scope::Crypto), &mut assets::Tally::default());
     let record = match old_prefix {
-        "ledgerlive:" => ledgerlive::record(row, 0),
-        "coinfinity:coinfinity:" => coinfinity::record(row, 0),
+        "ledgerlive:" => ledgerlive::record(row, 0, scope, tally),
+        "coinfinity:coinfinity:" => coinfinity::record(row, 0, scope, tally),
         "pocketbitcoin:pocketbitcoin:" => {
             let withdrawal = match raw.get("_pocketbitcoin_withdrawal") {
                 Some(Json::Object(w)) => Some(stored_row(w)),
@@ -121,8 +123,10 @@ pub fn synthetic_csv_identity(external_id: &str, raw_json: &str) -> Option<(Stri
             };
             pocket::record(&row, withdrawal.as_ref(), 0)
         }
-        "binance-supplemental:" => binance::investment(&exchange::Columns::new(&row), 0),
-        _ => binance::dividend(&exchange::Columns::new(&row), 0),
+        "binance-supplemental:" => {
+            binance::investment(&exchange::Columns::new(&row), 0, scope, tally)
+        }
+        _ => binance::dividend(&exchange::Columns::new(&row), 0, scope, tally),
     }
     .ok()??;
     if record.data.get(MARKER) != Some(&Json::Bool(true)) {

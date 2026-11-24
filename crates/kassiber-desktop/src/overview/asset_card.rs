@@ -86,8 +86,21 @@ fn exact(r: &AssetRow) -> String {
             }
         }
         Denomination::Fiat(code) => format::fiat(r.amount(), &code),
-        Denomination::Mixed => format!("{:.*} {}", r.precision as usize, r.amount(), r.symbol),
+        Denomination::Mixed => format!("{} {}", exact_units(r.units, r.precision), r.symbol),
     }
+}
+
+/// `units` of 10^-`precision` as an exact decimal without trailing zeros (`300000000000`, 11 ->
+/// `3`; `150000000`, 11 -> `0.0015`): integers only, never a float.
+fn exact_units(units: i128, precision: u8) -> String {
+    let scale = 10i128.pow(u32::from(precision));
+    let sign = if units < 0 { "-" } else { "" };
+    let (whole, frac) = (units.abs() / scale, units.abs() % scale);
+    if frac == 0 {
+        return format!("{sign}{whole}");
+    }
+    let digits = format!("{frac:0width$}", width = usize::from(precision));
+    format!("{sign}{whole}.{}", digits.trim_end_matches('0'))
 }
 
 /// What a row or group shows: (text, priced). Fiat cash is money already and shows its face
@@ -352,6 +365,7 @@ pub fn groups(app: &App, s: &Snapshot) -> Vec<AssetGroup> {
     let raw = app.read("ui.overview.snapshot");
     let sources = assets::sources(s, raw);
     let mut rows = assets::bitcoin_rows(&sources, assets::btc_rate(s));
+    rows.extend(assets::other_rows(raw));
     let cur = s.fiat_currency();
     for r in &app.ov.synthetic_assets {
         let mut r = r.clone();
@@ -415,4 +429,17 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, s: &Snapshot, slot: &Slot) -> 
         .clip_rounded(0.0)
         .label(aria())
         .child(content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::exact_units;
+
+    #[test]
+    fn other_asset_amounts_are_exact_decimals() {
+        assert_eq!(exact_units(300_000_000_000, 11), "3");
+        assert_eq!(exact_units(150_000_000, 11), "0.0015");
+        assert_eq!(exact_units(1, 11), "0.00000000001");
+        assert_eq!(exact_units(-12_345, 2), "-123.45");
+    }
 }

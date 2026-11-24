@@ -713,6 +713,10 @@ fn neutral(conn: &Connection, id: &str, year: i64, cut: Cut<'_>) -> Result<Vec<V
                 Value::Float(n as f64 / 1000.0)
             }
         };
+        let comparable = kassiber_store::assets::units_comparable(
+            &text(&row, "out_asset"),
+            &text(&row, "in_asset"),
+        );
         result.push(dict([
             ("date", s(date(&text(&row, "occurred_at"), cut)?)),
             ("pairId", value(&row, "pair_id").clone()),
@@ -727,8 +731,24 @@ fn neutral(conn: &Connection, id: &str, year: i64, cut: Cut<'_>) -> Result<Vec<V
             ("inWallet", fallback("in_wallet")),
             ("inAsset", fallback("in_asset")),
             ("inSats", amount(int(&row, "in_amount").unsigned_abs())),
-            ("feeSats", sat(int(&row, "swap_fee_msat"))),
-            ("feeKind", value(&row, "swap_fee_kind").clone()),
+            // A swap between two different assets (BTC -> ETH) has no fee in
+            // raw units: their difference is meaningless (plan 24).
+            (
+                "feeSats",
+                if comparable {
+                    sat(int(&row, "swap_fee_msat"))
+                } else {
+                    Value::Null
+                },
+            ),
+            (
+                "feeKind",
+                if comparable {
+                    value(&row, "swap_fee_kind").clone()
+                } else {
+                    Value::Null
+                },
+            ),
             ("costEur", Value::Float(number(&row, "cost_basis"))),
             ("proceedsEur", Value::Float(number(&row, "cost_basis"))),
             ("gainEur", Value::Float(0.0)),

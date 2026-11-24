@@ -98,7 +98,7 @@ changing their subsystem.
 | Wallet observation and network scope | [Chain observers](docs/reference/chain-observers.md), [book networks](docs/reference/book-networks.md) |
 | Local graph analysis or acquisition | [Chain analysis](docs/reference/local-chain-analysis.md), [recurring acquisition](docs/reference/recurring-chain-acquisition.md) |
 | Source-of-funds review and exports | [Source-of-funds review](docs/reference/source-of-funds-review.md) |
-| Imports and commercial evidence | [Imports](docs/reference/imports.md), [external documents](docs/plan/08-external-document-reconciliation.md) |
+| Imports and commercial evidence | [Imports](docs/reference/imports.md), [exchange contract](docs/reference/exchange-contract.md), [external documents](docs/plan/08-external-document-reconciliation.md) |
 | Error text from servers, proxies, or tools | [Credential echoes](docs/reference/credential-echo.md) |
 | Daemon, AI tools, and external agents | [Daemon](docs/reference/daemon.md), [AI](docs/reference/ai.md), [operator broker](docs/reference/operator-broker.md), [MCP](docs/reference/mcp.md) |
 | Database changes | [Database compatibility](docs/reference/database-compatibility.md) |

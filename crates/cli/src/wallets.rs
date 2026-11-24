@@ -80,12 +80,14 @@ pub fn execute(
         );
     }
     let operation = match namespace.text("wallets_command").unwrap_or_default() {
-        command @ ("sync-kraken" | "sync-coinbase" | "sync-binance" | "sync-bitpanda") => {
+        command @ ("sync-kraken" | "sync-coinbase" | "sync-binance" | "sync-bitpanda"
+        | "sync-bitvavo" | "sync-bitstamp" | "sync-bitfinex" | "sync-bitcoinde") => {
             return book.import_exchange_api(
                 &profile_id,
                 &wallet,
                 namespace.text("backend").unwrap_or_default(),
                 command.strip_prefix("sync-").expect("sync command"),
+                changed_rows(namespace)?,
             );
         }
         "sync" => {
@@ -106,6 +108,7 @@ pub fn execute(
                     mode: None,
                     companion: None,
                     timezone: None,
+                    changed_rows: changed_rows(namespace)?,
                 },
                 column_map,
             )
@@ -122,10 +125,15 @@ pub fn execute(
         | "import-pocketbitcoin"
         | "import-strike"
         | "import-bisq"
+        | "import-bitvavo"
+        | "import-bitstamp"
+        | "import-bitfinex"
+        | "import-bitcoinde"
         | "import-ledger-live"
         | "import-cointracking"
         | "import-blockpit"
         | "import-binance-supplemental"
+        | "import-binance-history"
         | "import-btcpay"
         | "import-wasabi" => {
             return book.import_wallet_file(kassiber_wallets::file_import::Request {
@@ -134,6 +142,7 @@ pub fn execute(
                 mode: namespace.text("mode").map(str::to_owned),
                 companion: namespace.text("transactions").map(str::to_owned),
                 timezone: namespace.text("timezone").map(str::to_owned),
+                changed_rows: changed_rows(namespace)?,
                 file: namespace.text("file").unwrap_or_default().into(),
                 format: match namespace.text("wallets_command") {
                     Some("import-wasabi") => kassiber_wallets::file_import::Format::Wasabi,
@@ -146,11 +155,18 @@ pub fn execute(
                     Some("import-21bitcoin") => kassiber_wallets::file_import::Format::TwentyOne,
                     Some("import-strike") => kassiber_wallets::file_import::Format::Strike,
                     Some("import-bisq") => kassiber_wallets::file_import::Format::Bisq,
+                    Some("import-bitvavo") => kassiber_wallets::file_import::Format::Bitvavo,
+                    Some("import-bitstamp") => kassiber_wallets::file_import::Format::Bitstamp,
+                    Some("import-bitfinex") => kassiber_wallets::file_import::Format::Bitfinex,
+                    Some("import-bitcoinde") => kassiber_wallets::file_import::Format::Bitcoinde,
                     Some("import-cointracking") => {
                         kassiber_wallets::file_import::Format::CoinTracking
                     }
                     Some("import-binance-supplemental") => {
                         kassiber_wallets::file_import::Format::Binance
+                    }
+                    Some("import-binance-history") => {
+                        kassiber_wallets::file_import::Format::BinanceHistory
                     }
                     Some("import-blockpit") => kassiber_wallets::file_import::Format::Blockpit,
                     Some("import-ledger-live") => kassiber_wallets::file_import::Format::LedgerLive,
@@ -236,6 +252,17 @@ fn column_map(
 }
 
 /// `wallets identify` arguments; an absent repeatable flag is no input.
+/// `--changed-rows`: the answer to rows that look like a stored row
+/// (docs/reference/imports.md#re-importing-a-newer-export).
+fn changed_rows(
+    namespace: &Namespace,
+) -> Result<Option<kassiber_wallets::file_import::ChangedRows>, AppError> {
+    namespace
+        .text("changed_rows")
+        .map(kassiber_wallets::file_import::ChangedRows::parse)
+        .transpose()
+}
+
 fn identify_args(namespace: &Namespace) -> kassiber_wallets::identify::CliArgs {
     let list = |name: &str| match namespace.get(name) {
         Some(Value::List(items)) => items.iter().map(kassiber_envelope::py_str).collect(),
