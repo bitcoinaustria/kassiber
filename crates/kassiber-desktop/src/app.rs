@@ -20,6 +20,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -131,6 +132,27 @@ pub struct Toast {
     pub actions: Vec<crate::toastopen::ToastAction>,
     /// The pointer is over it: `toastopen::poll` holds it.
     pub hovered: bool,
+}
+
+/// A caller's claim on the answer to one request ([`App::send_ticket`]).
+///
+/// The answer reaches the modules only while the caller still holds the ticket (or a clone).
+#[derive(Clone, Debug)]
+pub struct Ticket(Arc<()>);
+
+impl Ticket {
+    /// Whether the answer `on_reply` is handling now is this ticket's.
+    pub fn answers(&self, app: &App) -> bool {
+        app.delivering_ticket
+            .as_ref()
+            .is_some_and(|ticket| std::ptr::eq(ticket.as_ptr(), Arc::as_ptr(&self.0)))
+    }
+}
+
+impl PartialEq for Ticket {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// A reply as the UI keeps it.
@@ -267,8 +289,8 @@ pub struct App {
     /// order they asked.
     parked: HashMap<String, (u64, Value)>,
     next_seq: u64,
-    /// The request whose answer is being delivered (`reply_id`).
-    delivering: Option<String>,
+    delivering_ticket: Option<Weak<()>>,
+    tickets: HashMap<String, Weak<()>>,
     /// While true, error toasts are not shown: the answer is a refusal the app handles itself
     /// (a request refused behind the lock, a write refused because the open book changed).
     quiet_errors: bool,
@@ -533,7 +555,8 @@ impl App {
             orphaned: HashMap::new(),
             parked: HashMap::new(),
             next_seq: 0,
-            delivering: None,
+            delivering_ticket: None,
+            tickets: HashMap::new(),
             quiet_errors: false,
             root_switch: None,
             local: VecDeque::new(),
@@ -585,12 +608,6 @@ impl App {
     /// A data-root switch is warming its replacement.
     pub fn switching(&self) -> bool {
         self.root_switch.is_some()
-    }
-
-    /// The request whose answer `on_reply` is handling now: a caller that keeps several requests
-    /// with one tag in flight tells their answers apart by it.
-    pub fn reply_id(&self) -> Option<&str> {
-        self.delivering.as_deref()
     }
 
     pub fn dark(&self) -> bool {
@@ -789,6 +806,33 @@ impl App {
         Some(id)
     }
 
+    /// [`send`](Self::send), keeping the answer for as long as the returned ticket lives.
+    pub fn send_ticket(&mut self, kind: &str, args: Value, tag: &'static str) -> Ticket {
+        self.send_ticket_id(kind, args, tag).1
+    }
+
+    /// [`send_ticket`](Self::send_ticket), also naming the request: for a caller that cancels it
+    /// or matches its progress records by id. Its answer still reaches only the ticket's holder.
+    pub fn send_ticket_id(
+        &mut self,
+        kind: &str,
+        args: Value,
+        tag: &'static str,
+    ) -> (String, Ticket) {
+        let id = self
+            .send(kind, args, tag)
+            .expect("send answers every request");
+        let ticket = Ticket(Arc::new(()));
+        self.tickets.insert(id.clone(), Arc::downgrade(&ticket.0));
+        (id, ticket)
+    }
+
+    /// Whether the answer `on_reply` is handling now was sent with a ticket ([`Ticket::answers`]
+    /// tells whose). An answer without one names no caller.
+    pub fn delivering_ticketed(&self) -> bool {
+        self.delivering_ticket.is_some()
+    }
+
     /// Hands a registered request to the daemon.
     fn write(&mut self, id: &str, kind: &str, args: &Value) {
         match self.daemon.request(id, kind, args) {
@@ -849,7 +893,7 @@ impl App {
             if let Err(panic) =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.handle(pgen, m)))
             {
-                self.delivering = None;
+                self.delivering_ticket = None;
                 self.quiet_errors = false;
                 // Ahead of anything queued since: the order the records came in is kept.
                 for item in msgs.into_iter().rev() {
@@ -1071,9 +1115,11 @@ impl App {
             return false;
         };
         self.busy.reads = self.busy.reads.saturating_sub(1);
-        let _ = old;
         let id = self.daemon.alloc_id();
         self.register(&id, kind, tag, &args);
+        if let Some(ticket) = self.tickets.remove(old) {
+            self.tickets.insert(id.clone(), ticket);
+        }
         if let Some(m) = self.meta.get_mut(&id) {
             m.seq = meta.seq;
             m.rereads = meta.rereads + 1;
@@ -1085,11 +1131,19 @@ impl App {
         true
     }
 
-    /// Hands a finished reply to the app and every module, naming its request (`reply_id`).
+    /// Hands a finished reply to the app and every module. An answer whose caller dropped
+    /// every clone of its ticket is not delivered.
     pub(crate) fn deliver_as(&mut self, tag: &'static str, id: &str, reply: Reply) {
-        let before = self.delivering.replace(id.to_owned());
+        let ticket = self.tickets.remove(id);
+        if ticket
+            .as_ref()
+            .is_some_and(|ticket| ticket.strong_count() == 0)
+        {
+            return;
+        }
+        let before = std::mem::replace(&mut self.delivering_ticket, ticket);
         self.deliver(tag, reply);
-        self.delivering = before;
+        self.delivering_ticket = before;
     }
 
     /// Hands a finished reply to the app and every module.
@@ -1314,6 +1368,7 @@ impl App {
             self.parked.remove(&id);
             self.orphaned.insert(id, (kind, pgen));
         }
+        self.tickets.retain(|id, _| self.pending.contains_key(id));
         self.cycle = BookRefresh::default();
         self.last_change = None;
         self.reads.clear();
@@ -1928,6 +1983,9 @@ impl Drop for App {
 }
 
 #[cfg(test)]
+mod delivery_model;
+
+#[cfg(test)]
 pub(crate) mod tests {
     use super::*;
 
@@ -2039,6 +2097,13 @@ pub(crate) mod tests {
         let id = app.daemon.alloc_id();
         app.register(&id, kind, tag, &Value::Null);
         id
+    }
+
+    pub(crate) fn inject_ticket(app: &mut App, kind: &str, tag: &'static str) -> (String, Ticket) {
+        let id = inject(app, kind, tag);
+        let ticket = Ticket(Arc::new(()));
+        app.tickets.insert(id.clone(), Arc::downgrade(&ticket.0));
+        (id, ticket)
     }
 
     pub(crate) fn answer(app: &mut App, id: &str, kind: &str, data: Value) {

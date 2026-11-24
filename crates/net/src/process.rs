@@ -206,7 +206,6 @@ impl Route {
 mod tests {
     use super::*;
     use crate::{Consent, Ledger, Offline};
-    use std::os::unix::fs::PermissionsExt;
     use std::sync::{
         atomic::{AtomicU8, Ordering},
         Arc,
@@ -215,8 +214,7 @@ mod tests {
     fn fake(body: &str) -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("fake-lightning-cli");
-        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        kassiber_test_support::write_executable(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         (root, path)
     }
     fn config(program: PathBuf) -> ClnConfig {
@@ -241,22 +239,10 @@ mod tests {
         deadline: Instant,
         limit: usize,
     ) -> Result<Vec<u8>, ClnProcessError> {
-        // A script written a moment ago can be "text file busy" (ETXTBSY)
-        // while another test thread's fork still holds its write descriptor;
-        // that spawn fails as Io. Retry it briefly; any other outcome stands.
-        for _ in 0..20 {
-            let consent = Consent::explicit_trigger(&request);
-            let result = gate.authorize(request.clone(), Some(consent)).unwrap().cln(
-                ClnMethod::GetInfo,
-                deadline,
-                limit,
-            );
-            if !matches!(result, Err(ClnProcessError::Io)) {
-                return result;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        Err(ClnProcessError::Io)
+        let consent = Consent::explicit_trigger(&request);
+        gate.authorize(request, Some(consent))
+            .unwrap()
+            .cln(ClnMethod::GetInfo, deadline, limit)
     }
 
     #[test]

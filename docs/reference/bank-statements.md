@@ -102,7 +102,10 @@ Accepting (a suggestion, or any explicit lines and purchases) reuses a
 purchase's reviewed `fiat_purchase` source together with its reviewed link,
 or creates the source and links it as a `manual_source` (`method`
 `bank_statement`), and records an `accepted` decision; the purchase keeps one
-allocation. Generated text names only dates, amounts, a curated exchange and
+allocation. The desktop accepts a suggestion by its `suggestion_id` (the
+suggestion's `id`): the daemon refuses it (`conflict`) unless the pair is
+still exactly that suggestion, so a match shown as exact and unique never
+lands as an explicit pairing after the purchase or the statements changed. Generated text names only dates, amounts, a curated exchange and
 the account's short form (`••3201`). Rejecting records `rejected`; on an
 accepted pair it withdraws the line from the source's evidence and keeps the
 source. The source-of-funds report lists accepted lines as `bank_evidence`

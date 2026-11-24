@@ -29,6 +29,7 @@ zeroize = "1"
 nix = { version = "0.30", features = ["user", "fs"] }
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 tempfile = "3"
 
 [lints.rust]

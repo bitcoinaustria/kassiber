@@ -144,6 +144,7 @@ lwk_wollet = { version = "=0.18.0", default-features = false }
 lwk_common = { version = "=0.18.1", default-features = false }
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 kassiber-net = { path = "../net", features = ["test-support"] }
 
 [lints.rust]

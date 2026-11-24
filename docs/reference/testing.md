@@ -162,10 +162,18 @@ race on replay. Those sessions get the hold back from the tape
 `crates/session-replay/src/replay.rs`): the first history request waits, the
 test's input goes in once it is held, and the request finishes when the test
 let it. For `test_live_freshness_controls_remain_available_during_fetch` that
-is after the control has answered; for
-`test_live_freshness_eof_joins_the_request_before_exit` the input is EOF and
-the release follows once stdout has been quiet for 100 ms, as the test drained
-the daemon's output before it released the request.
+is after the control has answered. For
+`test_live_freshness_eof_joins_the_request_before_exit` (the input is EOF) and
+`test_live_freshness_encrypted_request_connection_and_lock_cleanup` (a lock)
+the daemon stops and joins the request before it answers or exits: the hold
+is armed with `release-on-revoke` and the tape releases it when the process
+revokes the request's consent, so the answer always arrives after the stop,
+as it did for the test (a quiet-stdout timer released it first under load).
+
+The dataset job fixture (`analysis_ops_fixture`) cancels a job before its
+worker begins, as the recording did: under `test-harness` the job runtime
+holds workers until the fixture's cancel is in
+(`Runtime::hold_workers`), instead of racing the worker thread.
 
 The recorder needed the pytest suite, so no new sessions are recorded. New
 coverage goes into Rust tests. A reviewed, deliberate change re-records the
@@ -431,7 +439,24 @@ that each fetch the locked test data first:
    observer-sensitive paths change.
 6. The stable `required` aggregate succeeds only when every required job
    passes. Platform credential jobs keep their separate credential/packaging
-   path filter, and ordinary pull requests do not build release packages.
+   path filter. `prerelease-binaries.yml` builds the CLI and desktop packages
+   (unpublished, `dev` channel) on pull requests that touch Rust, packaging or
+   release paths.
+
+A pull request whose base is another pull request's branch (a stacked layer)
+runs a fast lane: `Recorded sessions`, `Chain observers` and the macOS and
+Windows desktop builds are skipped, and `required` accepts those skips. Pull
+requests into `main` and pushes to `main` run every job. A stack pays the full
+lane on the layer that targets `main`, and each later layer pays it once it is
+retargeted there, so stacked layers must target the branch below them, not
+`main`. `prerelease-binaries.yml` skips its package builds on stacked layers
+the same way.
+
+Starting `ci` by hand (workflow_dispatch, on any branch) runs only the desktop
+app checks on the chosen OS (`windows-latest` by default). Use it for the
+Windows or macOS desktop checks of work that is tested locally and merged
+without the full cloud lane:
+`gh workflow run ci.yml --ref <branch> -f desktop_os=windows-latest`.
 
 Every job that compiles Rust first installs the toolchain `rust-toolchain.toml`
 pins and restores a Cargo cache of the registry and the dependency builds (the
@@ -1284,6 +1309,12 @@ frozen [custody recordings](#custody-recordings).
   transport tests fail and no test can change it. Exploratory
   `kassiber offline on|off` runs change the machine-wide switch unless that
   variable points elsewhere.
+- Stand-in scripts a test runs (fake CLIs, helpers, daemons) are written with
+  `kassiber_test_support::write_executable`, never written and made
+  executable in-process: a child that another test thread forks meanwhile
+  holds the write descriptor, and exec then fails with `ETXTBSY`.
+  `crates/repo-checks/tests/executable_scripts.rs` refuses the in-process
+  form and local `ETXTBSY` retries.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.

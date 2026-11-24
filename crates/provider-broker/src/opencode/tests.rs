@@ -107,9 +107,7 @@ exit 2
             names = RECORDED.join(" "),
         );
         let executable = fake.path("bin/opencode");
-        std::fs::write(&executable, script).unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        kassiber_test_support::write_executable(&executable, script).unwrap();
         fake
     }
 

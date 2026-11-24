@@ -29,7 +29,11 @@
 //! write when it is empty) fires it: the hold creates `<dir>/held`, and
 //! every replayed read from then on waits until `<dir>/release` exists (at
 //! most a minute), as a server that answers nothing while it holds one
-//! request. It fires once per process.
+//! request. It fires once per process. When `<dir>/release-on-revoke`
+//! exists, revoking any network consent in the process (a cancelled or
+//! stopped request) releases it too: the recording's server answered only
+//! after the test saw the product stop, so the answer replays after the
+//! stop, never before it (a timer could release it first under load).
 //!
 //! `KASSIBER_TEST_NET_TAPE_WRITES=<file>` appends every replayed write to
 //! the file, one base64 line each, so a test can count the requests a replay
@@ -95,6 +99,12 @@ enum Event {
 static MODE: OnceLock<Option<Mode>> = OnceLock::new();
 static HOLD: OnceLock<Option<PathBuf>> = OnceLock::new();
 static HOLD_FIRED: AtomicBool = AtomicBool::new(false);
+static REVOKED: AtomicBool = AtomicBool::new(false);
+
+/// A consent was revoked: a hold armed to release on that releases.
+pub(crate) fn note_revoked() {
+    REVOKED.store(true, Ordering::SeqCst);
+}
 static WRITES: OnceLock<Option<Mutex<File>>> = OnceLock::new();
 
 /// Note one replayed write for the test.
@@ -138,8 +148,18 @@ fn fires(dir: &std::path::Path, bytes: &[u8]) -> bool {
 
 /// Wait for the hold's release, at most a minute.
 fn wait_for_release(dir: &std::path::Path) {
+    wait_for_release_or_revoked(dir, &REVOKED);
+}
+
+/// [`wait_for_release`] against a given revocation flag, so unit tests don't
+/// share the process-wide one other tests' `Consent::revoke` calls set.
+fn wait_for_release_or_revoked(dir: &std::path::Path, revoked: &AtomicBool) {
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    while !dir.join("release").exists() && std::time::Instant::now() < deadline {
+    let on_revoke = dir.join("release-on-revoke").exists();
+    while !dir.join("release").exists()
+        && !(on_revoke && revoked.load(Ordering::SeqCst))
+        && std::time::Instant::now() < deadline
+    {
         std::thread::sleep(Duration::from_millis(5));
     }
 }
@@ -754,6 +774,29 @@ mod tests {
             decode_error(&encode_error(&Error::CertificateChanged)),
             Error::CertificateChanged
         ));
+    }
+
+    #[test]
+    fn a_hold_marked_release_on_revoke_ends_when_a_consent_is_revoked() {
+        let dir = std::env::temp_dir().join(format!("kassiber-tape-revoke-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("release-on-revoke"), b"").unwrap();
+        // Other tests revoke consents and set the process-wide flag; use our own.
+        let revoked = std::sync::Arc::new(AtomicBool::new(false));
+        let waiting = {
+            let dir = dir.clone();
+            let revoked = revoked.clone();
+            std::thread::spawn(move || {
+                let began = std::time::Instant::now();
+                wait_for_release_or_revoked(&dir, &revoked);
+                began.elapsed()
+            })
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!waiting.is_finished(), "held until the stop");
+        revoked.store(true, Ordering::SeqCst);
+        assert!(waiting.join().unwrap() < Duration::from_secs(30));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

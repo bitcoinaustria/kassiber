@@ -626,8 +626,8 @@
   {
     "id": "W-import-atomic",
     "file": "crates/wallets/src/file_import.rs",
-    "find": "ROLLBACK TO wallet_file_import;RELEASE wallet_file_import",
-    "replace": "RELEASE wallet_file_import",
+    "find": "    } else {\n        lock.rollback()\n    }",
+    "replace": "    } else {\n        lock.commit()\n    }",
     "expect_failing": [
       "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness",
       "twentyone_batch_failure_rolls_back_observations_legacy_flags_and_readiness",

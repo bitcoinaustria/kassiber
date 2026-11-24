@@ -57,6 +57,10 @@ fn main() -> ExitCode {
     // Test builds only: a recorded session's version, refused before any
     // work when malformed (the package version otherwise).
     version::current();
+    // SQLite's one-time initialization, finished here before the broker,
+    // daemon or job threads open their first connections (SQLCipher's
+    // `sqlcipher_export` is registered at the end of it).
+    kassiber_store::initialize();
     // BIP329 label matching reads the derived ownership index, which lives
     // above the metadata service it serves.
     kassiber_wallets::identify::register_bip329_ownership();

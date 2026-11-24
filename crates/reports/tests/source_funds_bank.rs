@@ -215,3 +215,55 @@ fn accept_refuses_pairs_that_cannot_be_funding_and_writes_nothing() {
     );
     assert_eq!(count(conn, "SELECT COUNT(*) FROM source_funds_sources"), 1);
 }
+
+/// Accepting a displayed suggestion binds to it: once the pair is no longer
+/// suggested (the purchase's value changed, or a competing line arrived), the
+/// acceptance is refused for a new review instead of becoming an explicit
+/// pairing that never met the suggestion's conditions.
+#[test]
+fn accepting_a_suggestion_refuses_once_it_is_no_longer_suggested() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    let lines = vec![line(conn, "-1000.00")];
+    let buys = vec!["buy1".to_owned()];
+    let id = matching::group_key(&lines, &buys);
+    let accept = |suggestion: &str| {
+        source_funds_bank::accept_suggestion(
+            conn,
+            &scope(),
+            &lines,
+            &buys,
+            suggestion,
+            &SystemSources,
+        )
+    };
+    // The id must be the named pair's own suggestion.
+    assert_eq!(accept("0000000000000000").unwrap_err().code, "validation");
+    conn.execute(
+        "UPDATE transactions SET fiat_value_exact='1001.00' WHERE id='buy1'",
+        [],
+    )
+    .unwrap();
+    let stale = accept(&id).unwrap_err();
+    assert_eq!(stale.code, "conflict", "{stale:?}");
+    assert_eq!(
+        count(conn, "SELECT COUNT(*) FROM bank_statement_line_decisions"),
+        0
+    );
+    assert_eq!(count(conn, "SELECT COUNT(*) FROM source_funds_sources"), 0);
+    // Still suggested: accepted with the suggestion's reasons.
+    conn.execute(
+        "UPDATE transactions SET fiat_value_exact='1000.00' WHERE id='buy1'",
+        [],
+    )
+    .unwrap();
+    accept(&id).unwrap();
+    let reasons: String = conn
+        .query_row(
+            "SELECT reasons_json FROM bank_statement_line_decisions",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(reasons.contains("equals the purchase value"), "{reasons}");
+}

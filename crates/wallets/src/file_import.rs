@@ -1713,22 +1713,6 @@ pub enum DesktopImport {
     Samourai(samourai::Request),
 }
 
-/// The `wallet_file_import` savepoint while it is open: dropped open (an
-/// early return), it is rolled back and released.
-struct OpenSavepoint<'a> {
-    conn: &'a Connection,
-    open: bool,
-}
-impl Drop for OpenSavepoint<'_> {
-    fn drop(&mut self) {
-        if self.open {
-            let _ = self.conn.execute_batch(
-                "ROLLBACK TO SAVEPOINT wallet_file_import; RELEASE SAVEPOINT wallet_file_import",
-            );
-        }
-    }
-}
-
 fn run(
     conn: &Connection,
     request: Request,
@@ -1790,8 +1774,7 @@ fn run(
         None => None,
     };
     let mut bisq_escrow = None;
-    // Rolls the import's savepoint back on any early return once it is open.
-    let mut savepoint = OpenSavepoint { conn, open: false };
+    let mut lock = None;
     // The wallet's asset scope, for formats that keep other crypto assets.
     let scope = match &wallet {
         Some(wallet) if request.format.scoped() => {
@@ -1825,15 +1808,11 @@ fn run(
                 "Omit --wallet to use the default Bisq wallet, or create one with `wallets create --kind bisq`.",
             ));
         }
-        // A Bisq export is validated against the book (stored legs, escrow
-        // transactions another trade books), so it is read under the write
-        // lock: a concurrent import can't commit the same trade in between.
-        kassiber_store::begin_write_savepoint(conn, "wallet_file_import")
-            .map_err(database_error)?;
-        savepoint.open = true;
+        let held =
+            kassiber_store::WriteLock::begin(conn, "wallet_file_import").map_err(database_error)?;
         let mut parsed = bisq::read(
             &bisq::Book {
-                conn,
+                conn: &held,
                 profile: &request.profile_id,
                 escrow: &wallet.id,
                 timezone: request.timezone.as_deref(),
@@ -1843,6 +1822,7 @@ fn run(
         )?;
         let rows = std::mem::take(&mut parsed.rows);
         bisq_escrow = Some(parsed);
+        lock = Some(held);
         (rows, None)
     } else if let (Some(scope), Some(wallet)) = (scope, &wallet) {
         let target = tax_platform::Target {
@@ -1894,11 +1874,12 @@ fn run(
             assets::screen_stored(&string(&record.fields, "asset"), scope, &wallet.label, &row)?;
         }
     }
-    if !savepoint.open {
-        kassiber_store::begin_write_savepoint(conn, "wallet_file_import")
-            .map_err(database_error)?;
-        savepoint.open = true;
-    }
+    let lock = match lock {
+        Some(lock) => lock,
+        None => {
+            kassiber_store::WriteLock::begin(conn, "wallet_file_import").map_err(database_error)?
+        }
+    };
     let mut selected = vec![];
     let result = if mode == Some("relevant") {
         exchange::enrich(conn, &request, &rows)
@@ -1971,14 +1952,12 @@ fn run(
         }
         (_, result) => result,
     };
-    savepoint.open = false;
     if result.is_ok() {
-        conn.execute_batch("RELEASE wallet_file_import")
-            .map_err(database_error)?;
+        lock.commit()
     } else {
-        conn.execute_batch("ROLLBACK TO wallet_file_import;RELEASE wallet_file_import")
-            .map_err(database_error)?;
+        lock.rollback()
     }
+    .map_err(database_error)?;
     let result = result.map(|mut outcome| {
         if let (Some((total, network, skipped)), Py::Dict(pairs)) = (&bull_wallet, &mut outcome) {
             let at = pairs

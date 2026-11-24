@@ -161,3 +161,7 @@ crates/kassiber-desktop/build.rs|git|let out = Command::new("git").args(args).ou
 crates/kassiber-desktop/src/fixtures.rs|process_alive|std::process::Command::new("kill")
 crates/kassiber-desktop/src/app.rs|on_window_close|let _ = std::process::Command::new("kill")
 crates/kassiber-desktop/src/osleaks/backup.rs|marks_are_set_on_existing_items_and_only_kassibers_are_released|let tm = std::process::Command::new("/usr/bin/tmutil")
+crates/test-support/src/lib.rs|write_executable|let mut writer = Command::new("/bin/sh")
+crates/test-support/tests/write_executable.rs|a_written_script_runs_while_other_threads_fork|Command::new("/bin/sh").arg("-c").arg(":").status().unwrap();
+crates/test-support/tests/write_executable.rs|a_written_script_runs_while_other_threads_fork|Command::new(&script).output()
+crates/test-support/tests/write_executable.rs|rewriting_a_script_replaces_it_with_owner_only_permissions|let output = Command::new(&script).output().unwrap();
