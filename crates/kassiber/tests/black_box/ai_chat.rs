@@ -50,11 +50,7 @@ fn book() -> Sandbox {
     let mut sandbox = Sandbox::empty();
     let broker = sandbox.path("broker/fake_broker.sh");
     std::fs::create_dir_all(broker.parent().unwrap()).unwrap();
-    std::fs::write(&broker, FAKE_BROKER).unwrap();
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&broker, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    kassiber_test_support::write_executable(&broker, FAKE_BROKER).unwrap();
     let broker = broker.to_string_lossy().into_owned();
     sandbox
         .set("KASSIBER_RUST_TEST_AI_TIME", TIME)

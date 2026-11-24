@@ -285,9 +285,8 @@ mod tests {
     /// `/dev/fd/N`: dash, Ubuntu's `/bin/sh`, refuses `<&N` above 9.
     #[cfg(unix)]
     fn script(directory: &std::path::Path) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
         let path = directory.join("child.sh");
-        std::fs::write(
+        kassiber_test_support::write_executable(
             &path,
             "#!/bin/sh\n\
              echo \"argv=$*\"\n\
@@ -303,7 +302,6 @@ mod tests {
              exit 3\n",
         )
         .unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
         path
     }
 
@@ -433,18 +431,16 @@ mod tests {
     #[test]
     fn a_signalled_child_reports_the_negative_signal() {
         use crate::service::tests::Fake;
-        use std::os::unix::fs::PermissionsExt;
         let book = tempfile::tempdir().unwrap();
         let launch = tempfile::tempdir().unwrap();
         let program = launch.path().join("killed.sh");
         // It takes its lease first: a child that dies before the broker
         // has written it fails the handoff with a broken pipe instead.
-        std::fs::write(
+        kassiber_test_support::write_executable(
             &program,
             "#!/bin/sh\ncat /dev/fd/$2 >/dev/null\nkill -9 $$\n",
         )
         .unwrap();
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
         let fake = Fake::new();
         let runner = CliRunner::new(
             Arc::clone(&fake) as Arc<dyn Backend>,

@@ -1,0 +1,17 @@
+[package]
+name = "kassiber-test-support"
+description = "Development fixtures shared by crate tests; never a product dependency"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
