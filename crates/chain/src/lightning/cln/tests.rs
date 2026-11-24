@@ -212,11 +212,9 @@ fn cln_report_commando_configuration_is_refused_inert_and_secret_free() {
 
 #[cfg(unix)]
 fn fake_cli(body: &str) -> (tempfile::TempDir, PathBuf) {
-    use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let program = root.path().join("fake-lightning-cli");
-    std::fs::write(&program, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+    kassiber_test_support::write_executable(&program, format!("#!/bin/sh\n{body}\n")).unwrap();
     (root, program)
 }
 

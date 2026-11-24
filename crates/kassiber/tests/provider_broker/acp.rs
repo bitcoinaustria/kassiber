@@ -4,13 +4,9 @@
 //! the real MCP child (`kassiber --provider-broker-mcp`) started by that
 //! fake from `--additional-mcp-config`, forwarding through the tool bridge.
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
-use kassiber_provider_broker::executables::{run_provider, RunOptions};
-use kassiber_provider_broker::ProviderId;
 use serde_json::{json, Value};
 
 const FAKE_SCRIPT: &str = include_str!("../../../provider-broker/src/acp/fake-copilot.sh");
@@ -29,30 +25,7 @@ impl Fake {
             .unwrap();
         let script = dir.path().join("copilot");
         std::fs::write(dir.path().join("version"), "GitHub Copilot CLI 1.0.93.\n").unwrap();
-        std::fs::write(&script, FAKE_SCRIPT).unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        // A thread spawning while the script was open for writing leaves a
-        // child holding that descriptor until it execs, and running the
-        // script meanwhile fails with ETXTBSY. Once one run succeeds no such
-        // descriptor is left, so the broker's launches are safe.
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match run_provider(
-                ProviderId::Copilot,
-                &script,
-                &["--version"],
-                RunOptions::default(),
-            ) {
-                Err(failure) if failure.message().ends_with("ETXTBSY") => {
-                    assert!(Instant::now() < deadline, "{failure}");
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                ran => {
-                    ran.unwrap();
-                    break;
-                }
-            }
-        }
+        kassiber_test_support::write_executable(&script, FAKE_SCRIPT).unwrap();
         Self {
             dir,
             steps: Vec::new(),

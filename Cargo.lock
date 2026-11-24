@@ -2507,6 +2507,7 @@ dependencies = [
  "kassiber-secrets",
  "kassiber-setup",
  "kassiber-store",
+ "kassiber-test-support",
  "kassiber-transactions",
  "kassiber-transfers",
  "kassiber-wallets",
@@ -2563,6 +2564,7 @@ dependencies = [
  "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-test-support",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
@@ -2752,6 +2754,7 @@ dependencies = [
  "httparse",
  "idna_adapter",
  "kassiber-envelope",
+ "kassiber-test-support",
  "nix 0.30.1",
  "rustls",
  "serde_json",
@@ -2772,6 +2775,7 @@ dependencies = [
  "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-test-support",
  "nix 0.30.1",
  "sha2 0.11.1",
  "tempfile",
@@ -2825,6 +2829,7 @@ dependencies = [
  "kassiber-net",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-test-support",
  "nix 0.30.1",
  "serde",
  "serde_json",
@@ -2919,6 +2924,7 @@ dependencies = [
 name = "kassiber-repo-checks"
 version = "0.1.0"
 dependencies = [
+ "kassiber-test-support",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -3063,6 +3069,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-test-support"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "kassiber-transactions"
 version = "0.1.0"
 dependencies = [
@@ -3122,6 +3135,7 @@ dependencies = [
  "kassiber-setup",
  "kassiber-store",
  "kassiber-tax-countries",
+ "kassiber-test-support",
  "kassiber-transactions",
  "kassiber-transfers",
  "kassiber-xlsx",

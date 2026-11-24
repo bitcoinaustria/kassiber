@@ -1292,6 +1292,12 @@ frozen [custody recordings](#custody-recordings).
   transport tests fail and no test can change it. Exploratory
   `kassiber offline on|off` runs change the machine-wide switch unless that
   variable points elsewhere.
+- Stand-in scripts a test runs (fake CLIs, helpers, daemons) are written with
+  `kassiber_test_support::write_executable`, never written and made
+  executable in-process: a child that another test thread forks meanwhile
+  holds the write descriptor, and exec then fails with `ETXTBSY`.
+  `crates/repo-checks/tests/executable_scripts.rs` refuses the in-process
+  form and local `ETXTBSY` retries.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.

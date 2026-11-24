@@ -24,6 +24,7 @@ kassiber-envelope = { path = "../envelope" }
 nix = { version = "0.30", features = ["signal", "user", "fs"] }
 
 [dev-dependencies]
+kassiber-test-support = { path = "../test-support" }
 tempfile = "3"
 serde_json = "1"
 # Parse Cargo policy without ad-hoc TOML line matching. No production dependency.

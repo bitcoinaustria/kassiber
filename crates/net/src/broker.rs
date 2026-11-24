@@ -1093,7 +1093,7 @@ mod tests {
         let overridden =
             BrokerProgram::locate_from(Some(fake.clone().into()), Some(current.clone()));
         assert_eq!(overridden.program(), None);
-        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        kassiber_test_support::write_executable(&fake, "#!/bin/sh\n").unwrap();
         let overridden =
             BrokerProgram::locate_from(Some(fake.clone().into()), Some(current.clone()));
         assert_eq!(overridden.program(), Some(fake.as_path()));

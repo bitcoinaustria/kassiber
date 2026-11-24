@@ -734,14 +734,12 @@ fn fake_cln(desk: &Desk, data: &Value) -> (std::path::PathBuf, std::path::PathBu
         std::fs::write(dir.join(format!("{method}.json")), dumps(reply)).unwrap();
     }
     let cli = desk.base_path().join("fake-lightning-cli");
-    std::fs::write(
+    kassiber_test_support::write_executable(
         &cli,
         "#!/bin/sh\nfor a; do case $a in --rpc-file=*) dir=${a#--rpc-file=};; esac; method=$a; done\n\
          printf '%s\\n' \"$*\" >> \"$dir/hits\"\nexec cat \"$dir/$method.json\"\n",
     )
     .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o700)).unwrap();
     (cli, dir)
 }
 
