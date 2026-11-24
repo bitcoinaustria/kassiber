@@ -8,7 +8,7 @@ use rune::{Color, El, Key, KeyEvent, Shadow, TextStyle, Tx, col, el, row, text};
 use rune_kit::Placement;
 
 use crate::app::App;
-use crate::i18n::{Lang, lang, t};
+use crate::i18n::{Lang, lang, t, t_in, tr_in};
 use crate::icons as I;
 use crate::theme::Tk;
 use crate::ui::{button, ic};
@@ -168,67 +168,70 @@ pub fn is_valid_date(s: &str) -> bool {
     normalize_date(s).is_some()
 }
 
-fn months_full(l: Lang) -> [&'static str; 12] {
-    match l {
-        Lang::En => [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ],
-        Lang::De => [
-            "Jänner",
-            "Februar",
-            "März",
-            "April",
-            "Mai",
-            "Juni",
-            "Juli",
-            "August",
-            "September",
-            "Oktober",
-            "November",
-            "Dezember",
-        ],
-    }
+const MONTH_FULL_KEYS: [&str; 12] = [
+    "common:datePicker.monthsFull.jan",
+    "common:datePicker.monthsFull.feb",
+    "common:datePicker.monthsFull.mar",
+    "common:datePicker.monthsFull.apr",
+    "common:datePicker.monthsFull.may",
+    "common:datePicker.monthsFull.jun",
+    "common:datePicker.monthsFull.jul",
+    "common:datePicker.monthsFull.aug",
+    "common:datePicker.monthsFull.sep",
+    "common:datePicker.monthsFull.oct",
+    "common:datePicker.monthsFull.nov",
+    "common:datePicker.monthsFull.dec",
+];
+
+const MONTH_SHORT_KEYS: [&str; 12] = [
+    "common:datePicker.monthsShort.jan",
+    "common:datePicker.monthsShort.feb",
+    "common:datePicker.monthsShort.mar",
+    "common:datePicker.monthsShort.apr",
+    "common:datePicker.monthsShort.may",
+    "common:datePicker.monthsShort.jun",
+    "common:datePicker.monthsShort.jul",
+    "common:datePicker.monthsShort.aug",
+    "common:datePicker.monthsShort.sep",
+    "common:datePicker.monthsShort.oct",
+    "common:datePicker.monthsShort.nov",
+    "common:datePicker.monthsShort.dec",
+];
+
+const WEEKDAY_KEYS: [&str; 7] = [
+    "common:datePicker.weekdays.mon",
+    "common:datePicker.weekdays.tue",
+    "common:datePicker.weekdays.wed",
+    "common:datePicker.weekdays.thu",
+    "common:datePicker.weekdays.fri",
+    "common:datePicker.weekdays.sat",
+    "common:datePicker.weekdays.sun",
+];
+
+fn month_full(m0: u32, l: Lang) -> String {
+    t_in(MONTH_FULL_KEYS[m0 as usize], l)
 }
 
-fn months_short(l: Lang) -> [&'static str; 12] {
-    match l {
-        Lang::En => [
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-        ],
-        Lang::De => [
-            "Jän.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.",
-            "Dez.",
-        ],
-    }
+fn month_short(m0: u32, l: Lang) -> String {
+    t_in(MONTH_SHORT_KEYS[m0 as usize], l)
 }
 
-fn weekdays(l: Lang) -> [&'static str; 7] {
-    match l {
-        Lang::En => ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
-        Lang::De => ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
-    }
+fn weekday(i: usize, l: Lang) -> String {
+    t_in(WEEKDAY_KEYS[i], l)
 }
 
 /// Formats a valid date for display: `Mar 05, 2024` (EN) or `05. März 2024` (DE-AT).
 pub fn format_display(v: &str, l: Lang) -> Option<String> {
     let iso = normalize_date(v)?;
     let (y, m0, d) = parse_iso(&iso)?;
-    let m = months_short(l)[m0 as usize];
-    Some(match l {
-        Lang::En => format!("{m} {d:02}, {y:04}"),
-        Lang::De => format!("{d:02}. {m} {y:04}"),
-    })
+    let month = month_short(m0, l);
+    let day = format!("{d:02}");
+    let year = format!("{y:04}");
+    Some(tr_in(
+        "common:datePicker.displayFormat",
+        l,
+        &[("month", &month), ("day", &day), ("year", &year)],
+    ))
 }
 
 /// 12-year page start containing `y`, anchored so `today_y` is the final cell of its page
@@ -499,7 +502,7 @@ fn popover(
             .center_y()
             .child(pill_btn(
                 "pick-month",
-                months_full(l)[state.month as usize].to_owned(),
+                month_full(state.month, l),
                 t("common:datePicker.chooseMonth"),
                 View::Months,
             ))
@@ -654,12 +657,12 @@ fn days_grid(
     l: Lang,
     on_select: fn(&mut App, String),
 ) -> El {
-    let wd_row = row().w(grid_w).gap(gap).children(weekdays(l).map(|d| {
+    let wd_row = row().w(grid_w).gap(gap).children((0..7).map(|i| {
         row()
             .w(cell_w)
             .py(tk.r(0.25))
             .center()
-            .child(text(d).font(tk.txs(500.0)).color(tk.muted_fg))
+            .child(text(weekday(i, l)).font(tk.txs(500.0)).color(tk.muted_fg))
     }));
     let first = first_weekday(vy, vm);
     let n = days_in_month(vy, vm);
@@ -671,7 +674,7 @@ fn days_grid(
     let mut weeks = col()
         .gap(gap)
         .role("grid")
-        .label(format!("{} {vy:04}", months_full(l)[vm as usize]));
+        .label(format!("{} {vy:04}", month_full(vm, l)));
     let mut week = row().gap(gap);
     let mut slot = 0;
     for _ in 0..first {
@@ -789,8 +792,6 @@ fn months_grid(
     grid_w: f32,
     l: Lang,
 ) -> El {
-    let short = months_short(l);
-    let full = months_full(l);
     let gap = tk.r(0.25);
     let mut grid = col()
         .w(grid_w)
@@ -811,7 +812,7 @@ fn months_grid(
                 .center()
                 .radius(tk.r(0.375))
                 .role("button")
-                .label(full[m0 as usize].to_owned())
+                .label(month_full(m0, l))
                 .checked(is_sel)
                 .focusable(true)
                 .focus_selected(is_sel || is_cur)
@@ -877,7 +878,7 @@ fn months_grid(
             };
             r = r.child(
                 b.child(
-                    text(short[m0 as usize])
+                    text(month_short(m0, l))
                         .font(tk.tsm(if is_sel || is_cur { 500.0 } else { 400.0 }))
                         .color(if is_sel { tk.primary_fg } else { tk.fg }),
                 ),
