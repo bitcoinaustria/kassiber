@@ -105,6 +105,68 @@ impl ExchangeTxidProof {
 
 pub(super) type Proofs = BTreeMap<(String, String), ExchangeTxidProof>;
 
+fn valid_script_hex(value: &Py) -> bool {
+    let Py::Str(raw) = value else {
+        return false;
+    };
+    let Some(text) = raw.as_str() else {
+        return false;
+    };
+    let trimmed = text.py_strip();
+    !trimmed.is_empty()
+        && trimmed.len().is_multiple_of(2)
+        && trimmed.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn exact_nonneg_sats(value: &Py) -> bool {
+    matches!(value, Py::Int(n) if *n >= BigInt::from(0))
+}
+
+/// Reject raw leg payloads where `stored::parse` silently dropped non-dict
+/// elements or truncated a fractional `value_sats` into an integer.
+fn valid_raw_legs(raw_json: &Value, expected_inputs: usize, expected_outputs: usize) -> bool {
+    let raw = py::object(raw_json);
+    let payload = [py::get(&raw, "ownership_graph"), py::get(&raw, "tx"), &raw]
+        .into_iter()
+        .find(|candidate| {
+            matches!(
+                (py::get(candidate, "vin"), py::get(candidate, "vout")),
+                (Py::List(_), Py::List(_))
+            )
+        });
+    let Some(payload) = payload else {
+        return true;
+    };
+    let (Py::List(vin), Py::List(vout)) = (py::get(payload, "vin"), py::get(payload, "vout"))
+    else {
+        return false;
+    };
+    if vin.len() != expected_inputs || vout.len() != expected_outputs {
+        return false;
+    }
+    let integer_sats_field = |entry: &Py| -> bool {
+        match py::get(entry, "value_sats") {
+            Py::Null => true,
+            Py::Int(n) => *n >= BigInt::from(0),
+            Py::Str(s) => s.as_str().is_some_and(|text| {
+                let trimmed = text.py_strip();
+                !trimmed.is_empty() && trimmed.bytes().all(|b| b.is_ascii_digit())
+            }),
+            _ => false,
+        }
+    };
+    vin.iter().all(|entry| {
+        matches!(entry, Py::Dict(_)) && {
+            let prevout = py::get(entry, "prevout");
+            matches!(prevout, Py::Dict(_))
+                && integer_sats_field(prevout)
+                && integer_sats_field(entry)
+        }
+    }) && vout
+        .iter()
+        .all(|entry| matches!(entry, Py::Dict(_)) && integer_sats_field(entry))
+}
+
 /// The receipt's one owned output, or `None` when the match is not exact:
 /// a fully valued graph with no input owned by the book and exactly one
 /// output owned in its network, by the receiving wallet alone, for the whole
@@ -136,12 +198,16 @@ pub(super) fn owned_output(
     }
     let inputs = py::list(py::get(&graph, "inputs"));
     if inputs.is_empty()
-        || inputs
-            .iter()
-            .any(|entry| !py::truth(py::get(entry, "script")))
-        || outputs
-            .iter()
-            .any(|output| !py::truth(py::get(output, "script")))
+        || outputs.is_empty()
+        || !valid_raw_legs(&row["raw_json"], inputs.len(), outputs.len())
+        || inputs.iter().any(|entry| {
+            !valid_script_hex(py::get(entry, "script"))
+                || !exact_nonneg_sats(py::get(entry, "value_sats"))
+        })
+        || outputs.iter().any(|output| {
+            !valid_script_hex(py::get(output, "script"))
+                || !exact_nonneg_sats(py::get(output, "value_sats"))
+        })
     {
         return Ok(None);
     }

@@ -273,7 +273,15 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
         if part_ok && kind_ok {
             if let Some(hash) = member(raw_ordered, "transaction_hash") {
                 if let Some(strict) = crate::graph::strict_txid(&codec::to_json(hash)) {
-                    candidates.push(Value::String(strict));
+                    let conflicting_txid = member(raw_ordered, "txid").is_some_and(|v| {
+                        let raw_txid = codec::to_json(v);
+                        !text(&raw_txid).py_strip().is_empty()
+                            && crate::graph::strict_txid(&raw_txid).as_deref()
+                                != Some(strict.as_str())
+                    });
+                    if !conflicting_txid {
+                        candidates.push(Value::String(strict));
+                    }
                 }
             }
         }

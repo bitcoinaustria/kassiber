@@ -373,6 +373,42 @@ pub(super) fn compile_with_scopes(
             }
             continue;
         }
+        if chain_candidate
+            && !truth(&source["authoritative_chain_observation"])
+            && !truth(&target["authoritative_chain_observation"])
+            && (crate::graph::is_bark_onchain_row(out)
+                || crate::graph::is_bark_onchain_row(incoming))
+        {
+            let (bark_id, bark_row, bark_obs, other_id, other_row) =
+                if crate::graph::is_bark_onchain_row(out) {
+                    (&out_id, out, source, &in_id, incoming)
+                } else {
+                    (&in_id, incoming, target, &out_id, out)
+                };
+            quarantines.push(quarantine(
+                bark_row,
+                bark_id,
+                "recorded_transfer_authority_conflict",
+                &json!({
+                    "pairing_source": name,
+                    "authoritative_transaction_id": other_id,
+                    "observation_authority_reason": bark_obs["observation_authority_reason"],
+                    "required_for": "authoritative_same_event_wallet_observation"
+                }),
+            )?);
+            blocked.insert(bark_id.clone());
+            quarantines.push(quarantine(
+                other_row,
+                other_id,
+                "transfer_pair_dependency_blocked",
+                &json!({
+                    "blocked_by_transaction_ids": [bark_id],
+                    "required_for": "complete_transfer_component"
+                }),
+            )?);
+            blocked.insert(other_id.clone());
+            continue;
+        }
         if name != "channel_lifecycle"
             && !exact_recorded
             && !exact_fanout

@@ -663,7 +663,8 @@ fn bark_duplicate_legs_other_kinds_and_network_or_authority_gaps_refuse_promotio
     let (q, p) = network_mismatch.run();
     assert!(!has_bark_move(&q, &p));
 
-    // Non-authoritative target (e.g. BTCPay BTC-CHAIN wallet_source).
+    // Non-authoritative target (e.g. BTCPay BTC-CHAIN wallet_source):
+    // refuses automatic promotion and holds BOTH legs so neither books standalone.
     let mut non_auth = Case::exact("send-onchain", 30_000_000, 2_802_000);
     let raw = non_auth.transactions[1]["raw_json"]
         .as_str()
@@ -673,6 +674,73 @@ fn bark_duplicate_legs_other_kinds_and_network_or_authority_gaps_refuse_promotio
         multisig_receipt_row("in-multi", "w-multi", "main", TXID, 30_000_000, raw, false);
     let (q, p) = non_auth.run();
     assert!(!has_bark_move(&q, &p));
+    assert!(
+        has_authority_conflict(&p, "out-bark"),
+        "statement-only Bark match must hold out-bark: {p}"
+    );
+    assert!(
+        has_quarantine(&p, "in-multi", "transfer_pair_dependency_blocked"),
+        "statement-only Bark match must also hold in-multi: {p}"
+    );
+    assert!(
+        projected_row_ids(&p).is_empty(),
+        "statement-only Bark match must book neither leg standalone: {p}"
+    );
+
+    // Amount-balanced fan-out (10,000 + 20,000 = 30,000 sat): both authoritative
+    // and statement-only multi-receipt groups must hold all legs as owned_fanout_unresolved
+    // with zero standalone rows.
+    for authoritative in [true, false] {
+        let mut balanced = Case::exact("send-onchain", 30_000_000, 2_802_000);
+        balanced.wallets.push(multisig_wallet("w-multi-2", "main"));
+        let raw_a = receipt_raw(
+            TXID,
+            default_inputs(INPUT_SCRIPT),
+            default_outputs(10_000, OWNED_SCRIPT),
+        );
+        let raw_b = receipt_raw(
+            TXID,
+            default_inputs(INPUT_SCRIPT),
+            default_outputs(20_000, SECOND_OWNED_SCRIPT),
+        );
+        balanced.transactions[1] = multisig_receipt_row(
+            "in-multi-1",
+            "w-multi",
+            "main",
+            TXID,
+            10_000_000,
+            raw_a,
+            authoritative,
+        );
+        balanced.transactions.push(multisig_receipt_row(
+            "in-multi-2",
+            "w-multi-2",
+            "main",
+            TXID,
+            20_000_000,
+            raw_b,
+            authoritative,
+        ));
+        balanced.owned_index = owned_index(
+            "main",
+            &[
+                (OWNED_SCRIPT, "w-multi"),
+                (SECOND_OWNED_SCRIPT, "w-multi-2"),
+            ],
+        );
+        let (q, p) = balanced.run();
+        assert!(!has_bark_move(&q, &p));
+        for tx_id in ["out-bark", "in-multi-1", "in-multi-2"] {
+            assert!(
+                has_quarantine(&p, tx_id, "owned_fanout_unresolved"),
+                "amount-balanced Bark fan-out (auth={authoritative}) must hold {tx_id}: {p}"
+            );
+        }
+        assert!(
+            projected_row_ids(&p).is_empty(),
+            "amount-balanced Bark fan-out (auth={authoritative}) must emit no standalone rows: {p}"
+        );
+    }
 
     // Bark ark-receive / lightning-send / exit / ark-send must not promote.
     for kind in ["ark-send", "lightning-send", "exit", "ark-receive"] {
@@ -896,6 +964,95 @@ fn bark_requires_bound_sync_provenance_and_complete_observer_graph_scripts() {
         "missing output scriptpubkey must not promote"
     );
     assert!(has_authority_conflict(&p, "out-bark"));
+
+    // 6. Incomplete observer graph: prevout with script but missing value.
+    let mut missing_prevout_value = Case::exact("send-onchain", 30_000_000, 2_802_000);
+    let raw = receipt_raw(
+        TXID,
+        json!([{"txid": FOREIGN_INPUT_TXID, "vout": 0, "prevout": {"scriptpubkey": INPUT_SCRIPT}}]),
+        default_outputs(30_000, OWNED_SCRIPT),
+    );
+    missing_prevout_value.transactions[1] =
+        multisig_receipt_row("in-multi", "w-multi", "main", TXID, 30_000_000, raw, true);
+    let (q, p) = missing_prevout_value.run();
+    assert!(
+        !has_bark_move(&q, &p),
+        "prevout without value must not promote"
+    );
+    assert!(has_authority_conflict(&p, "out-bark"));
+
+    // 7. Malformed non-hex input or output script string must not promote.
+    for (vin, vout, label) in [
+        (
+            json!([{"txid": FOREIGN_INPUT_TXID, "vout": 0, "prevout": {"scriptpubkey": "not-valid-hex!", "value": 80_000}}]),
+            default_outputs(30_000, OWNED_SCRIPT),
+            "malformed input script",
+        ),
+        (
+            default_inputs(INPUT_SCRIPT),
+            json!([
+                {"scriptpubkey": "zzz", "value": 40_000},
+                {"scriptpubkey": OWNED_SCRIPT, "value": 30_000},
+            ]),
+            "malformed output script",
+        ),
+    ] {
+        let mut bad_script = Case::exact("send-onchain", 30_000_000, 2_802_000);
+        let raw = receipt_raw(TXID, vin, vout);
+        bad_script.transactions[1] =
+            multisig_receipt_row("in-multi", "w-multi", "main", TXID, 30_000_000, raw, true);
+        let (q, p) = bad_script.run();
+        assert!(!has_bark_move(&q, &p), "{label} must not promote");
+        assert!(has_authority_conflict(&p, "out-bark"));
+    }
+
+    // 8. Dropped non-object entry in vin or vout must not promote.
+    for (vin, vout, label) in [
+        (
+            json!([
+                {"txid": FOREIGN_INPUT_TXID, "vout": 0, "prevout": {"scriptpubkey": INPUT_SCRIPT, "value": 80_000}},
+                "dropped-input",
+            ]),
+            default_outputs(30_000, OWNED_SCRIPT),
+            "non-object vin entry",
+        ),
+        (
+            default_inputs(INPUT_SCRIPT),
+            json!([
+                {"scriptpubkey": FOREIGN_SCRIPT, "value": 40_000},
+                {"scriptpubkey": OWNED_SCRIPT, "value": 30_000},
+                12345,
+            ]),
+            "non-object vout entry",
+        ),
+    ] {
+        let mut dropped_leg = Case::exact("send-onchain", 30_000_000, 2_802_000);
+        let raw = receipt_raw(TXID, vin, vout);
+        dropped_leg.transactions[1] =
+            multisig_receipt_row("in-multi", "w-multi", "main", TXID, 30_000_000, raw, true);
+        let (q, p) = dropped_leg.run();
+        assert!(!has_bark_move(&q, &p), "{label} must not promote");
+        assert!(has_authority_conflict(&p, "out-bark"));
+    }
+
+    // 9. Fractional value_sats on output must not be truncated to match.
+    let mut fractional = Case::exact("send-onchain", 30_000_000, 2_802_000);
+    let raw = receipt_raw(
+        TXID,
+        default_inputs(INPUT_SCRIPT),
+        json!([
+            {"scriptpubkey": FOREIGN_SCRIPT, "value_sats": 40_000},
+            {"scriptpubkey": OWNED_SCRIPT, "value_sats": 30_000.5},
+        ]),
+    );
+    fractional.transactions[1] =
+        multisig_receipt_row("in-multi", "w-multi", "main", TXID, 30_000_000, raw, true);
+    let (q, p) = fractional.run();
+    assert!(
+        !has_bark_move(&q, &p),
+        "fractional value_sats must not promote"
+    );
+    assert!(has_authority_conflict(&p, "out-bark"));
 }
 
 #[test]
@@ -947,4 +1104,28 @@ fn bark_event_key_rejects_vtxo_and_fee_hashes_and_accepts_onchain_principal() {
             "{kind}/{part} must not get a chain event key: {key:?}"
         );
     }
+
+    // Conflicting txid and transaction_hash in a Bark payload must fail closed
+    // in both onchain_scope and evidence::event_key.
+    let mut conflicting = bark_send_row(
+        "conflict",
+        "w-bark",
+        "custom",
+        "main",
+        "send-onchain",
+        "principal",
+        30_000_000,
+        2_802_000,
+        false,
+        Some(TXID),
+    );
+    let mut raw: Value = serde_json::from_str(conflicting["raw_json"].as_str().unwrap()).unwrap();
+    raw["txid"] = json!(OTHER_TXID);
+    conflicting["raw_json"] = json!(raw.to_string());
+    assert_eq!(journal_support::onchain_scope(&conflicting), None);
+    let key = evidence::event_key(&conflicting).unwrap();
+    assert_ne!(
+        key.native_namespace, "chain",
+        "conflicting Bark txid vs transaction_hash must not get a chain event key: {key:?}"
+    );
 }

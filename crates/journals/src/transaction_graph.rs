@@ -704,23 +704,29 @@ fn is_unspendable(script: Option<&str>) -> bool {
 
 fn txid_from_row(row: &Value) -> Option<String> {
     let raw = json_obj(g(row, "raw_json"));
-    if let Some(txid) = string_or_none(g(&raw, "txid")) {
-        return Some(lower(&txid));
-    }
-    if string_or_none(g(&raw, "source")).is_some_and(|v| lower(&v) == "btcpay_bark_wallet")
-        && string_or_none(g(&raw, "part")).is_some_and(|v| lower(&v) == "principal")
-        && string_or_none(g(&raw, "kind")).is_some_and(|v| {
-            matches!(
-                lower(&v).as_str(),
-                "send-onchain" | "offboard" | "onchain-send" | "onchain-receive"
-            )
-        })
-    {
-        if let Some(tx_hash) = string_or_none(g(&raw, "transaction_hash"))
-            .filter(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
-        {
-            return Some(lower(&tx_hash));
+    if string_or_none(g(&raw, "source")).is_some_and(|v| lower(&v) == "btcpay_bark_wallet") {
+        let onchain_kind = string_or_none(g(&raw, "part"))
+            .is_some_and(|v| lower(&v) == "principal")
+            && string_or_none(g(&raw, "kind")).is_some_and(|v| {
+                matches!(
+                    lower(&v).as_str(),
+                    "send-onchain" | "offboard" | "onchain-send" | "onchain-receive"
+                )
+            });
+        if onchain_kind {
+            if let Some(tx_hash) = string_or_none(g(&raw, "transaction_hash"))
+                .filter(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+                .map(|h| lower(&h))
+            {
+                let conflicting_txid =
+                    string_or_none(g(&raw, "txid")).is_some_and(|t| lower(&t) != tx_hash);
+                if !conflicting_txid {
+                    return Some(tx_hash);
+                }
+            }
         }
+    } else if let Some(txid) = string_or_none(g(&raw, "txid")) {
+        return Some(lower(&txid));
     }
     let external = string_or_none(g(row, "external_id"))?;
     Some(if external.chars().count() == 64 {

@@ -719,6 +719,7 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
                 mode: None,
                 companion: None,
                 timezone: None,
+                changed_rows: None,
             },
             None,
         )
@@ -749,15 +750,112 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
             "held forged Bark import into '{label}' must not book the multisig receipt standalone"
         );
     }
+
+    // Pre-upgrade file-enrichment attack: a Bark row enriched on an older build
+    // (adding a payment_hash and swapping transaction_hash without creating an
+    // import_batch_transactions link) must not gain bark_txid_exact authority.
+    let conn = open_book();
+    insert_wallet(
+        &conn,
+        "w-bark",
+        "BTCPay Bark",
+        "custom",
+        json!({
+            "sync_source": "btcpay",
+            "backend": "merchant",
+            "store_id": "shop",
+            "payment_method_id": "BTC-ARK",
+            "chain": "bitcoin",
+            "network": "main",
+        }),
+    );
+    insert_wallet(
+        &conn,
+        "w-multi",
+        "Store multisig",
+        "address",
+        json!({
+            "chain": "bitcoin",
+            "network": "main",
+            "addresses": [MULTISIG_ADDRESS],
+        }),
+    );
+    insert_tx(
+        &conn,
+        "ln-in",
+        "w-bark",
+        "btcpay-bark:shop:ln-1",
+        None,
+        "2026-11-10T10:00:00Z",
+        "inbound",
+        100_000_000,
+        0,
+        "income",
+        &bark_raw("lightning-receive", "ln-1", 100_000_000, 0, None),
+        80_000.0,
+    );
+    insert_tx(
+        &conn,
+        "out-enriched",
+        "w-bark",
+        "btcpay-bark:shop:send-1",
+        None,
+        "2026-11-11T10:00:00Z",
+        "outbound",
+        30_000_000,
+        2_802_000,
+        "withdrawal",
+        &bark_raw(
+            "send-onchain",
+            "send-1",
+            -32_802_000,
+            2_802_000,
+            Some(TXID_SEND),
+        ),
+        80_000.0,
+    );
+    conn.execute(
+        "UPDATE transactions SET payment_hash = ?1, payment_hash_source = 'generic' WHERE id = 'out-enriched'",
+        [TXID_UNRELATED],
+    )
+    .unwrap();
+    let raw = receipt_raw(TXID_SEND, 0, 30_000, &owned_script);
+    insert_tx(
+        &conn,
+        "in-multi",
+        "w-multi",
+        TXID_SEND,
+        Some("txid"),
+        "2026-11-11T10:01:00Z",
+        "inbound",
+        30_000_000,
+        0,
+        "deposit",
+        &raw,
+        80_000.0,
+    );
+    stamp_authoritative_receipt(&conn, "in-multi", "w-multi", TXID_SEND, 30_000_000, &raw);
+    run_journals(&conn);
+    let enriched_auto: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM journal_custody_decisions WHERE state = 'internal_verified'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        enriched_auto, 0,
+        "pre-upgrade enriched Bark row with payment_hash must not qualify for bark_txid_exact"
+    );
 }
 
 #[test]
 fn upgrade_invalidates_existing_processed_bark_book_and_restores_report_readiness_on_rebuild() {
     let root = ScratchDir::new("upgrade");
-    let mut book = kassiber_store::Book::create(root.path(), None).unwrap();
     let owned_script = kassiber_wallets::config::bitcoin_address_script(MULTISIG_ADDRESS)
         .expect("P2WSH multisig script");
     {
+        let book = kassiber_store::Book::create(root.path(), None).unwrap();
         let conn = book.connection();
         conn.execute_batch(
             "INSERT INTO workspaces(id,label,created_at) VALUES('w','Shop','2026-01-01T00:00:00Z');
@@ -865,8 +963,6 @@ fn upgrade_invalidates_existing_processed_bark_book_and_restores_report_readines
         .unwrap();
     }
 
-    // Upgrade migration runs on open and invalidates the affected processed book once.
-    kassiber_store::semantics::migrate(book.connection_mut()).unwrap();
     let blockers_snapshot = |conn: &Connection| {
         let (context, active) = kassiber_workspace::readiness::scope(conn, None).unwrap();
         let health =
@@ -881,39 +977,171 @@ fn upgrade_invalidates_existing_processed_bark_book_and_restores_report_readines
             kassiber_journals::report_blockers::snapshot(conn, health, coverage).unwrap(),
         )
     };
-    let (health_before, before) = blockers_snapshot(book.connection());
-    assert_eq!(
-        get(&before, "ready"),
-        Some(&Py::Bool(false)),
-        "upgraded book with stale Bark journals must block reports before rebuild: {before:?}"
-    );
-    let journal_before = get(&health_before, "journals").unwrap();
-    assert_eq!(get(journal_before, "status"), Some(&s("not_processed")));
 
-    // Rebuild with current Kassiber: report readiness is restored and double-counting is gone.
-    run_journals(book.connection());
-    let (health_after, after) = blockers_snapshot(book.connection());
-    assert_eq!(
-        get(&after, "ready"),
-        Some(&Py::Bool(true)),
-        "rebuilt Bark book must be report ready: {after:?}"
-    );
-    let journal_after = get(&health_after, "journals").unwrap();
-    assert_eq!(get(journal_after, "status"), Some(&s("current")));
-    let acquisitions: i64 = book
-        .connection()
-        .query_row(
-            "SELECT COALESCE(SUM(quantity), 0) FROM journal_entries WHERE entry_type = 'acquisition'",
-            [],
-            |r| r.get(0),
+    // Production open (`Book::open_migrating`) runs compat_ordered -> bark_onchain_settlement
+    // and invalidates the affected processed book once.
+    {
+        let book = kassiber_store::Book::open_migrating(
+            root.path(),
+            kassiber_store::OpenOptions::default(),
+            true,
         )
         .unwrap();
-    assert_eq!(acquisitions, 100_000_000);
+        let (health_before, before) = blockers_snapshot(book.connection());
+        assert_eq!(
+            get(&before, "ready"),
+            Some(&Py::Bool(false)),
+            "upgraded book with stale Bark journals must block reports before rebuild: {before:?}"
+        );
+        let journal_before = get(&health_before, "journals").unwrap();
+        assert_eq!(get(journal_before, "status"), Some(&s("not_processed")));
 
-    // Subsequent open/migrate is a no-op and keeps the rebuilt book current.
-    let changes_before = book.connection().total_changes();
-    kassiber_store::semantics::migrate(book.connection_mut()).unwrap();
-    assert_eq!(book.connection().total_changes(), changes_before);
+        // Rebuild with current Kassiber: report readiness is restored and double-counting is gone.
+        run_journals(book.connection());
+        let (health_after, after) = blockers_snapshot(book.connection());
+        assert_eq!(
+            get(&after, "ready"),
+            Some(&Py::Bool(true)),
+            "rebuilt Bark book must be report ready: {after:?}"
+        );
+        let journal_after = get(&health_after, "journals").unwrap();
+        assert_eq!(get(journal_after, "status"), Some(&s("current")));
+        let acquisitions: i64 = book
+            .connection()
+            .query_row(
+                "SELECT COALESCE(SUM(quantity), 0) FROM journal_entries WHERE entry_type = 'acquisition'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(acquisitions, 100_000_000);
+    }
+
+    // Reopening via production `Book::open_migrating` is a no-op and keeps the book current.
+    {
+        let book = kassiber_store::Book::open_migrating(
+            root.path(),
+            kassiber_store::OpenOptions::default(),
+            true,
+        )
+        .unwrap();
+        let (health_reopen, reopen) = blockers_snapshot(book.connection());
+        assert_eq!(get(&reopen, "ready"), Some(&Py::Bool(true)));
+        assert_eq!(
+            get(get(&health_reopen, "journals").unwrap(), "status"),
+            Some(&s("current"))
+        );
+    }
+
+    // A brand-new book created and processed on this build must stay current on reopen.
+    let fresh_root = ScratchDir::new("fresh-reopen");
+    {
+        let book = kassiber_store::Book::create(fresh_root.path(), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(
+            "INSERT INTO workspaces(id,label,created_at) VALUES('w','Shop','2026-01-01T00:00:00Z');
+             INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) VALUES('p','w','Main','EUR','generic','2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+        kassiber_setup::context::execute(
+            conn,
+            "context.set",
+            &dict([("workspace", s("w")), ("profile", s("p"))]),
+        )
+        .unwrap();
+        insert_wallet(
+            conn,
+            "w-bark",
+            "BTCPay Bark",
+            "custom",
+            json!({
+                "sync_source": "btcpay",
+                "backend": "merchant",
+                "store_id": "shop",
+                "payment_method_id": "BTC-ARK",
+                "chain": "bitcoin",
+                "network": "main",
+            }),
+        );
+        insert_wallet(
+            conn,
+            "w-multi",
+            "Store multisig",
+            "address",
+            json!({
+                "chain": "bitcoin",
+                "network": "main",
+                "addresses": [MULTISIG_ADDRESS],
+            }),
+        );
+        insert_tx(
+            conn,
+            "ln-in",
+            "w-bark",
+            "btcpay-bark:shop:ln-1",
+            None,
+            "2026-11-10T10:00:00Z",
+            "inbound",
+            100_000_000,
+            0,
+            "income",
+            &bark_raw("lightning-receive", "ln-1", 100_000_000, 0, None),
+            80_000.0,
+        );
+        insert_tx(
+            conn,
+            "out-send",
+            "w-bark",
+            "btcpay-bark:shop:send",
+            None,
+            "2026-11-11T10:00:00Z",
+            "outbound",
+            30_000_000,
+            2_802_000,
+            "withdrawal",
+            &bark_raw(
+                "send-onchain",
+                "send",
+                -32_802_000,
+                2_802_000,
+                Some(TXID_SEND),
+            ),
+            80_000.0,
+        );
+        let raw = receipt_raw(TXID_SEND, 0, 30_000, &owned_script);
+        insert_tx(
+            conn,
+            "in-send",
+            "w-multi",
+            TXID_SEND,
+            Some("txid"),
+            "2026-11-11T10:01:00Z",
+            "inbound",
+            30_000_000,
+            0,
+            "deposit",
+            &raw,
+            80_000.0,
+        );
+        stamp_authoritative_receipt(conn, "in-send", "w-multi", TXID_SEND, 30_000_000, &raw);
+        run_journals(conn);
+    }
+    let reopened = kassiber_store::Book::open_migrating(
+        fresh_root.path(),
+        kassiber_store::OpenOptions::default(),
+        true,
+    )
+    .unwrap();
+    let (health_fresh, fresh_blockers) = blockers_snapshot(reopened.connection());
+    assert_eq!(
+        get(&fresh_blockers, "ready"),
+        Some(&Py::Bool(true)),
+        "brand-new Bark book must stay report ready after reopen: {fresh_blockers:?}"
+    );
+    assert_eq!(
+        get(get(&health_fresh, "journals").unwrap(), "status"),
+        Some(&s("current"))
+    );
 }
 
 #[test]
@@ -1059,4 +1287,77 @@ fn bark_adapter_rows_agree_between_evidence_event_key_and_transaction_graph_txid
         get(get(&ark_graph, "transaction").unwrap(), "txid"),
         Some(&s("btcpay-bark:shop:5-1"))
     );
+
+    // Conflicting txid vs transaction_hash in a stored Bark payload falls back
+    // to external_id rather than trusting the conflicting txid.
+    let mut conflicting_raw: Value = serde_json::from_str(&send_raw).unwrap();
+    conflicting_raw["txid"] = json!(TXID_UNRELATED);
+    insert_tx(
+        &conn,
+        "tx-conflict",
+        "w-bark",
+        "btcpay-bark:shop:14-conflict",
+        None,
+        "2026-11-11T10:02:00Z",
+        "outbound",
+        30_000_000,
+        2_802_000,
+        "withdrawal",
+        &conflicting_raw.to_string(),
+        80_000.0,
+    );
+    let conflict_graph = kassiber_journals::transaction_graph::snapshot(
+        &conn,
+        Some(&dict([("transaction", s("tx-conflict"))])),
+    )
+    .unwrap();
+    assert_eq!(
+        get(get(&conflict_graph, "transaction").unwrap(), "txid"),
+        Some(&s("btcpay-bark:shop:14-conflict"))
+    );
+
+    // transaction_graph::verify finds the clean Bark on-chain sibling on the
+    // receiving multisig tx as an external_record, and excludes the conflicting
+    // Bark payload whose raw_json.txid disagrees with transaction_hash.
+    let owned_script = kassiber_wallets::config::bitcoin_address_script(MULTISIG_ADDRESS)
+        .expect("P2WSH multisig script");
+    insert_wallet(
+        &conn,
+        "w-multi",
+        "Store multisig",
+        "address",
+        json!({
+            "chain": "bitcoin",
+            "network": "main",
+            "addresses": [MULTISIG_ADDRESS],
+        }),
+    );
+    let mut multi_raw_obj: Value =
+        serde_json::from_str(&receipt_raw(TXID_SEND, 0, 30_000, &owned_script)).unwrap();
+    multi_raw_obj["fee"] = json!(10_000);
+    let multi_raw = multi_raw_obj.to_string();
+    insert_tx(
+        &conn,
+        "in-send",
+        "w-multi",
+        TXID_SEND,
+        Some("txid"),
+        "2026-11-11T10:01:00Z",
+        "inbound",
+        30_000_000,
+        0,
+        "deposit",
+        &multi_raw,
+        80_000.0,
+    );
+    let verified = kassiber_journals::transaction_graph::verify(&conn, "p", "in-send").unwrap();
+    assert_eq!(get(&verified, "status"), Some(&s("ok")));
+    let unexplained = py_list(&verified, "unexplained_rows");
+    assert_eq!(
+        unexplained.len(),
+        1,
+        "expected only clean Bark sibling row in verify unexplained_rows, got {verified:?}"
+    );
+    assert_eq!(get(&unexplained[0], "transaction_id"), Some(&s("tx-send")));
+    assert_eq!(get(&unexplained[0], "status"), Some(&s("external_record")));
 }

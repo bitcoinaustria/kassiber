@@ -14,6 +14,15 @@ const LEGACY_PAIR_FEE: &str = "custody-legacy-pair-fee-review-v1";
 const SAME_TIME_ORDER: &str = "same-time-source-order-v1";
 const PRICE_CURRENCY: &str = "price-currency-mismatch-hold-v1";
 const BARK_ONCHAIN_SETTLEMENT: &str = "bark-onchain-settlement-v1";
+const BARK_ACTIVE_ONCHAIN_ROW_SQL: &str = "EXISTS (SELECT 1 FROM transactions t \
+    WHERE t.profile_id = ?1 \
+      AND t.excluded = 0 \
+      AND json_valid(t.raw_json) \
+      AND json_type(t.raw_json) = 'object' \
+      AND lower(trim(coalesce(json_extract(t.raw_json, '$.source'), ''))) = 'btcpay_bark_wallet' \
+      AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal' \
+      AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive') \
+      AND length(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = 64)";
 /// The semantics version that holds a price stored in another currency than
 /// the book's.
 const PRICE_CURRENCY_REQUIRED: i64 = 10;
@@ -461,6 +470,58 @@ pub(crate) fn bark_onchain_settlement(
     observer(&format!("{BARK_ONCHAIN_SETTLEMENT}.before_commit"))?;
     tx.commit().map_err(map_sqlite_error)?;
     observer(&format!("{BARK_ONCHAIN_SETTLEMENT}.after_commit"))
+}
+
+/// Record `bark-onchain-settlement-v1` when a current build finishes processing
+/// a profile containing active Bark on-chain rows, so reopening a brand-new
+/// book via `Book::open_migrating` does not spuriously invalidate it once.
+/// Returns `true` when the audit row was newly inserted.
+pub fn mark_bark_onchain_settlement_current(conn: &Connection, profile_id: &str) -> Result<bool> {
+    let has_table: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migration_audits')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if !has_table {
+        return Ok(false);
+    }
+    let already: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migration_audits WHERE migration_name=?)",
+            [BARK_ONCHAIN_SETTLEMENT],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if already {
+        return Ok(false);
+    }
+    let has_bark: bool = conn
+        .query_row(
+            &format!("SELECT {BARK_ACTIVE_ONCHAIN_ROW_SQL}"),
+            [profile_id],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if !has_bark {
+        return Ok(false);
+    }
+    let impact = python_value(&serde_json::json!({
+        "schema_version": 1,
+        "migration": BARK_ONCHAIN_SETTLEMENT,
+        "affected_profile_count": 0,
+        "explanation": "Recorded after rebuilding journals with Bark on-chain settlement linking and holds.",
+    }));
+    let impact = dumps(&impact, &Options::default().sort_keys(true))
+        .map_err(|_| Error::new(ErrorKind::Validation, "invalid migration audit JSON"))?;
+    let inserted = conn
+        .execute(
+            "INSERT OR IGNORE INTO schema_migration_audits(id,migration_name,schema_version,impact_json,created_at) VALUES(?1,?1,1,?2,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+            [BARK_ONCHAIN_SETTLEMENT, &impact],
+        )
+        .map_err(map_sqlite_error)?;
+    Ok(inserted != 0)
 }
 
 pub(crate) fn legacy_pair_fee(
