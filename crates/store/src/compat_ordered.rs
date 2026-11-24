@@ -247,6 +247,15 @@ fn ensure_schema_compat(
     crate::semantics::legacy_pair_fee(conn, observer)?;
     crate::semantics::price_currency(conn, observer)?;
     transaction_page_index(conn, observer)?;
+    // Import-run coverage metadata (docs/reference/imports.md#import-runs):
+    // additive and NULL for runs recorded before it.
+    columns_between(
+        conn,
+        ("import_batches", "first_row_at"),
+        ("import_batches", "file_size"),
+    )?;
+    // Exchange sync outcomes stored before error classes held provider text.
+    crate::exchange_sync_errors::migrate(conn, observer)?;
     // Last, so the tables a repair matches have their current columns.
     crate::unreleased::repair(conn, observer)?;
     Ok(())

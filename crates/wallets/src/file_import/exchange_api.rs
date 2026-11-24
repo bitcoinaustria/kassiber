@@ -176,6 +176,7 @@ pub fn execute_with(
         &mut ids,
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
+        None,
         &mut selected,
     )
     .and_then(|result| {

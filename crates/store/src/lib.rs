@@ -6,6 +6,7 @@ mod creation;
 pub mod custody_hooks;
 mod durable;
 pub mod encryption;
+pub mod exchange_sync_errors;
 pub mod layout;
 pub mod observer;
 pub mod optional;

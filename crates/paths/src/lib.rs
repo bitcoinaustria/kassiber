@@ -545,6 +545,30 @@ pub fn open_read_nofollow(path: &Path) -> std::io::Result<fs::File> {
     options.open(path)
 }
 
+/// Open a regular file for reading without following a final symlink or
+/// waiting on a FIFO or device: `O_NOFOLLOW | O_NONBLOCK`, then the open
+/// file must be a regular file. A display or import read that must not block
+/// or wander uses this.
+pub fn open_regular_nofollow(path: &Path) -> std::io::Result<fs::File> {
+    let not_regular =
+        || std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a regular file");
+    if !fs::symlink_metadata(path)?.is_file() {
+        return Err(not_regular());
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(not_regular());
+    }
+    Ok(file)
+}
+
 /// `os.getuid()`.
 #[cfg(unix)]
 pub fn current_uid() -> u32 {
