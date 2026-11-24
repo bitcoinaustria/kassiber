@@ -1125,7 +1125,8 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
         ));
     }
     let (mut created, mut unchanged) = (0i64, 0i64);
-    kassiber_store::begin_write_savepoint(conn, "checkpoint_import").map_err(database_error)?;
+    let lock =
+        kassiber_store::WriteLock::begin(conn, "checkpoint_import").map_err(database_error)?;
     let result = prepared.iter().try_for_each(|(known, new)| {
         // An exported row coming back adds nothing; any other row is the
         // user's own statement, never gaining another origin's authority.
@@ -1138,8 +1139,8 @@ pub fn import_csv(conn: &Connection, profile_id: &str, text: &str, source: &str)
         Ok::<(), AppError>(())
     });
     match &result {
-        Ok(()) => conn.execute_batch("RELEASE checkpoint_import"),
-        Err(_) => conn.execute_batch("ROLLBACK TO checkpoint_import;RELEASE checkpoint_import"),
+        Ok(()) => lock.commit(),
+        Err(_) => lock.rollback(),
     }
     .map_err(database_error)?;
     result?;

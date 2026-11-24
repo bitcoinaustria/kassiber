@@ -208,7 +208,7 @@ pub fn execute(
             let asset = text_arg(args, "asset")?;
             let note = text_arg(args, "note")?;
             let attachment = text_arg(args, "attachment")?;
-            kassiber_store::begin_write_savepoint(conn, "checkpoint_add")
+            let lock = kassiber_store::WriteLock::begin(conn, "checkpoint_add")
                 .map_err(kassiber_wallets::database_error)?;
             let result = bound(conn, profile, args).and_then(|()| {
                 checkpoints::add_manual(
@@ -224,7 +224,7 @@ pub fn execute(
                     },
                 )
             });
-            finish(conn, "checkpoint_add", result)
+            finish(lock, result)
         }
         "remove" => {
             check_fields(
@@ -237,11 +237,11 @@ pub fn execute(
                 }),
             )?;
             let id = required(args, "id", operation)?;
-            kassiber_store::begin_write_savepoint(conn, "checkpoint_remove")
+            let lock = kassiber_store::WriteLock::begin(conn, "checkpoint_remove")
                 .map_err(kassiber_wallets::database_error)?;
             let result =
                 bound(conn, profile, args).and_then(|()| checkpoints::remove(conn, profile, &id));
-            finish(conn, "checkpoint_remove", result)
+            finish(lock, result)
         }
         "import" => {
             // The CLI reads a file it is given; the desktop sends the text it
@@ -354,10 +354,10 @@ fn write_new(file: &str, text: &str) -> Result<()> {
         .map_err(|e| AppError::new("filesystem_error", e.to_string()))
 }
 
-fn finish(conn: &Connection, name: &str, result: Result<Value>) -> Result<Value> {
+fn finish(lock: kassiber_store::WriteLock<'_>, result: Result<Value>) -> Result<Value> {
     match &result {
-        Ok(_) => conn.execute_batch(&format!("RELEASE {name}")),
-        Err(_) => conn.execute_batch(&format!("ROLLBACK TO {name};RELEASE {name}")),
+        Ok(_) => lock.commit(),
+        Err(_) => lock.rollback(),
     }
     .map_err(kassiber_wallets::database_error)?;
     result
