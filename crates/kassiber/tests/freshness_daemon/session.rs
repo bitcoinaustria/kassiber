@@ -531,6 +531,24 @@ pub struct Prepared {
     pub env: Vec<(String, String)>,
 }
 
+/// The version of a freshness recording whose environment does not pin one:
+/// the existing recordings were made at 0.22.78, before 1.0.0.
+const UNRECORDED_VERSION: &str = "0.22.78";
+
+fn recorded_version(session: &Value) -> Option<String> {
+    let Value::List(rows) = get(session, "rows")? else {
+        return None;
+    };
+    rows.iter().find_map(|row| {
+        if field(row, "kind") != "daemon.ready" {
+            return None;
+        }
+        let version = get(row, "data").and_then(|data| get(data, "version"))?;
+        let text = py_str(version);
+        (!text.is_empty()).then_some(text)
+    })
+}
+
 pub fn prepare(golden: &Golden, scratch: &Scratch, index: usize, session: &Value) -> Prepared {
     let root = PathBuf::from(scratch.place(&string(session, "root")));
     std::fs::create_dir_all(&root).unwrap();
@@ -551,7 +569,14 @@ pub fn prepare(golden: &Golden, scratch: &Scratch, index: usize, session: &Value
                 .expect("encrypt the restored book");
         }
     }
-    let env = environment(scratch, value(session, "env"));
+    let mut env = environment(scratch, value(session, "env"));
+    if !env
+        .iter()
+        .any(|(key, _)| key == kassiber_store::version::OVERRIDE)
+    {
+        let version = recorded_version(session).unwrap_or_else(|| UNRECORDED_VERSION.to_owned());
+        env.push((kassiber_store::version::OVERRIDE.into(), version));
+    }
     for (key, path) in &env {
         if key == "KASSIBER_RUST_TEST_OWNER_ROOT" {
             std::fs::create_dir_all(path).unwrap();
