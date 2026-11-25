@@ -59,7 +59,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/ci"
+        # The labels API sometimes answers with an empty body; try three times.
+        run: |
+          for attempt in 1 2 3; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/ci" >/dev/null && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
 
   frontend:
     name: Frontend checks
