@@ -1,7 +1,7 @@
 //! Generic pair compilation. A source label never substitutes for endpoint
 //! authority. Native proof production supplies bound compiler-only proofs.
 use super::{
-    anchor,
+    anchor, bark,
     claims::{claim, principal, slice},
     exchange, recorded, Context,
 };
@@ -327,7 +327,15 @@ pub(super) fn compile_with_scopes(
         let exact_exchange = name == exchange::SOURCE
             && exchange_proofs
                 .get(&(out_id.clone(), in_id.clone()))
-                .is_some_and(|p| p.validates(pair, source, target));
+                .is_some_and(|p| {
+                    p.validates_for(exchange::ProofSource::Exchange, pair, source, target)
+                });
+        let exact_bark = name == bark::SOURCE
+            && exchange_proofs
+                .get(&(out_id.clone(), in_id.clone()))
+                .is_some_and(|p| {
+                    p.validates_for(exchange::ProofSource::Bark, pair, source, target)
+                });
         let exact_native = recorded::exact_native(source, target);
         let exact_recorded = recorded::exact_recorded(pair, source, target);
         let exact_fanout = name == "recorded_fanout" && fanout.contains(&text(&pair["group_id"]));
@@ -342,14 +350,63 @@ pub(super) fn compile_with_scopes(
             && source["authoritative_chain_observation"]
                 != target["authoritative_chain_observation"]
         {
-            let (id, row, observation, authoritative) =
+            let (id, row, observation, authoritative, authoritative_row) =
                 if truth(&source["authoritative_chain_observation"]) {
-                    (&in_id, incoming, target, &out_id)
+                    (&in_id, incoming, target, &out_id, out)
                 } else {
-                    (&out_id, out, source, &in_id)
+                    (&out_id, out, source, &in_id, incoming)
                 };
             quarantines.push(quarantine(row,id,"recorded_transfer_authority_conflict",&json!({"pairing_source":name,"authoritative_transaction_id":authoritative,"observation_authority_reason":observation["observation_authority_reason"],"required_for":"authoritative_same_event_wallet_observation"}))?);
             blocked.insert(id.clone());
+            if crate::graph::is_bark_onchain_row(out) || crate::graph::is_bark_onchain_row(incoming)
+            {
+                quarantines.push(quarantine(
+                    authoritative_row,
+                    authoritative,
+                    "transfer_pair_dependency_blocked",
+                    &json!({
+                        "blocked_by_transaction_ids": [id],
+                        "required_for": "complete_transfer_component"
+                    }),
+                )?);
+                blocked.insert(authoritative.clone());
+            }
+            continue;
+        }
+        if chain_candidate
+            && !truth(&source["authoritative_chain_observation"])
+            && !truth(&target["authoritative_chain_observation"])
+            && (crate::graph::is_bark_onchain_row(out)
+                || crate::graph::is_bark_onchain_row(incoming))
+        {
+            let (bark_id, bark_row, bark_obs, other_id, other_row) =
+                if crate::graph::is_bark_onchain_row(out) {
+                    (&out_id, out, source, &in_id, incoming)
+                } else {
+                    (&in_id, incoming, target, &out_id, out)
+                };
+            quarantines.push(quarantine(
+                bark_row,
+                bark_id,
+                "recorded_transfer_authority_conflict",
+                &json!({
+                    "pairing_source": name,
+                    "authoritative_transaction_id": other_id,
+                    "observation_authority_reason": bark_obs["observation_authority_reason"],
+                    "required_for": "authoritative_same_event_wallet_observation"
+                }),
+            )?);
+            blocked.insert(bark_id.clone());
+            quarantines.push(quarantine(
+                other_row,
+                other_id,
+                "transfer_pair_dependency_blocked",
+                &json!({
+                    "blocked_by_transaction_ids": [bark_id],
+                    "required_for": "complete_transfer_component"
+                }),
+            )?);
+            blocked.insert(other_id.clone());
             continue;
         }
         if name != "channel_lifecycle"
@@ -358,6 +415,7 @@ pub(super) fn compile_with_scopes(
             && !exact_native
             && !exact_transition
             && !exact_exchange
+            && !exact_bark
         {
             continue;
         }

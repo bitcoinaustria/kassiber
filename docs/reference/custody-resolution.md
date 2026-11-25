@@ -64,6 +64,7 @@ establish an external origin.
 | --- | --- |
 | Same scoped transaction observed by both own wallets, exact quantities | Automatic MOVE; no manual pairing required. |
 | A Strike or River withdrawal names the txid of an owned wallet's observed receipt, and its amount is exactly that receipt's one owned output | Automatic MOVE with the `exchange_txid_exact` evidence; see [exchange withdrawals](#exchange-withdrawals-that-name-their-txid). Anything less exact keeps today's hold or candidate. |
+| A BTCPay Bark on-chain send (`send-onchain`, `offboard`, or `onchain-send`) names the txid of an owned wallet's observed receipt, and its principal is exactly that receipt's one owned output | Automatic MOVE with the `bark_txid_exact` evidence; see [exchange withdrawals and Bark sends](#exchange-withdrawals-that-name-their-txid). Anything less exact keeps today's hold or candidate. |
 | The recipient synced first and its native inputs imply a missing debit from another connected wallet | `ownership_transfer_source_missing` holds the receipt until the sender's history is available. It does not invent a new acquisition or an absent debit. |
 | A collaborative transaction returns a wallet's entire contribution while another participant funds the recipient or pays the fee | Complete native wallet-net evidence rules out a missing debit. A proven zero-movement observer row is non-economic; foreign-paid fees are not attributed to the owner. |
 | An address list and a later descriptor overlap on some receipt outputs | Complete current native evidence and canonical script ownership apportion the receipt once per output. Imported rows remain unchanged. Incomplete or conflicting evidence produces a targeted quantity hold. |
@@ -106,27 +107,41 @@ The owner decided (D2, 2026-11-09) that one statement is exact enough to
 book without review. The journal books a transfer between the owner's own
 accounts when all of these hold:
 
-- the platform wallet is a Strike or River wallet (`EXCHANGE_TXID_WALLET_KINDS`);
-- its outbound row names a typed txid, and exactly one outbound and one
+- the platform wallet is a Strike or River wallet (`EXCHANGE_TXID_WALLET_KINDS`),
+  or a BTCPay Bark wallet sync (`custom` wallet configured with
+  `sync_source = btcpay`, `payment_method_id = BTC-ARK`, and matching
+  `store_id`, outside file import batches, carrying row-bound Bark sync
+  provenance and `raw_json.source = btcpay_bark_wallet`, `part = principal`,
+  `kind` in `send-onchain`, `offboard`, `onchain-send`, with
+  `amount_includes_fee = false`; generic file imports cannot claim Bark
+  authority);
+- its outbound row names a typed txid (or, for Bark on-chain sends, a valid
+  64-hex `transaction_hash`), and exactly one outbound and one
   inbound row in the book share that canonical `(chain, network, txid,
   asset)` scope, in two different wallets;
-- the receipt has current observer authority and a fully valued graph with
-  that txid, no input owned by the book, and exactly one output owned in that
-  network, by the receiving wallet alone;
-- the platform row's principal equals that output's value in msat, by the
+- the receipt has current observer authority and a complete, fully valued graph
+  (non-empty inputs with previous output scripts, every output with its script
+  and satoshi value, and no evidence conflicts) with that txid, no input owned
+  by the book, and exactly one output owned in that network, by the receiving
+  wallet alone;
+- the platform or Bark row's principal equals that output's value in msat, by the
   source's convention below;
 - neither row is anchored by an authored custody component, and the pair has
   no active "not one movement" dismissal.
 
-The decision is `internal_verified` with the reason `exchange_txid_exact`; it
+The decision is `internal_verified` with the reason `exchange_txid_exact` (for
+Strike/River) or `bark_txid_exact` (for BTCPay Bark); it
 is never presented as a reviewed (`internal_reviewed`) transfer. Its transient
-pair id `exchange-txid:<txid>:<vout>` names the matched output, the decision
-names the platform row and the receipt, and the platform's withdrawal fee
+pair id `exchange-txid:<txid>:<vout>` or `bark-txid:<txid>:<vout>` names the matched output, the decision
+names the platform or Bark row and the receipt, and the withdrawal or Bark fee
 books as a transfer fee. Nothing is stored beyond the journal's own decision,
 so the next rebuild re-derives it from the rows. Dismissing the pair (`transfers
 dismiss --tx-out <withdrawal> --tx-in <receipt>`, or `ui.transfers.dismiss`)
 undoes it like a native HTLC transition: the rows return to today's hold
-(`recorded_transfer_authority_conflict`) until the dismissal expires or is
+(`recorded_transfer_authority_conflict`, and for Bark the paired authoritative
+on-chain leg is also held as `transfer_pair_dependency_blocked` so neither leg
+books standalone; unresolved multi-leg Bark groups hold all legs as
+`owned_fanout_unresolved`) until the dismissal expires or is
 deleted. The held row's quarantine actions then lead with `restore_pairing`,
 which names that dismissal (see [why a transaction is
 quarantined](#why-a-transaction-is-quarantined)). On the desktop, the move's row under
@@ -143,6 +158,7 @@ deletes the dismissal (`ui.transfers.dismissals.delete`) and recalculates.
 | --- | --- | --- |
 | Strike CSV | `Transaction Hash` | `Amount BTC` is what leaves on chain; `Fee BTC` is Strike's charge on top. |
 | River CSV | `Transaction ID` (Account Activity) | `Sent Amount` is what leaves on chain; `Fee Amount` is River's charge, and `Total Amount` is their sum. |
+| BTCPay Bark (`BTC-ARK`) | `transactionHash` (`send-onchain`, `offboard`, `onchain-send` principal rows only; never `ark-receive` VTXOs) | Principal (`-amount - fee`) is what leaves on chain; `fee` is the Ark server and miner fee on top. |
 | Coinbase API | `network.hash` | Not matched: the raw `network` object keeps the row unscoped, and the API's fee is not imported, so its convention is unverified. |
 | Binance API | `txId` | Not matched: whether `amount` excludes `transactionFee` is unverified, and the `network` rail code (`"BTC"`) is admission evidence only, not a matching scope. |
 | Kraken API, Bitpanda API, Bitvavo API and CSV | none | The ledger exports carry no txid. |

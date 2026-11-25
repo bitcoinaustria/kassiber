@@ -285,6 +285,28 @@ pub(crate) fn transfer_scope(row: &Value) -> Option<(String, String, String, Str
             None if present => return None,
             None => {}
         }
+        let norm = |key: &str| {
+            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(
+                get(payload, key).unwrap_or(&Value::Null),
+            )))
+        };
+        if norm("source") == "btcpay_bark_wallet"
+            && norm("part") == "principal"
+            && matches!(
+                norm("kind").as_str(),
+                "send-onchain" | "offboard" | "onchain-send" | "onchain-receive"
+            )
+        {
+            let value = get(payload, "transaction_hash").unwrap_or(&Value::Null);
+            let present = !kassiber_pytext::strip(&or_text(value)).is_empty();
+            match canonical_txid(value) {
+                Some(txid) => {
+                    graph_txids.insert(txid);
+                }
+                None if present => return None,
+                None => {}
+            }
+        }
     }
     if graph_txids.len() > 1 {
         return None;

@@ -364,10 +364,29 @@ pub fn verify(conn: &Connection, profile_id: &str, reference: &str) -> Result<Va
     }
 
     let mut rows_by_wallet: Vec<(String, Vec<Value>)> = Vec::new();
+    let lower_txid = lower(&txid);
     for candidate in rows(
         conn,
-        "SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind, w.config_json AS wallet_config_json FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE t.profile_id = ? AND lower(t.external_id) = ? ORDER BY t.occurred_at, t.created_at, t.id",
-        [profile_id, lower(&txid).as_str()],
+        "SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind, w.config_json AS wallet_config_json \
+         FROM transactions t JOIN wallets w ON w.id = t.wallet_id \
+         WHERE t.profile_id = ?1 \
+           AND ( \
+             lower(t.external_id) = ?2 \
+             OR ( \
+               json_valid(t.raw_json) \
+               AND json_type(t.raw_json) = 'object' \
+               AND lower(trim(coalesce(json_extract(t.raw_json, '$.source'), ''))) = 'btcpay_bark_wallet' \
+               AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal' \
+               AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive') \
+               AND lower(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = ?2 \
+               AND ( \
+                 trim(coalesce(json_extract(t.raw_json, '$.txid'), '')) = '' \
+                 OR lower(trim(json_extract(t.raw_json, '$.txid'))) = ?2 \
+               ) \
+             ) \
+           ) \
+         ORDER BY t.occurred_at, t.created_at, t.id",
+        [profile_id, lower_txid.as_str()],
     )? {
         let (row_chain, row_network) = default_row_chain_network(&candidate);
         if norm_chain_network(&s(row_chain), &s(row_network)) != wanted {

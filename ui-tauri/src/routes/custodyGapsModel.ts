@@ -400,7 +400,7 @@ export function collectCustodyLineagePages(
  * undoes (docs/reference/custody-resolution.md). Reviewed moves are undone
  * by unpairing them instead.
  */
-const UNDOABLE_AUTOMATIC_EVIDENCE = new Set(["exchange_txid_exact"]);
+const UNDOABLE_AUTOMATIC_EVIDENCE = new Set(["exchange_txid_exact", "bark_txid_exact"]);
 
 /** The longest dismissal the daemon accepts: an undo should not lapse. */
 export const AUTOMATIC_UNDO_DAYS = 3650;

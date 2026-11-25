@@ -259,19 +259,47 @@ pub(crate) fn event_key_of<F: Fields + ?Sized>(row: &F) -> Result<EventKey, Erro
         }
     }
     let mut candidates = Vec::new();
-    for payload in [
-        Some(raw_ordered),
-        member(raw_ordered, "tx"),
-        member(raw_ordered, "ownership_graph"),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        if let Py::Dict(items) = payload {
-            for (key, value) in items {
-                if let Key::Str(key) = key {
-                    if txid_name(key.as_str().unwrap_or_default()) {
-                        candidates.push(codec::to_json(value));
+    let is_bark_payload = member(raw_ordered, "source").is_some_and(|v| {
+        text(&codec::to_json(v)).py_strip().py_lower() == crate::graph::BARK_RAW_SOURCE
+    });
+    if is_bark_payload {
+        let part_ok = member(raw_ordered, "part").is_some_and(|v| {
+            text(&codec::to_json(v)).py_strip().py_lower() == crate::graph::BARK_PART_PRINCIPAL
+        });
+        let kind_ok = member(raw_ordered, "kind").is_some_and(|v| {
+            crate::graph::BARK_ONCHAIN_KINDS
+                .contains(&text(&codec::to_json(v)).py_strip().py_lower().as_str())
+        });
+        if part_ok && kind_ok {
+            if let Some(hash) = member(raw_ordered, "transaction_hash") {
+                if let Some(strict) = crate::graph::strict_txid(&codec::to_json(hash)) {
+                    let conflicting_txid = member(raw_ordered, "txid").is_some_and(|v| {
+                        let raw_txid = codec::to_json(v);
+                        !text(&raw_txid).py_strip().is_empty()
+                            && crate::graph::strict_txid(&raw_txid).as_deref()
+                                != Some(strict.as_str())
+                    });
+                    if !conflicting_txid {
+                        candidates.push(Value::String(strict));
+                    }
+                }
+            }
+        }
+    } else {
+        for payload in [
+            Some(raw_ordered),
+            member(raw_ordered, "tx"),
+            member(raw_ordered, "ownership_graph"),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if let Py::Dict(items) = payload {
+                for (key, value) in items {
+                    if let Key::Str(key) = key {
+                        if txid_name(key.as_str().unwrap_or_default()) {
+                            candidates.push(codec::to_json(value));
+                        }
                     }
                 }
             }

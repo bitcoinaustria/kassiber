@@ -507,6 +507,11 @@ fn store<O: storage::WriteObserver>(
     writer.conn.prepare("UPDATE profiles SET journal_semantics_version=?,required_journal_semantics_version=MAX(required_journal_semantics_version,?) WHERE id=?")?
         .execute(params![semantics, semantics, pid])?;
     writer.observer.wrote("profiles")?;
+    if kassiber_store::semantics::mark_bark_onchain_settlement_current(writer.conn, &pid)
+        .map_err(|e| Refusal::new("DatabaseError", e.message))?
+    {
+        writer.observer.wrote("schema_migration_audits")?;
+    }
     writer.observer.phase("filed");
     let filed_report_impacts_resolved = if !truth(state.custody_component_blockers)
         && quarantines.is_empty()

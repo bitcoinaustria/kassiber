@@ -81,6 +81,11 @@ pub struct StageSnapshot {
     /// read as its transaction's only row; present only while there are some.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub excluded_txids: Option<Vec<String>>,
+    /// Row-bound provenance for BTCPay Bark synced on-chain sends
+    /// (`{"transaction_id", "observed_hash"}`); present only while the book
+    /// holds synced Bark sends outside file import batches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bark_sync_provenance: Option<Vec<Record>>,
     pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
@@ -114,6 +119,7 @@ impl StageSnapshot {
             .iter_mut()
             .chain(self.reset_hold_quarantines.iter_mut())
             .chain(self.provider_hold_quarantines.iter_mut())
+            .chain(self.bark_sync_provenance.iter_mut())
         {
             rows.iter_mut().for_each(Record::escape_wire_tags);
         }

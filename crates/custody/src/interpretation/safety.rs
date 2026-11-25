@@ -1,7 +1,7 @@
 //! Composed comparison seam through privacy, raw holds and dependency closure.
 //! Native HTLC production is composed before graph derivation and reconciliation.
 use super::{
-    array, channels, exchange,
+    array, bark, channels, exchange,
     holds::{self, Ids},
     native, pairs, pipeline, privacy, reconciliation, recorded, samourai, Context,
 };
@@ -74,11 +74,17 @@ fn compose_impl(
         } else {
             Vec::new()
         };
-        let (auto, exchange_proofs) = if auto.is_empty() {
+        let (auto, mut exchange_proofs) = if auto.is_empty() {
             (auto, exchange::Proofs::new())
         } else {
             exchange::promote(auto, context, snapshot, &native::dismissed(snapshot)?)?
         };
+        let (auto, bark_proofs) = if auto.is_empty() {
+            (auto, exchange::Proofs::new())
+        } else {
+            bark::promote(auto, context, snapshot, &native::dismissed(snapshot)?)?
+        };
+        exchange_proofs.extend(bark_proofs);
         let exchange_ids: Ids = exchange_proofs
             .keys()
             .flat_map(|(a, b)| [a.clone(), b.clone()])

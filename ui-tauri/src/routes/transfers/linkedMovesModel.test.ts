@@ -70,8 +70,10 @@ const dismissal = (overrides: Partial<TransferDismissal> = {}): TransferDismissa
 
 describe("buildLinkedMoves", () => {
   it("lists automatic lineage moves as automatic and undoable", () => {
-    const [move] = buildLinkedMoves({ lineage: [lineageItem({ evidence_reason: "exchange_txid_exact" })], pairs: [], dismissals: [] });
-    expect(move).toMatchObject({ source: "automatic", undoable: true, fromLabel: "BTCPay Bark", toLabel: "Store on-chain" });
+    for (const reason of ["exchange_txid_exact", "bark_txid_exact"]) {
+      const [move] = buildLinkedMoves({ lineage: [lineageItem({ evidence_reason: reason })], pairs: [], dismissals: [] });
+      expect(move).toMatchObject({ source: "automatic", undoable: true, fromLabel: "BTCPay Bark", toLabel: "Store on-chain" });
+    }
   });
 
   it("keeps each side's own rail on an automatic move between rails", () => {

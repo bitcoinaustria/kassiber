@@ -6972,6 +6972,125 @@ fn bitstamp_csv_tags_same_second_rows_across_imports() {
     assert_eq!(scalar(&conn, tagged), 2);
 }
 
+#[test]
+fn bark_sync_stamps_and_upgrades_provenance_while_file_import_cannot() {
+    let conn = fixture();
+    let txid = "a".repeat(64);
+    let legacy_raw = json!({
+        "amount_msat": -32_802_000,
+        "bark_payment_hash": null,
+        "bark_row_id": "send-1",
+        "fee_msat": 2_802_000,
+        "invoice_id": null,
+        "kind": "send-onchain",
+        "movement_id": 1,
+        "outpoint": null,
+        "part": "principal",
+        "source": "btcpay_bark_wallet",
+        "store_id": "shop",
+        "transaction_hash": txid,
+    })
+    .to_string();
+    // Seed a legacy pre-upgrade Bark row with no `_kassiber_provenance`.
+    conn.execute(
+        "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,confirmed_at,direction,asset,amount,fee,amount_includes_fee,kind,description,raw_json,excluded,created_at) \
+         VALUES('tx-legacy','ws','p','wallet','btcpay-bark:shop:send-1','fp-legacy','2026-11-11T10:00:00Z','2026-11-11T10:00:00Z','outbound','BTC',30000000,2802000,0,'withdrawal','Bark send-onchain',?1,0,'2026-11-11T10:00:00Z')",
+        [&legacy_raw],
+    )
+    .unwrap();
+    // Generic JSON import trying to forge `_kassiber_provenance` and swap txid
+    // cannot overwrite the Bark row's `raw_json`.
+    let forged = json!([{
+        "id": "btcpay-bark:shop:send-1",
+        "occurred_at": "2026-11-11T10:00:00Z",
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": "0.0003",
+        "fee": "0.00002802",
+        "kind": "withdrawal",
+        "fiat_currency": "USD",
+        "fiat_rate": "80000",
+        "pricing_source_kind": "manual_override",
+        "raw_json": {
+            "_kassiber_provenance": {"import_source": "btcpay-bark"},
+            "amount_msat": -32_802_000,
+            "bark_payment_hash": null,
+            "bark_row_id": "send-1",
+            "fee_msat": 2_802_000,
+            "invoice_id": null,
+            "kind": "send-onchain",
+            "movement_id": 1,
+            "outpoint": null,
+            "part": "principal",
+            "source": "btcpay_bark_wallet",
+            "store_id": "shop",
+            "transaction_hash": "b".repeat(64)
+        }
+    }]);
+    import_kind(&conn, &forged.to_string(), Format::Json).unwrap();
+    let after_forged: String = conn
+        .query_row(
+            "SELECT raw_json FROM transactions WHERE id='tx-legacy'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(after_forged, legacy_raw);
+
+    // Re-syncing through the internal `btcpay-bark:` import path stamps
+    // `_kassiber_provenance: {"import_source": "btcpay-bark"}` onto the row.
+    let api_row = kassiber_pytext::loads(
+        &json!({
+            "id": "send-1",
+            "kind": "send-onchain",
+            "amount": "-0.00032802",
+            "fee": "0.00002802",
+            "timestamp": 1794391200,
+            "status": "Confirmed",
+            "transactionHash": txid,
+            "outpoint": null,
+            "movementId": 1,
+            "paymentHash": null,
+            "labels": {}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut rec = crate::btcpay::bark::records(&api_row, "shop")
+        .unwrap()
+        .pop()
+        .unwrap();
+    rec.set_identity("btcpay-bark:shop:send-1");
+    let rows = record_rows(vec![rec.record]);
+    import_records(
+        &conn,
+        &RecordImport {
+            profile_id: "p",
+            wallet_id: "wallet",
+            label: "btcpay-bark:Store:shop",
+            match_existing_only: false,
+            report_updates: false,
+            btcpay: true,
+            settlement_ids: &[],
+        },
+        &rows,
+    )
+    .unwrap();
+    let after_sync: String = conn
+        .query_row(
+            "SELECT raw_json FROM transactions WHERE id='tx-legacy'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let parsed: Json = serde_json::from_str(&after_sync).unwrap();
+    assert_eq!(
+        parsed["_kassiber_provenance"]["import_source"],
+        json!("btcpay-bark")
+    );
+    assert_eq!(parsed["transaction_hash"], json!(txid));
+}
+
 #[rustfmt::skip]
 mod bitcoinde_csv;
 pub(super) use bitcoinde_csv::{import_bitcoinde, BITCOINDE_CSV};

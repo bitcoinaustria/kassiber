@@ -23,6 +23,9 @@ const PROVIDERS: &[&str] = &[
     // Bull Bitcoin's wallet CSV import stamps this source; the network gate
     // reads it exactly (custody/src/gates/network.rs).
     "bullbitcoin_wallet_csv",
+    // BTCPay Bark wallet sync stamps this source (custody/src/graph.rs,
+    // interpretation/bark.rs).
+    "btcpay_bark_wallet",
 ];
 
 /// Swap flows the matcher's `kind` and `flow` read.
@@ -46,6 +49,10 @@ const FLOWS: &[&str] = &[
     "swap_refund",
     "failed-swap-refund",
     "failed_swap_refund",
+    "send-onchain",
+    "offboard",
+    "onchain-send",
+    "onchain-receive",
 ];
 
 /// Swap statuses: Boltz's event names and the generic ones providers use.

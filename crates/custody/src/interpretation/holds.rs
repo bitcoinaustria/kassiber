@@ -674,10 +674,16 @@ fn fanout_with_facts<R: Row>(
             continue;
         }
         let mut graph_bearing = false;
-        for row in outs.iter().chain(&ins) {
-            if stored::parse(row.at("raw_json"))?.is_some() {
-                graph_bearing = true;
-                break;
+        let has_bark = outs
+            .iter()
+            .chain(&ins)
+            .any(|row| graph::is_bark_onchain_row_ref(*row));
+        if !has_bark {
+            for row in outs.iter().chain(&ins) {
+                if stored::parse(row.at("raw_json"))?.is_some() {
+                    graph_bearing = true;
+                    break;
+                }
             }
         }
         if graph_bearing && positive_ids.is_disjoint(covered) {

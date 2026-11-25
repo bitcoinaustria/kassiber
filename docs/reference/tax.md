@@ -317,9 +317,10 @@ typed physical `(chain, network, txid, asset identity)` and principal. A
 64-hex provider/order id is not a txid merely because it has the same shape;
 the transaction graph or an explicit txid-named import field must establish
 that type. Deterministic booked moves are kept out of review. A Strike or
-River withdrawal that names the txid of an owned wallet's receipt, for exactly
-its one owned output, books the same way with the `exchange_txid_exact`
-evidence ([exchange withdrawals](custody-resolution.md#exchange-withdrawals-that-name-their-txid)).
+River withdrawal, or a BTCPay Bark on-chain send (`send-onchain`, `offboard`,
+`onchain-send`), that names the txid of an owned wallet's receipt, for exactly
+its one owned output, books the same way with the `exchange_txid_exact` or
+`bark_txid_exact` evidence ([exchange withdrawals](custody-resolution.md#exchange-withdrawals-that-name-their-txid)).
 When the ownership graph proves a move but the journal declines to guess a
 destination or split, `transfers suggest` surfaces an `ownership_graph` card
 in the transfer tab instead of leaving the proof quarantine-only. It is exact

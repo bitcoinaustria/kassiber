@@ -158,6 +158,13 @@ pub(super) fn derive<R: Row>(rows: &[R], handled: &BTreeSet<String>) -> Result<V
         if wallets.len() != ins.len() {
             continue;
         }
+        if crate::graph::is_bark_onchain_row_ref(out)
+            || ins
+                .iter()
+                .any(|row| crate::graph::is_bark_onchain_row_ref(*row))
+        {
+            continue;
+        }
         let mut legs = ins
             .into_iter()
             .map(|row| Ok((amount(row, "amount")?, codec::pystr(row.at("id")), row)))

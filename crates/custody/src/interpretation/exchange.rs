@@ -26,7 +26,7 @@ pub(super) fn pair_id(txid: &str, vout: &str) -> String {
 }
 
 /// A platform's graphless withdrawal row and the observed owned receipt.
-fn shape(source: &Value, target: &Value) -> bool {
+pub(super) fn shape(source: &Value, target: &Value) -> bool {
     !truth(&source["authoritative_chain_observation"])
         && truth(&target["authoritative_chain_observation"])
         && source["direction"] == "outbound"
@@ -40,9 +40,19 @@ fn shape(source: &Value, target: &Value) -> bool {
         && principal(source) == principal(target)
 }
 
-/// A platform withdrawal bound to the one owned output it paid.
+/// Which automatic txid-exact producer created a bound proof.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum ProofSource {
+    #[default]
+    Exchange,
+    Bark,
+}
+
+/// A platform withdrawal or Bark on-chain send bound to the one owned output it paid.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(super) struct ExchangeTxidProof {
+    #[serde(default)]
+    source: ProofSource,
     source_quantity_hash: String,
     target_quantity_hash: String,
     txid: String,
@@ -50,22 +60,118 @@ pub(super) struct ExchangeTxidProof {
     amount_msat: i128,
 }
 impl ExchangeTxidProof {
-    pub(super) fn validates(&self, pair: &Value, source: &Value, target: &Value) -> bool {
+    pub(super) fn bark(
+        source_quantity_hash: String,
+        target_quantity_hash: String,
+        txid: String,
+        vout: String,
+        amount_msat: i128,
+    ) -> Self {
+        Self {
+            source: ProofSource::Bark,
+            source_quantity_hash,
+            target_quantity_hash,
+            txid,
+            vout,
+            amount_msat,
+        }
+    }
+    pub(super) fn validates_for(
+        &self,
+        expected: ProofSource,
+        pair: &Value,
+        source: &Value,
+        target: &Value,
+    ) -> bool {
+        if self.source != expected {
+            return false;
+        }
+        let expected_pair_id = match self.source {
+            ProofSource::Exchange => pair_id(&self.txid, &self.vout),
+            ProofSource::Bark => {
+                if truth(&source["amount_includes_fee"]) {
+                    return false;
+                }
+                super::bark::pair_id(&self.txid, &self.vout)
+            }
+        };
         source["quantity_hash"] == self.source_quantity_hash
             && target["quantity_hash"] == self.target_quantity_hash
             && shape(source, target)
             && principal(source) == self.amount_msat
-            && pair["pair_id"] == pair_id(&self.txid, &self.vout)
+            && pair["pair_id"] == expected_pair_id
     }
 }
 
 pub(super) type Proofs = BTreeMap<(String, String), ExchangeTxidProof>;
 
+fn valid_script_hex(value: &Py) -> bool {
+    let Py::Str(raw) = value else {
+        return false;
+    };
+    let Some(text) = raw.as_str() else {
+        return false;
+    };
+    let trimmed = text.py_strip();
+    !trimmed.is_empty()
+        && trimmed.len().is_multiple_of(2)
+        && trimmed.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn exact_nonneg_sats(value: &Py) -> bool {
+    matches!(value, Py::Int(n) if *n >= BigInt::from(0))
+}
+
+/// Reject raw leg payloads where `stored::parse` silently dropped non-dict
+/// elements or truncated a fractional `value_sats` into an integer.
+fn valid_raw_legs(raw_json: &Value, expected_inputs: usize, expected_outputs: usize) -> bool {
+    let raw = py::object(raw_json);
+    let payload = [py::get(&raw, "ownership_graph"), py::get(&raw, "tx"), &raw]
+        .into_iter()
+        .find(|candidate| {
+            matches!(
+                (py::get(candidate, "vin"), py::get(candidate, "vout")),
+                (Py::List(_), Py::List(_))
+            )
+        });
+    let Some(payload) = payload else {
+        return true;
+    };
+    let (Py::List(vin), Py::List(vout)) = (py::get(payload, "vin"), py::get(payload, "vout"))
+    else {
+        return false;
+    };
+    if vin.len() != expected_inputs || vout.len() != expected_outputs {
+        return false;
+    }
+    let integer_sats_field = |entry: &Py| -> bool {
+        match py::get(entry, "value_sats") {
+            Py::Null => true,
+            Py::Int(n) => *n >= BigInt::from(0),
+            Py::Str(s) => s.as_str().is_some_and(|text| {
+                let trimmed = text.py_strip();
+                !trimmed.is_empty() && trimmed.bytes().all(|b| b.is_ascii_digit())
+            }),
+            _ => false,
+        }
+    };
+    vin.iter().all(|entry| {
+        matches!(entry, Py::Dict(_)) && {
+            let prevout = py::get(entry, "prevout");
+            matches!(prevout, Py::Dict(_))
+                && integer_sats_field(prevout)
+                && integer_sats_field(entry)
+        }
+    }) && vout
+        .iter()
+        .all(|entry| matches!(entry, Py::Dict(_)) && integer_sats_field(entry))
+}
+
 /// The receipt's one owned output, or `None` when the match is not exact:
 /// a fully valued graph with no input owned by the book and exactly one
 /// output owned in its network, by the receiving wallet alone, for the whole
 /// receipt.
-fn owned_output(
+pub(super) fn owned_output(
     row: &Value,
     target: &Value,
     scope: &TransferScope,
@@ -90,8 +196,23 @@ fn owned_output(
     {
         return Ok(None);
     }
+    let inputs = py::list(py::get(&graph, "inputs"));
+    if inputs.is_empty()
+        || outputs.is_empty()
+        || !valid_raw_legs(&row["raw_json"], inputs.len(), outputs.len())
+        || inputs.iter().any(|entry| {
+            !valid_script_hex(py::get(entry, "script"))
+                || !exact_nonneg_sats(py::get(entry, "value_sats"))
+        })
+        || outputs.iter().any(|output| {
+            !valid_script_hex(py::get(output, "script"))
+                || !exact_nonneg_sats(py::get(output, "value_sats"))
+        })
+    {
+        return Ok(None);
+    }
     let physical: PhysicalScope = (scope.0.clone(), scope.1.clone());
-    for entry in py::list(py::get(&graph, "inputs")) {
+    for entry in inputs {
         if !index
             .input_owners(&py::project(entry), &physical)?
             .is_empty()
@@ -164,6 +285,7 @@ pub(super) fn promote(
         proofs.insert(
             (out_id, in_id),
             ExchangeTxidProof {
+                source: ProofSource::Exchange,
                 source_quantity_hash: codec::text(&source["quantity_hash"]),
                 target_quantity_hash: codec::text(&target["quantity_hash"]),
                 txid: scope.2.clone(),

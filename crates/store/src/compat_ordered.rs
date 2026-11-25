@@ -246,6 +246,7 @@ fn ensure_schema_compat(
     crate::semantics::partial_payout(conn, observer)?;
     crate::semantics::legacy_pair_fee(conn, observer)?;
     crate::semantics::price_currency(conn, observer)?;
+    crate::semantics::bark_onchain_settlement(conn, observer)?;
     transaction_page_index(conn, observer)?;
     // Import-run coverage metadata (docs/reference/imports.md#import-runs):
     // additive and NULL for runs recorded before it.

@@ -226,6 +226,28 @@ the pair keep their authored component unchanged. The calculation semantics
 version therefore stays as it is: a rebuild by an older writer re-creates
 the same hold, never a different number.
 
+## BTCPay Bark on-chain settlements
+
+[BTCPay Bark on-chain sends](custody-resolution.md#exchange-withdrawals-that-name-their-txid)
+did not carry an on-chain scope in earlier builds, so a previously processed
+book with Bark sweeps could pass freshness checks with double-counted incoming
+BTC or standalone disposals and no hold; the shared observer-graph completeness
+checks for exact txid moves (`exchange_txid_exact` and `bark_txid_exact`) also
+refuse receipts whose stored graph omits input prevout values or valid hex
+scripts. Opening a processed book that holds either an active Bark on-chain
+principal row (`send-onchain`, `offboard`, `onchain-send`, or `onchain-receive`
+with a 64-hex `transaction_hash`) or a retained `internal_verified`
+`exchange_txid_exact` decision runs the one-time `bark-onchain-settlement-v1`
+invalidation in `crates/store/src/semantics.rs` via `Book::open_migrating`,
+recording its audit row and clearing the affected profile's processing markers
+so reports stay blocked until `journals process` rebuilds with the new linking,
+completeness checks, and holds. Pre-upgrade Bark on-chain send rows lack the
+sync-written `_kassiber_provenance` commitment and stay held as
+`recorded_transfer_authority_conflict` until re-synced through BTCPay Bark
+sync (which upgrades them in place) or reviewed manually. Books without
+affected processed Bark rows or retained `exchange_txid_exact` decisions are
+untouched and receive no audit row.
+
 ## Custody authoring transaction compatibility
 
 The savepoint atomicity fix changes transaction ownership, not the schema or

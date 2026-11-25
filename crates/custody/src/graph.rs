@@ -427,6 +427,45 @@ fn scope_key(row: &Value) -> String {
     .expect("JSON values")
 }
 
+pub(crate) const BARK_RAW_SOURCE: &str = "btcpay_bark_wallet";
+pub(crate) const BARK_PART_PRINCIPAL: &str = "principal";
+pub(crate) const BARK_ONCHAIN_KINDS: [&str; 4] = [
+    "send-onchain",
+    "offboard",
+    "onchain-send",
+    "onchain-receive",
+];
+
+pub(crate) fn bark_raw_onchain_txid(raw: &Value) -> Option<String> {
+    let is_bark = text(&raw["source"]).py_strip().py_lower() == BARK_RAW_SOURCE
+        && text(&raw["part"]).py_strip().py_lower() == BARK_PART_PRINCIPAL
+        && BARK_ONCHAIN_KINDS.contains(&text(&raw["kind"]).py_strip().py_lower().as_str());
+    if !is_bark {
+        return None;
+    }
+    strict_txid(&raw["transaction_hash"])
+}
+
+pub(crate) fn is_bark_onchain_row(row: &Value) -> bool {
+    bark_raw_onchain_txid(&transfer_object_ref(&row["raw_json"])).is_some()
+}
+
+pub(crate) fn is_bark_onchain_row_ref<R: crate::fields::Fields + ?Sized>(row: &R) -> bool {
+    bark_raw_onchain_txid(&transfer_object_ref(row.at("raw_json"))).is_some()
+}
+
+fn bark_onchain_hash<'a>(
+    source: &Value,
+    part: &Value,
+    kind: &Value,
+    transaction_hash: &'a Value,
+) -> Option<&'a Value> {
+    let is_bark = text(source).py_strip().py_lower() == BARK_RAW_SOURCE
+        && text(part).py_strip().py_lower() == BARK_PART_PRINCIPAL
+        && BARK_ONCHAIN_KINDS.contains(&text(kind).py_strip().py_lower().as_str());
+    (is_bark && !text(transaction_hash).py_strip().is_empty()).then_some(transaction_hash)
+}
+
 fn physical_scope<R: crate::fields::Fields + ?Sized>(row: &R) -> Scope {
     if [
         "custody-tax:",
@@ -451,8 +490,18 @@ fn physical_scope<R: crate::fields::Fields + ?Sized>(row: &R) -> Scope {
             && !raw.field("ownership_graph").is_object()
         {
             let txid = raw.field("txid");
+            let bark_hash = raw.field("transaction_hash");
+            let has_bark_hash = bark_onchain_hash(
+                &raw.field("source"),
+                &raw.field("part"),
+                &raw.field("kind"),
+                &bark_hash,
+            )
+            .is_some();
             if !text(&txid).py_strip().is_empty() {
                 strict_txid(&txid)?;
+            } else if has_bark_hash {
+                strict_txid(&bark_hash)?;
             } else if strict_txid(row.at("external_id")).is_none() {
                 return None;
             }
@@ -484,6 +533,14 @@ fn physical_scope<R: crate::fields::Fields + ?Sized>(row: &R) -> Scope {
     for payload in &maps {
         if !text(&payload["txid"]).py_strip().is_empty() {
             txids.insert(strict_txid(&payload["txid"])?);
+        }
+        if let Some(hash) = bark_onchain_hash(
+            &payload["source"],
+            &payload["part"],
+            &payload["kind"],
+            &payload["transaction_hash"],
+        ) {
+            txids.insert(strict_txid(hash)?);
         }
     }
     if txids.len() > 1 {
