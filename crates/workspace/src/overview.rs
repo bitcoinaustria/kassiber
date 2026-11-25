@@ -679,6 +679,97 @@ fn chain_balance(
     )))
 }
 
+/// The UTXO inventory the wallet's last sync stored, exactly, as balance
+/// checkpoints (docs/reference/balance-checkpoints.md): one per asset, as of
+/// the last refresh, under the same source filter `chain_balance` uses.
+/// Reads stored rows only; never refreshes.
+pub fn chain_checkpoints(
+    conn: &Connection,
+    profile: &str,
+) -> Result<Vec<kassiber_wallets::checkpoints::Checkpoint>> {
+    let default = default_backend(conn)?;
+    let mut checkpoints = Vec::new();
+    for row in rows(
+        conn,
+        "SELECT id, kind, config_json FROM wallets WHERE profile_id = ? ORDER BY id",
+        [profile],
+    )? {
+        let config = json_config(&val(&row, "config_json"));
+        let summary = backend_summary(&text(&row, "kind"), &config, default.as_deref());
+        if string_or_empty(get(&config, "source_format")) != "wasabi_bundle"
+            && ![
+                "backend_descriptor",
+                "backend_addresses",
+                "backend_silent_payment",
+            ]
+            .contains(&summary.sync_mode)
+        {
+            continue;
+        }
+        let backend = backend_row(conn, &summary.name)?;
+        let filter = source_filter(&config, &summary, backend.as_ref());
+        let id = text(&row, "id");
+        let mut params = vec![SqlValue::Text(id.clone())];
+        let clause = filter_sql(&filter, &mut params);
+        let refresh = rows(
+            conn,
+            &format!("SELECT last_seen_at FROM wallet_utxo_refreshes WHERE wallet_id = ? {clause}"),
+            params_from_iter(params.clone()),
+        )?;
+        let Some(last_seen) = refresh
+            .first()
+            .map(|r| text(r, "last_seen_at"))
+            .and_then(|at| kassiber_rates::time::parse(&at))
+        else {
+            continue;
+        };
+        let as_of = kassiber_wallets::checkpoints::iso(last_seen)?;
+        let mut totals: BTreeMap<&'static str, i128> = BTreeMap::new();
+        for total in rows(
+            conn,
+            &format!("SELECT UPPER(asset) AS asset, SUM(amount) AS amount_msat FROM wallet_utxos WHERE wallet_id = ? AND spent_at IS NULL {clause} GROUP BY UPPER(asset)"),
+            params_from_iter(params),
+        )? {
+            let asset = match text(&total, "asset").as_str() {
+                "BTC" => "BTC",
+                "LBTC" | "L-BTC" => "LBTC",
+                _ => continue,
+            };
+            *totals.entry(asset).or_default() += msat(&val(&total, "amount_msat"))?;
+        }
+        if totals.is_empty() {
+            // No coin: a zero balance in the wallet's own chain asset.
+            let liquid = filter
+                .iter()
+                .find(|(column, _)| *column == "chain")
+                .and_then(|(_, values)| values.first())
+                .is_some_and(|chain| chain == "liquid");
+            totals.insert(if liquid { "LBTC" } else { "BTC" }, 0);
+        }
+        for (asset, amount) in totals {
+            let Ok(amount_msat) = i64::try_from(amount) else {
+                continue;
+            };
+            if amount_msat < 0 {
+                continue;
+            }
+            checkpoints.push(kassiber_wallets::checkpoints::Checkpoint {
+                id: None,
+                wallet_id: id.clone(),
+                asset: asset.into(),
+                as_of: as_of.clone(),
+                amount_msat,
+                origin: "chain".into(),
+                scope: Some("chain_utxo_set".into()),
+                origin_ref: None,
+                attachment_id: None,
+                note: None,
+                created_at: None,
+            });
+        }
+    }
+    Ok(checkpoints)
+}
 /// `_chain_duplicate_outpoint_adjustment_btc`.
 fn duplicate_adjustment(
     conn: &Connection,
@@ -1220,6 +1311,22 @@ fn connections(
 ) -> Result<Vec<Value>> {
     let assets = observed_assets(conn, profile)?;
     let imports = import_summary(conn, profile)?;
+    // Source coverage for today (docs/reference/desktop.md#sources-live-sync-and-file-snapshots):
+    // `status` says whether a source is current, not whether it holds rows.
+    let now = kassiber_rates::time::format(clock.now).unwrap_or_default();
+    let coverage: std::collections::BTreeMap<String, kassiber_wallets::coverage::Source> =
+        kassiber_wallets::coverage::sources(
+            conn,
+            profile,
+            &kassiber_wallets::coverage::Options {
+                skip_scan_bounds: true,
+                ..Default::default()
+            },
+            &now,
+        )?
+        .into_iter()
+        .map(|source| (source.wallet_id.clone(), source))
+        .collect();
     let mut output = Vec::new();
     for row in rows(
         conn,
@@ -1288,7 +1395,19 @@ fn connections(
                 "chainActiveCount",
                 balance.map_or(Value::Null, |b| b.active.clone()),
             ),
-            ("status", s(if tx_count != 0 { "synced" } else { "idle" })),
+            (
+                "status",
+                s(match coverage.get(&id).map(|c| c.freshness_state) {
+                    Some("current") => "synced",
+                    Some("behind") => "behind",
+                    Some("sync_failed") => "error",
+                    _ => "idle",
+                }),
+            ),
+            (
+                "coverage",
+                coverage.get(&id).map_or(Value::Null, |c| c.to_value()),
+            ),
             ("transactionCount", tx_count.into()),
             ("syncMode", s(summary.sync_mode)),
             ("syncSource", s(sync_source)),

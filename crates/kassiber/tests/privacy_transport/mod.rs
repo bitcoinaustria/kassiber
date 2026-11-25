@@ -61,6 +61,9 @@ fn tables(database: &Path) -> BTreeMap<String, Vec<String>> {
             rows.sort();
             (name, rows)
         })
+        // Storage added after these sessions were recorded
+        // (docs/reference/balance-checkpoints.md): left out while empty.
+        .filter(|(name, rows)| !(name == "balance_checkpoints" && rows.is_empty()))
         .collect()
 }
 

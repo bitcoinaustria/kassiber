@@ -191,7 +191,11 @@ impl Batch {
             ("rows_updated", Value::from(self.updated)),
             ("rows_skipped", Value::from(self.skipped)),
             ("rows_present", Value::from(remaining)),
-            ("rolled_back", Value::Bool(remaining == 0)),
+            // A run that created nothing (a re-import) has nothing to roll back.
+            (
+                "rolled_back",
+                Value::Bool(self.inserted > 0 && remaining == 0),
+            ),
         ]))
     }
 }
@@ -417,8 +421,27 @@ fn rollback(conn: &Connection, profile: &str, reference: &str) -> Result<Value, 
             .map_err(database_error)?;
             Ok((staged, counts))
         })?;
+        // Re-imports of the same file that created nothing only re-observed
+        // the rows this run created; with them gone, their file ranges no
+        // longer rest on anything (docs/reference/imports.md#import-runs-and-rolling-one-back).
+        let file: Option<String> = conn
+            .query_row(
+                "SELECT file_sha256 FROM import_batches WHERE id=?",
+                [&row.id],
+                |r| r.get(0),
+            )
+            .map_err(database_error)?;
         conn.execute("DELETE FROM import_batches WHERE id=?", [&row.id])
             .map_err(database_error)?;
+        if let (Some(file), Some(wallet)) = (&file, &row.wallet_id) {
+            conn.execute(
+                "UPDATE import_batches SET first_row_at=NULL, last_row_at=NULL, rows_read=NULL \
+                 WHERE profile_id=?1 AND wallet_id=?2 AND file_sha256=?3 \
+                 AND NOT EXISTS (SELECT 1 FROM import_batch_transactions bt WHERE bt.batch_id=import_batches.id)",
+                rusqlite::params![profile, wallet, file],
+            )
+            .map_err(database_error)?;
+        }
         if staged != 0 {
             invalidate_journals(conn, profile)?;
         }

@@ -1095,12 +1095,17 @@ pub fn submit(app: &mut App) {
         SetupKind::ExchangeApi => {
             if let Ok(mut args) = super::exchange::submit(app, &label) {
                 // Importing right away: ask which assets first, unless the exchange reads only
-                // Bitcoin (docs/reference/exchange-desktop.md#other-crypto-assets).
+                // Bitcoin (docs/reference/exchange-desktop.md#other-crypto-assets). A key added
+                // to an existing wallet keeps that wallet's scope and syncs it afterwards, so
+                // it asks nothing and sends no preview.
+                let attaching = args.get("wallet").is_some();
                 let exchange = m.exchange.unwrap_or("");
                 let source = crate::wallets::asset_choice::Source::Exchange(
                     super::exchange::current_credentials(app),
                 );
-                if st(app).form.sync_after && crate::wallets::asset_choice::exchange_asks(exchange)
+                if !attaching
+                    && st(app).form.sync_after
+                    && crate::wallets::asset_choice::exchange_asks(exchange)
                 {
                     if asset_scope_for(app, &label, source.clone()).is_none() {
                         return;
@@ -1111,7 +1116,7 @@ pub fn submit(app: &mut App) {
                     }
                 }
                 // An answer stands even when the history is imported later.
-                if let (Some(scope), _) = answered(app, &source) {
+                if let (false, (Some(scope), _)) = (attaching, answered(app, &source)) {
                     args["asset_scope"] = json!(scope);
                 }
                 start(app, &label);
@@ -1936,6 +1941,9 @@ fn on_job(app: &mut App, r: &Reply) {
             });
             return;
         }
+        if stage == Stage::ExchangeCreate {
+            super::exchange::on_create_error(app, &r.error_detail);
+        }
         fail_job(app, job, e.clone());
         return;
     }
@@ -2040,6 +2048,7 @@ fn on_job(app: &mut App, r: &Reply) {
             if !job.dismissed {
                 set_last_import(app, &mut job, d.clone());
             }
+            app.wallets.imports_done += 1;
             let m = meta(job.source_id);
             if m.kind() == SetupKind::FileEnrichment {
                 let book = is_exchange_evidence(m.source_format);
@@ -2188,6 +2197,7 @@ fn on_job(app: &mut App, r: &Reply) {
             next_sync_job(app, job);
         }
         Stage::ExchangeCreate => {
+            super::exchange::clear_attach(app);
             let wallet = d.get("wallet").cloned().unwrap_or(Value::Null);
             let label = wallet
                 .get("label")

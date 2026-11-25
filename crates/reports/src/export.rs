@@ -398,14 +398,34 @@ mod tests {
         )
         .unwrap()
     }
+    /// `balance_checkpoints` is newer than these frozen dumps
+    /// (docs/reference/balance-checkpoints.md): left out only while it holds no
+    /// row, so a step that writes one still shows.
+    fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+        table == "balance_checkpoints"
+            && conn
+                .query_row(
+                    "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(true)
+    }
+
     fn dump(conn: &Connection) -> Value {
         let tables = rows(conn, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name", []).unwrap();
-        dict(tables.iter().map(|table| {
-            let name = text(table, "name");
-            let mut contents = rows(conn, &format!("SELECT * FROM \"{name}\""), []).unwrap();
-            contents.sort_by_key(encode);
-            (name, Value::List(contents))
-        }))
+        dict(
+            tables
+                .iter()
+                .filter(|table| !newer_and_empty(conn, &text(table, "name")))
+                .map(|table| {
+                    let name = text(table, "name");
+                    let mut contents =
+                        rows(conn, &format!("SELECT * FROM \"{name}\""), []).unwrap();
+                    contents.sort_by_key(encode);
+                    (name, Value::List(contents))
+                }),
+        )
     }
     /// Complete Python exports, repeated explicit filing, failures and drafts.
     /// Compare every table after each action, keeping stored JSON literal.

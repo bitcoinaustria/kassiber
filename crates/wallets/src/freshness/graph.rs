@@ -161,7 +161,16 @@ fn signature(wallet: &Value) -> Result<Value> {
     let Value::Dict(pairs) = &mut config else {
         return Err(ended());
     };
-    pairs.retain(|(key, _)| *key != Key::from("last_synced_at"));
+    // Sync bookkeeping and coverage statements change no wallet material.
+    pairs.retain(|(key, _)| {
+        ![
+            "last_synced_at",
+            crate::coverage::ATTESTATION_KEY,
+            crate::coverage::EXCHANGE_SYNC_KEY,
+        ]
+        .iter()
+        .any(|name| *key == Key::from(*name))
+    });
     Ok(dict([
         ("kind", field(wallet, "kind").clone()),
         ("config", config),

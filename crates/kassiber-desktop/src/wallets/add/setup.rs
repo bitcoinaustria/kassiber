@@ -3515,7 +3515,7 @@ fn fields(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> 
                 tk,
                 &tr("connections:exchange.syncAfter", &[("provider", provider)]),
             );
-            vec![super::exchange::panel(
+            let mut out = vec![super::exchange::panel(
                 app,
                 cx,
                 tk,
@@ -3523,7 +3523,9 @@ fn fields(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> Vec<El> 
                 ex,
                 label_field(app, tk),
                 footer,
-            )]
+            )];
+            out.extend(super::exchange::attach_offer(app, tk, provider));
+            out
         }
         SetupKind::Btcpay => {
             let footer = sync_after(app, tk, &t("connections:add.btcpay.refreshAfter"));
@@ -3835,6 +3837,9 @@ pub fn body(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         .gap(tk.r(1.0))
         .role("form")
         .label(tr("connections:add.setupTitle", &[("title", &src.title())]));
+    if let Some(choice) = source_mode_choice(app, tk) {
+        form = form.child(choice);
+    }
     for f in fields(app, cx, tk, layer) {
         form = form.child(f);
     }
@@ -4062,3 +4067,114 @@ pub fn selects(_app: &App, _tk: &Tk, _layer: &mut Vec<El>) {}
 
 #[allow(dead_code)]
 fn _style(_: TextStyle) {}
+
+/// `SourceModeChoice`: a provider with both an API and a file import asks which first
+/// (catalog `fileSourceId`; never in a history import, which only takes files).
+fn source_mode_choice(app: &App, tk: &Tk) -> Option<El> {
+    let src = selected(app);
+    if super::history_import(app) {
+        return None;
+    }
+    let (api, file) = super::meta::paired_sources(src.id)?;
+    let provider = super::exchange::provider_name(meta(api).exchange?);
+    let option = |id: &'static str, title: String, detail: String, recommended: bool| {
+        let checked = src.id == id;
+        let mut head = row()
+            .gap(tk.r(0.5))
+            .center_y()
+            .flex_wrap()
+            .child(text(title.clone()).font(tk.tsm(500.0)).color(tk.fg));
+        if recommended {
+            head = head.child(crate::ui::tag(
+                tk,
+                tk.muted_fg,
+                None,
+                t("connections:coverage.choice.recommended"),
+            ));
+        }
+        let mut c = row()
+            .key(format!("connection-source-mode-{id}"))
+            .w_full()
+            .padding(tk.r(0.75))
+            .gap(tk.r(0.75))
+            .items_start()
+            .radius(tk.r(0.375))
+            .border(1.0, if checked { tk.primary } else { tk.border })
+            .border_layout()
+            .fill(if checked {
+                tk.primary.alpha(0.05)
+            } else {
+                Color::TRANSPARENT
+            })
+            .role("radio")
+            .checked(checked)
+            .label(title)
+            .focusable(true)
+            .on_press(move |a: &mut App| {
+                if selected(a).id != id {
+                    super::choose_source_mode(a, id);
+                }
+            })
+            .child(
+                row()
+                    .mt(tk.r(0.125))
+                    .size(tk.r(1.0), tk.r(1.0))
+                    .center()
+                    .radius(tk.r(0.5))
+                    .border(1.0, if checked { tk.primary } else { tk.input })
+                    .border_layout()
+                    .child(if checked {
+                        row()
+                            .size(tk.r(0.5), tk.r(0.5))
+                            .radius(tk.r(0.25))
+                            .fill(tk.primary)
+                    } else {
+                        row()
+                    }),
+            )
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(tk.r(0.125))
+                    .child(head)
+                    .child(text(detail).font(tk.txs(400.0)).color(tk.muted_fg).wrap()),
+            );
+        if !checked {
+            c = c.hover(tk.muted.alpha(0.4));
+        }
+        c
+    };
+    let title = tr(
+        "connections:coverage.choice.title",
+        &[("provider", provider)],
+    );
+    Some(
+        col()
+            .key("connection-source-mode")
+            .w_full()
+            .gap(tk.r(0.5))
+            .role("radiogroup")
+            .label(title.clone())
+            .child(text(title).font(tk.tsm(500.0)).color(tk.fg))
+            .child(option(
+                api,
+                t("connections:coverage.choice.api"),
+                t("connections:coverage.choice.apiDetail"),
+                true,
+            ))
+            .child(option(
+                file,
+                t("connections:coverage.choice.file"),
+                t("connections:coverage.choice.fileDetail"),
+                false,
+            ))
+            .child(
+                text(t("connections:coverage.choice.note"))
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg)
+                    .wrap()
+                    .w_full(),
+            ),
+    )
+}

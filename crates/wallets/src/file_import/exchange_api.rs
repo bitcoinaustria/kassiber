@@ -97,10 +97,47 @@ pub fn execute_with(
     changed_rows: Option<ChangedRows>,
     preview_token: Option<&str>,
 ) -> Result<Py, AppError> {
+    execute_recording(
+        conn,
+        profile,
+        wallet_ref,
+        backend,
+        expected,
+        gate,
+        version,
+        consent,
+        identity,
+        changed_rows,
+        preview_token,
+        &mut None,
+    )
+}
+
+/// [`execute_with`], naming the wallet the sync resolved in
+/// `resolved_wallet` (also when it then fails), so the caller can record
+/// the outcome on it.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_recording(
+    conn: &Connection,
+    profile: &str,
+    wallet_ref: &str,
+    backend: &Json,
+    expected: &str,
+    gate: &Gate,
+    version: &str,
+    consent: &mut dyn FnMut(&Route) -> Option<Consent>,
+    identity: Option<&Identity>,
+    changed_rows: Option<ChangedRows>,
+    preview_token: Option<&str>,
+    resolved_wallet: &mut Option<String>,
+) -> Result<Py, AppError> {
     let backend = to_py(backend)?;
     let (name, kind) = backend_kind(&backend, expected)?;
     let mut ids = Ids { identity, at: 0 };
     let wallet = wallet(conn, profile, wallet_ref, &kind, &name, &mut ids)?;
+    // The caller records this sync's outcome on the wallet it ran for, also
+    // when no `--wallet` named it.
+    *resolved_wallet = Some(wallet.id.clone());
     // The wallet's `asset_scope` decides which non-Bitcoin rows are kept.
     let scope = assets::Scope::of_wallet(conn, &wallet.id)?;
     let exchange = exchange(&kind)?;
@@ -176,6 +213,7 @@ pub fn execute_with(
         &mut ids,
         None,
         Some(&format!("{kind}:api:{}", lossy(&name))),
+        None,
         &mut selected,
     )
     .and_then(|result| {

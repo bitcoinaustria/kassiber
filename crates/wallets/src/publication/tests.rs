@@ -28,6 +28,20 @@ fn schema(conn: &Connection) {
         .unwrap();
 }
 
+/// `balance_checkpoints` is newer than these frozen dumps
+/// (docs/reference/balance-checkpoints.md): left out only while it holds no
+/// row, so a step that writes one still shows.
+fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+    table == "balance_checkpoints"
+        && conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+}
+
 fn snapshot(conn: &Connection) -> Value {
     let tables = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
@@ -37,7 +51,7 @@ fn snapshot(conn: &Connection) -> Value {
         .collect::<std::result::Result<Vec<_>, _>>()
         .unwrap();
     let mut result = serde_json::Map::new();
-    for table in tables {
+    for table in tables.into_iter().filter(|t| !newer_and_empty(conn, t)) {
         let mut stmt = conn.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
         let count = stmt.column_count();
         let mut rows = stmt

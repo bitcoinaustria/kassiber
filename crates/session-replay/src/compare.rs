@@ -736,6 +736,8 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.diagnostics.replay_bundle.export",
     "ui.wallets.import_preview",
     "ui.connections.exchange.preview",
+    "ui.sources.coverage",
+    "ui.sources.attest_coverage",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

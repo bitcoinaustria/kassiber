@@ -110,7 +110,6 @@ export function ExchangeSyncCard({
         </p>
       ) : null}
       {error && !needsRust ? <ExchangeErrorNotice provider={provider} error={error} /> : null}
-      <p className="m-0 text-2xs text-muted-foreground">{t("exchange.sync.sessionNote")}</p>
     </section>
   );
 }

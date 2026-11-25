@@ -47,32 +47,51 @@ impl Sources for Fixed {
         Ok("2026-10-30T12:00:00Z".into())
     }
 }
+/// `balance_checkpoints` is newer than these frozen dumps
+/// (docs/reference/balance-checkpoints.md): left out only while it holds no
+/// row, so a step that writes one still shows.
+fn newer_and_empty(conn: &Connection, table: &str) -> bool {
+    table == "balance_checkpoints"
+        && conn
+            .query_row(
+                "SELECT NOT EXISTS(SELECT 1 FROM balance_checkpoints)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(true)
+}
+
 fn dump(c: &Connection) -> Value {
     let tables:Vec<String>=c.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").unwrap().query_map([],|r|r.get(0)).unwrap().collect::<Result<_,_>>().unwrap();
-    dict(tables.iter().map(|table| {
-        let mut stmt = c
-            .prepare(&format!("SELECT * FROM \"{}\"", table.replace('"', "\"\"")))
-            .unwrap();
-        let names: Vec<_> = stmt.column_names().iter().map(|n| n.to_string()).collect();
-        let mut cur = stmt.query([]).unwrap();
-        let mut rows = Vec::new();
-        while let Some(r) = cur.next().unwrap() {
-            rows.push(dict(names.iter().enumerate().map(|(i, n)| {
-                (
-                    n.as_str(),
-                    match r.get_ref(i).unwrap() {
-                        ValueRef::Null => Value::Null,
-                        ValueRef::Integer(n) => Value::Int(n.into()),
-                        ValueRef::Real(n) => Value::Float(n),
-                        ValueRef::Text(t) => s(std::str::from_utf8(t).unwrap()),
-                        ValueRef::Blob(_) => panic!("binary fixture"),
-                    },
-                )
-            })));
-        }
-        rows.sort_by_key(bytes);
-        (table.as_str(), Value::List(rows))
-    }))
+    dict(
+        tables
+            .iter()
+            .filter(|table| !newer_and_empty(c, table))
+            .map(|table| {
+                let mut stmt = c
+                    .prepare(&format!("SELECT * FROM \"{}\"", table.replace('"', "\"\"")))
+                    .unwrap();
+                let names: Vec<_> = stmt.column_names().iter().map(|n| n.to_string()).collect();
+                let mut cur = stmt.query([]).unwrap();
+                let mut rows = Vec::new();
+                while let Some(r) = cur.next().unwrap() {
+                    rows.push(dict(names.iter().enumerate().map(|(i, n)| {
+                        (
+                            n.as_str(),
+                            match r.get_ref(i).unwrap() {
+                                ValueRef::Null => Value::Null,
+                                ValueRef::Integer(n) => Value::Int(n.into()),
+                                ValueRef::Real(n) => Value::Float(n),
+                                ValueRef::Text(t) => s(std::str::from_utf8(t).unwrap()),
+                                ValueRef::Blob(_) => panic!("binary fixture"),
+                            },
+                        )
+                    })));
+                }
+                rows.sort_by_key(bytes);
+                (table.as_str(), Value::List(rows))
+            }),
+    )
 }
 fn options() -> pairing::PairingOptions {
     let mut o = pairing::PairingOptions::default();

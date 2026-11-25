@@ -287,7 +287,7 @@ fn refresh_split(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
         ))
         .focusable(true)
         .busy(app.busy.syncing)
-        .on_press(|s: &mut App| s.refresh_book(false))
+        .on_press(|s: &mut App| s.refresh_book_from_title_bar(false))
         .child(spin);
     let caret = row()
         .key("sh-refresh-caret")
@@ -324,7 +324,7 @@ fn refresh_split(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             )
             .on_press(|s: &mut App| {
                 s.shell.popup = None;
-                s.refresh_book(false);
+                s.refresh_book_from_title_bar(false);
             }),
             "sh-refresh-all",
             all_l,
@@ -359,7 +359,7 @@ fn refresh_split(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
             )
             .on_press(|s: &mut App| {
                 s.shell.popup = None;
-                s.refresh_book(true);
+                s.refresh_book_from_title_bar(true);
             }),
             "sh-refresh-rescan",
             res_l,

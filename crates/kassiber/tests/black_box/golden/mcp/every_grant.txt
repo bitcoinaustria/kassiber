@@ -1,9 +1,9 @@
 # grant read, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [957 bytes fnv128 52e748b4be621d57ff3d8d99364efe66]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [83210 bytes fnv128 fac03bffd638969e236f4cb16052b2cf]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [84404 bytes fnv128 d573e53c3a3bd0a35f6c78104fb275d1]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1050 bytes fnv128 8d2224cde45efe83b417536c32701569]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [83343 bytes fnv128 180c81c122fe9abb77fd752d2db6c064]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [84537 bytes fnv128 0f8fffd7e27f9e1856a294eccc1465ee]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -13,7 +13,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request id"},"id":null}
 < {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":10},"notifications":{}}}
 < {"jsonrpc":"2.0","id":"c0","result":{"content":[{"type":"text","text":"{\"tool\":\"status\",\"book… [1716 bytes fnv128 2b604e6df7ed89346461fc80a43f1540]
-< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [33266 bytes fnv128 9d86dc26a92fc8ba44fe7a2ccb8c5c91]
+< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [42654 bytes fnv128 cd904bf4b58ef62e3e247f43fade46b3]
 < {"jsonrpc":"2.0","id":"c2","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13250 bytes fnv128 f2b67f9b9aa7bd5032e85817e13e1d52]
 < {"jsonrpc":"2.0","id":"c3","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [5940 bytes fnv128 20780bc35ef6b59ebf08f2e32ed59231]
 < {"jsonrpc":"2.0","id":"c4","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13248 bytes fnv128 1059f9884a21749040891fe993947806]
@@ -201,9 +201,9 @@ $ mcp serve --workspace w --profile p
 # grant read, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [957 bytes fnv128 52e748b4be621d57ff3d8d99364efe66]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [75224 bytes fnv128 ae8785d09d70f260a850cc335fedf1a9]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [76418 bytes fnv128 92591c28c92384ee2c77fe93c94a9fff]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1050 bytes fnv128 8d2224cde45efe83b417536c32701569]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [75357 bytes fnv128 1d83185d6270d4eb9e30db5784d43006]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [76551 bytes fnv128 d268cf12921f1d3c00158afc7b74a014]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -213,7 +213,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid request id"},"id":null}
 < {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":10},"notifications":{}}}
 < {"jsonrpc":"2.0","id":"c0","result":{"content":[{"type":"text","text":"{\"tool\":\"status\",\"book… [1716 bytes fnv128 2b604e6df7ed89346461fc80a43f1540]
-< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [33266 bytes fnv128 9d86dc26a92fc8ba44fe7a2ccb8c5c91]
+< {"jsonrpc":"2.0","id":"c1","result":{"content":[{"type":"text","text":"{\"tool\":\"overview_snapsh… [42654 bytes fnv128 cd904bf4b58ef62e3e247f43fade46b3]
 < {"jsonrpc":"2.0","id":"c2","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13250 bytes fnv128 f2b67f9b9aa7bd5032e85817e13e1d52]
 < {"jsonrpc":"2.0","id":"c3","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [5940 bytes fnv128 20780bc35ef6b59ebf08f2e32ed59231]
 < {"jsonrpc":"2.0","id":"c4","result":{"content":[{"type":"text","text":"{\"tool\":\"transactions_li… [13248 bytes fnv128 1059f9884a21749040891fe993947806]
@@ -385,9 +385,9 @@ $ mcp serve --workspace w --profile p
 # grant operator, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1343 bytes fnv128 3ac550bcd7a82dcb42ad8af71ecb4620]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [111590 bytes fnv128 41e9974b911d183672f7bcaf55d8fa99]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [112784 bytes fnv128 55bd9a3b906fb89c26c97640d3babbaf]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1436 bytes fnv128 49bba341a491b392469fc9d5aa5c4adb]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [111723 bytes fnv128 23f872af0f30078ad66b7a4562be3576]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [112917 bytes fnv128 df32ddf7e83a44ce260bd217af0a4a84]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -647,7 +647,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -659,13 +659,13 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38433 bytes, 73 lines fnv128 df4f8210921fdec0960154f70e26055d]
+… [38433 bytes, 73 lines fnv128 c3ad37f50d32ec41ca87056d43af7e93]
 # grant operator, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1343 bytes fnv128 3ac550bcd7a82dcb42ad8af71ecb4620]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [101163 bytes fnv128 340f3037e3fa89fdf9ea3c711eae051f]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [102357 bytes fnv128 5c30fca75ae963fe5e56603a68fd5261]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1436 bytes fnv128 49bba341a491b392469fc9d5aa5c4adb]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [101296 bytes fnv128 ca98b22a33096296d32f1c6c088844f4]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [102490 bytes fnv128 b95e7e9dd996224de0de47d78fe9ee3e]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -901,7 +901,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -913,13 +913,13 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38433 bytes, 73 lines fnv128 3e419ce96a0986759f9c6936c5593c8d]
+… [38433 bytes, 73 lines fnv128 c9f28a7df81d597d4f88a5be784fbd4b]
 # grant accounting_decisions, access full
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1385 bytes fnv128 759e551a01a4c3b0b33e4ab84890c0bc]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [142506 bytes fnv128 7f583d6572402ea7efa83563392dcca5]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [144841 bytes fnv128 f6769ad9fc19f4b5499eeb55093509b5]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1478 bytes fnv128 91ff88da546eb63c7e37bbc19088bf43]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [142639 bytes fnv128 d722e164a1cbbfe2af36fcdb9e07b562]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [144974 bytes fnv128 6debdcd1df84470e0c7e3f3e3b234d72]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -1226,7 +1226,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1238,13 +1238,13 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [39433 bytes, 75 lines fnv128 7d5d37e5e8bbbd4190ae1713c755cb6a]
+… [39433 bytes, 75 lines fnv128 1fa73a41aecbe67f18bc6199d500e4e8]
 # grant accounting_decisions, access restricted
 $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","id":"init","result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},… [1385 bytes fnv128 759e551a01a4c3b0b33e4ab84890c0bc]
-< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [131183 bytes fnv128 5d8e25b789662d73122578990e17264d]
+< {"jsonrpc":"2.0","id":"legacy-list","result":{"tools":[{"name":"status","title":"Status","descript… [133518 bytes fnv128 f899a4455c023fd9868c477bcaa4ad1d]
 < {"jsonrpc":"2.0","id":1,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"… [1478 bytes fnv128 91ff88da546eb63c7e37bbc19088bf43]
-< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [131316 bytes fnv128 084ece0de405c10557d850353de480ca]
+< {"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"status","title":"Status","description":"Read K… [133651 bytes fnv128 7628b82c5d5f50a16e4d2a42916fd49a]
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid cursor"},"id":3}
 < {"jsonrpc":"2.0","id":4,"result":{}}
 < {"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found: resources/list"},"id":5}
@@ -1525,7 +1525,7 @@ $ mcp serve --workspace w --profile p
 < {"jsonrpc":"2.0","error":{"code":-32602,"message":"Unknown tool: None"},"id":"no-name"}
 < {"jsonrpc":"2.0","id":10,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/subscriptionId":10,"io.modelcontextprotocol/serverInfo":{"name":"kassiber","version":"1.0.0"}}}}
 === book changes after the session
-- (116 tables, 105 empty)
+- (117 tables, 106 empty)
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef" | node_id=t:"liquid:liquidtestnet:tx:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"a" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -1537,4 +1537,4 @@ $ mcp serve --workspace w --profile p
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:record:g" | node_id=t:"bitcoin:regtest:record:g"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" | node_id=t:"bitcoin:regtest:tx:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 + chain_index_aliases: profile_id=t:"p" | observer=t:"owner" | alias=t:"c" | node_id=t:"bitcoin:main:record:c"
-… [38656 bytes, 74 lines fnv128 ab60a43fccbaff0d0308b8ce6ead8b66]
+… [38656 bytes, 74 lines fnv128 f1137edf4a061244849042a101b7cf36]

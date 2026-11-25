@@ -51,7 +51,7 @@
 - chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:16
 - chain_index_dirty: source_table=t:"wallets" | source_key=i:-1 | revision=i:19
 - profiles: id=t:"p" | workspace_id=t:"ws" | label=t:"Book" | fiat_currency=t:"EUR" | tax_country=t:… [558 bytes fnv128 7c5f21536e61a5bb8dc4568530e62371]
-- (116 tables, 99 empty)
+- (117 tables, 100 empty)
 + chain_index_clock: id=i:1 | revision=i:35
 + chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:35
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:6 | revision=i:31
@@ -59,4 +59,4 @@
 + chain_index_dirty: source_table=t:"transactions" | source_key=i:8 | revision=i:33
 + chain_index_dirty: source_table=t:"wallets" | source_key=i:-1 | revision=i:28
 + import_batch_transactions: batch_id=t:"<uuid>" | transaction_id=t:"<uuid>" | source_position=i:1
-… [6857 bytes, 21 lines fnv128 f64998af408d9bc8e6fd78b789630a07]
+… [7054 bytes, 21 lines fnv128 6f6db13eafc9ea85d00617f0e9108fd3]

@@ -28,6 +28,12 @@
     ],
     [
       "index",
+      "idx_balance_checkpoints_wallet",
+      "balance_checkpoints",
+      "CREATE INDEX idx_balance_checkpoints_wallet\n    ON balance_checkpoints(profile_id, wallet_id, as_of)"
+    ],
+    [
+      "index",
       "idx_bip329_labels_profile_created",
       "bip329_labels",
       "CREATE INDEX idx_bip329_labels_profile_created\n            ON bip329_labels(profile_id, created_at DESC, id DESC)\n        "
@@ -922,6 +928,12 @@
     ],
     [
       "table",
+      "balance_checkpoints",
+      "balance_checkpoints",
+      "CREATE TABLE balance_checkpoints (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,\n    asset TEXT NOT NULL CHECK(asset IN ('BTC', 'LBTC')),\n    as_of TEXT NOT NULL,\n    amount_msat INTEGER NOT NULL CHECK(typeof(amount_msat) = 'integer' AND amount_msat >= 0),\n    origin TEXT NOT NULL CHECK(origin IN ('api', 'file', 'chain', 'node', 'manual')),\n    scope TEXT,\n    origin_ref TEXT,\n    attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,\n    note TEXT,\n    created_at TEXT NOT NULL\n)"
+    ],
+    [
+      "table",
       "bip329_labels",
       "bip329_labels",
       "CREATE TABLE bip329_labels (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    wallet_id TEXT REFERENCES wallets(id) ON DELETE SET NULL,\n    record_type TEXT NOT NULL,\n    ref TEXT NOT NULL,\n    label TEXT,\n    origin TEXT,\n    spendable INTEGER,\n    data_json TEXT NOT NULL DEFAULT '{}',\n    created_at TEXT NOT NULL\n)"
@@ -1290,7 +1302,7 @@
       "table",
       "import_batches",
       "import_batches",
-      "CREATE TABLE import_batches (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,\n    source_format TEXT NOT NULL,\n    source_filename TEXT,\n    column_map_json TEXT,\n    imported_at TEXT NOT NULL,\n    -- Insertion order; `imported_at` has one-second resolution. Filled by\n    -- trg_import_batches_sequence and carried verbatim by copies.\n    import_sequence INTEGER,\n    rows_inserted INTEGER NOT NULL DEFAULT 0,\n    rows_updated INTEGER NOT NULL DEFAULT 0,\n    rows_skipped INTEGER NOT NULL DEFAULT 0\n)"
+      "CREATE TABLE import_batches (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,\n    source_format TEXT NOT NULL,\n    source_filename TEXT,\n    column_map_json TEXT,\n    imported_at TEXT NOT NULL,\n    -- Insertion order; `imported_at` has one-second resolution. Filled by\n    -- trg_import_batches_sequence and carried verbatim by copies.\n    import_sequence INTEGER,\n    rows_inserted INTEGER NOT NULL DEFAULT 0,\n    rows_updated INTEGER NOT NULL DEFAULT 0,\n    rows_skipped INTEGER NOT NULL DEFAULT 0,\n    -- What the run's file held: the first and last time of its dated rows\n    -- (every row read, including ones already present), the rows it read and\n    -- its SHA-256. NULL for runs recorded before these columns.\n    first_row_at TEXT,\n    last_row_at TEXT,\n    rows_read INTEGER,\n    file_sha256 TEXT,\n    -- The file's size when it was imported, compared with the file on disk\n    -- to say a newer export is waiting (never its time or inode: stored bytes\n    -- stay deterministic).\n    file_size INTEGER\n)"
     ],
     [
       "table",

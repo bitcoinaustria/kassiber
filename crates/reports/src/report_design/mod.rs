@@ -295,6 +295,22 @@ impl Document {
     pub fn preview_notice(&self) -> Option<&'static str> {
         self.lang.preview_notice(&self.country)
     }
+    /// The note that the figures are provisional because a source does not
+    /// reach the period end (`source_coverage`): the note right before the
+    /// sources table. The PDF and XLSX show it in place; the CSV summary and
+    /// manifest carry it.
+    pub fn coverage_notice(&self) -> Option<&str> {
+        self.sections.iter().find_map(|section| {
+            section.blocks.windows(2).find_map(|pair| match pair {
+                [Block::Note { text, .. }, Block::Table(table)]
+                    if table.id == "source_coverage" =>
+                {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })
+        })
+    }
     /// The input version as the footer prints it; unknown is `—`.
     fn version_text(&self) -> String {
         self.input_version
@@ -553,6 +569,68 @@ fn count(v: &Value, key: &str) -> Cell {
 fn col(key: &'static str, label: impl Into<String>, kind: Kind, width: f64) -> Column {
     Column::new(key, label, kind, width)
 }
+/// Sources that do not reach the report period's end (Rust only;
+/// docs/reference/desktop.md#sources-live-sync-and-file-snapshots): a note
+/// that the figures are provisional and a table of the sources and what
+/// brings each current. Nothing when every source is current, so reports
+/// of covered books are unchanged. The export still proceeds.
+fn source_coverage(lang: Lang, model: &Value) -> Vec<Block> {
+    let coverage = value(model, "source_coverage");
+    let sources = list(coverage, "sources");
+    if sources.is_empty() {
+        return vec![];
+    }
+    let named = |prefix: &str, row: &Value, key: &str| {
+        let raw = text(row, key);
+        lang.get(&format!("{prefix}.{raw}"))
+            .map(str::to_owned)
+            .unwrap_or(raw)
+    };
+    vec![
+        Block::Note {
+            text: lang.tf(
+                "coverage.provisional",
+                &[
+                    ("count", &lang.integer(sources.len() as i128)),
+                    ("date", &lang.date(&text(coverage, "period_end"))),
+                ],
+            ),
+            accent: true,
+        },
+        Block::Table(Table {
+            id: "source_coverage",
+            title: lang.t("coverage.title").into(),
+            columns: vec![
+                col("wallet", lang.t("col.wallet"), Kind::Text, 2.0),
+                col("state", lang.t("coverage.col.state"), Kind::Text, 1.4),
+                col(
+                    "covered_through",
+                    lang.t("coverage.col.covered_through"),
+                    Kind::Date,
+                    1.2,
+                ),
+                col("action", lang.t("coverage.col.action"), Kind::Text, 2.2),
+            ],
+            rows: sources
+                .iter()
+                .map(|row| {
+                    vec![
+                        txt(row, "wallet"),
+                        Cell::Text(named("coverage.state", row, "freshness_state")),
+                        match text(row, "covered_through") {
+                            day if day.is_empty() => Cell::Empty,
+                            day => Cell::Date(day),
+                        },
+                        Cell::Text(named("coverage.action", row, "action")),
+                    ]
+                })
+                .collect(),
+            total: None,
+            note: String::new(),
+        }),
+    ]
+}
+
 fn fact(key: &'static str, label: &str, value: Cell) -> Fact {
     Fact {
         key,
@@ -1356,6 +1434,9 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     if let Some(notice) = doc.preview_notice() {
         facts.push(("preview", "notice", Cell::Text(notice.into())));
     }
+    if let Some(notice) = doc.coverage_notice() {
+        facts.push(("source_coverage", "notice", Cell::Text(notice.into())));
+    }
     let mut files: Vec<(String, Vec<u8>, Vec<&str>, usize)> = Vec::new();
     for section in &doc.sections {
         for block in &section.blocks {
@@ -1446,6 +1527,9 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     ]);
     if let Some(notice) = doc.preview_notice() {
         kassiber_envelope::set(&mut manifest, "preview_notice", s(notice));
+    }
+    if let Some(notice) = doc.coverage_notice() {
+        kassiber_envelope::set(&mut manifest, "source_coverage_notice", s(notice));
     }
     let mut text = kassiber_pyjson::dumps(
         &manifest,

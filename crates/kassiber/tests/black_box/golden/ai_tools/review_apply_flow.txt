@@ -43,4 +43,4 @@
 - journal_account_holdings: id=t:"negative" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:-1 | cost_basis=r:5.0 | created_at=t:"fixed"
 - journal_account_holdings: id=t:"zero" | workspace_id=t:"ws" | profile_id=t:"p" | account_id=NULL | account_code=NULL | account_label=t:"Fallback" | asset=t:"BTC" | quantity=i:0 | cost_basis=r:5.0 | created_at=t:"fixed"
 - journal_custody_decisions: decision_id=t:"00000000000000000000000000000000000000000000000000000000… [966 bytes fnv128 181bafffd4f91b5403ae71c7bdd17f1c]
-… [28543 bytes, 66 lines fnv128 4089634350cf6d91050af5e8989a687b]
+… [28544 bytes, 66 lines fnv128 3e1e568a68e24320e7c85fb82f4a9e65]

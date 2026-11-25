@@ -347,3 +347,70 @@ mod tests {
         }
     }
 }
+
+/// `refreshHintKey`: the key under `connections:coverage.refreshHints` of a file source's short
+/// "how to download a newer export" hint (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+pub fn refresh_hint_key(id: &str) -> Option<&'static str> {
+    Some(match id {
+        "phoenix" => "phoenix",
+        "river" => "river",
+        "bullbitcoin" => "bullbitcoin",
+        "pocket-bitcoin" => "pocketbitcoin",
+        "strike" => "strike",
+        "21bitcoin" => "21bitcoin",
+        "coinfinity" => "coinfinity",
+        "binance" => "binance",
+        "cointracking" => "cointracking",
+        "blockpit" => "blockpit",
+        _ => return None,
+    })
+}
+
+/// `fileSourceId`: for an exchange API source, the same exchange's file import. Only where the
+/// file lands in a wallet of the same kind, so the key can later attach to it instead of
+/// double-counting; the Add connection dialog then asks "connect with a key or import a file".
+pub fn file_source_id(id: &str) -> Option<&'static str> {
+    match id {
+        "binance-api" => Some("binance"),
+        _ => None,
+    }
+}
+
+/// `pairedSources`: the API source and the file source of one provider, when the catalog pairs
+/// them and both are ready.
+pub fn paired_sources(id: &str) -> Option<(&'static str, &'static str)> {
+    let ready = |id: &str| {
+        crate::overview::catalog::SOURCES
+            .iter()
+            .any(|s| s.id == id && !s.planned)
+    };
+    let api = crate::overview::catalog::SOURCES
+        .iter()
+        .map(|s| s.id)
+        .find(|a| *a == id && file_source_id(a).is_some())
+        .or_else(|| {
+            crate::overview::catalog::SOURCES
+                .iter()
+                .map(|s| s.id)
+                .find(|a| file_source_id(a) == Some(id))
+        })?;
+    let file = file_source_id(api)?;
+    (ready(api) && ready(file)).then_some((api, file))
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+
+    #[test]
+    fn binance_pairs_its_key_and_its_file() {
+        assert_eq!(
+            paired_sources("binance-api"),
+            Some(("binance-api", "binance"))
+        );
+        assert_eq!(paired_sources("binance"), Some(("binance-api", "binance")));
+        assert_eq!(paired_sources("kraken"), None);
+        assert_eq!(refresh_hint_key("pocket-bitcoin"), Some("pocketbitcoin"));
+        assert_eq!(refresh_hint_key("kraken"), None);
+    }
+}

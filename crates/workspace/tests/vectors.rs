@@ -9,6 +9,60 @@ fn encode(value: &Value) -> String {
     kassiber_pyjson::dumps(value, &Default::default()).unwrap()
 }
 
+/// The overview's Rust-only source coverage
+/// (docs/reference/desktop.md#sources-live-sync-and-file-snapshots): each
+/// connection carries `coverage`, and its `status` follows it instead of
+/// Python's "has transactions". Checks that rule on `actual`, then drops both
+/// keys from every connection in `actual` and `expected`, so every other byte
+/// is still compared with Python's.
+fn without_coverage(actual: &mut Value, expected: &mut Value) {
+    fn connections(value: &mut Value, visit: &mut dyn FnMut(&mut Value)) {
+        match value {
+            Value::Dict(pairs) => {
+                for (key, item) in pairs.iter_mut() {
+                    if matches!(key, kassiber_pyjson::Key::Str(name) if name.as_str() == Some("connections"))
+                    {
+                        if let Value::List(items) = item {
+                            items.iter_mut().for_each(&mut *visit);
+                        }
+                    } else {
+                        connections(item, visit);
+                    }
+                }
+            }
+            Value::List(items) => items.iter_mut().for_each(|item| connections(item, visit)),
+            _ => {}
+        }
+    }
+    fn strip(connection: &mut Value) {
+        if let Value::Dict(pairs) = connection {
+            pairs.retain(|(key, _)| {
+                !matches!(key, kassiber_pyjson::Key::Str(name)
+                    if matches!(name.as_str(), Some("coverage" | "status")))
+            });
+        }
+    }
+    connections(actual, &mut |connection| {
+        let state = get(connection, "coverage")
+            .and_then(|coverage| get(coverage, "freshness_state"))
+            .cloned()
+            .expect("every connection carries its coverage");
+        let status = match kassiber_envelope::py_str(&state).as_str() {
+            "current" => "synced",
+            "behind" => "behind",
+            "sync_failed" => "error",
+            _ => "idle",
+        };
+        assert_eq!(
+            get(connection, "status"),
+            Some(&s(status)),
+            "status follows coverage"
+        );
+        strip(connection);
+    });
+    connections(expected, &mut strip);
+}
+
 fn replay(group: &str, projection: &str) {
     let Value::List(cases) = kassiber_pytext::loads(include_str!("data/vectors.json")).unwrap()
     else {
@@ -56,12 +110,16 @@ fn replay(group: &str, projection: &str) {
                     get(&case, "name")
                 );
             }
-            (Ok(actual), _) => assert_eq!(
-                encode(&actual),
-                encode(expected),
-                "{:?}: {projection}",
-                get(&case, "name")
-            ),
+            (Ok(mut actual), _) => {
+                let mut expected = expected.clone();
+                without_coverage(&mut actual, &mut expected);
+                assert_eq!(
+                    encode(&actual),
+                    encode(&expected),
+                    "{:?}: {projection}",
+                    get(&case, "name")
+                );
+            }
             (Err(error), None) => panic!("{:?}: {projection}: {error:?}", get(&case, "name")),
         }
         assert_eq!(conn.total_changes(), before, "read changed stored state");

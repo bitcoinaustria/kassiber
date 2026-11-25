@@ -114,7 +114,10 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         blocking_source_count(app),
         &core_readiness(app),
     );
-    let provisional = model::provisional(&report, comp.as_ref(), pending);
+    // Sources that do not reach the period end make the figures provisional, as an unknown
+    // coverage read does.
+    let provisional = model::provisional(&report, comp.as_ref(), pending)
+        || coverage_provisional(app.reports.report.coverage.as_ref().map(|(_, l, _)| l));
     let mut page = lc::shell(tk)
         .key("rep-page")
         .child(header(app, cx, tk, layer, &report, year));
@@ -130,6 +133,9 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         hidden,
         provisional,
     ));
+    if let Some(n) = coverage_notice(app, tk) {
+        page = page.child(n);
+    }
     let left = col()
         .w_full()
         .min_w(0.0)
@@ -1015,4 +1021,161 @@ fn blocking_source_count(app: &App) -> usize {
         }
     }
     seen.len()
+}
+
+/// The sources behind for the period, from the coverage read (None while it is unknown).
+fn sources_behind(load: Option<&Load<Value>>) -> Option<Vec<&Value>> {
+    let Some(Load::Ready(report)) = load else {
+        return None;
+    };
+    Some(
+        report["sources"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|s| s["needs_action"] == true)
+            .collect(),
+    )
+}
+
+/// A pending or failed coverage read is not "every source is current".
+fn coverage_provisional(load: Option<&Load<Value>>) -> bool {
+    sources_behind(load).is_none_or(|b| !b.is_empty())
+}
+
+/// `SourceCoverageNotice`: the sources that do not reach the period end, each opening its
+/// connection, and Open connections filtered to them. A readiness warning, not a blocker.
+fn coverage_notice(app: &App, tk: &Tk) -> Option<El> {
+    let (period, load, _) = app.reports.report.coverage.as_ref()?;
+    let (fill, border, ink) = crate::wallets::detail::ui::amber(tk);
+    let frame = |key: &str| {
+        col()
+            .key(key.to_owned())
+            .w_full()
+            .px(tk.r(1.0))
+            .py(tk.r(0.625))
+            .gap(tk.r(0.5))
+            .radius(tk.r(0.5))
+            .fill(fill)
+            .border(1.0, border)
+            .border_layout()
+            .role("status")
+    };
+    let line = |s: String, weight: f32| text(s).font(tk.tsm(weight)).color(ink).wrap().w_full();
+    let Some(behind) = sources_behind(Some(load)) else {
+        return Some(
+            frame("rep-coverage-unknown").child(
+                row()
+                    .w_full()
+                    .gap(tk.r(0.75))
+                    .items_start()
+                    .child(ic(&I::TRIANGLE_ALERT, tk.r(1.0), ink).mt(tk.r(0.125)))
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .gap(tk.r(0.25))
+                            .child(line(t("connections:coverage.report.unknownTitle"), 500.0))
+                            .child(line(t("connections:coverage.report.unknownBody"), 400.0)),
+                    ),
+            ),
+        );
+    };
+    if behind.is_empty() {
+        return None;
+    }
+    let now = format::now_secs();
+    let mut list = col().w_full().gap(tk.r(0.125)).role("list");
+    for s in behind {
+        let id = s["wallet_id"].as_str().unwrap_or("").to_owned();
+        let name = s["wallet"].as_str().unwrap_or("").to_owned();
+        let summary = crate::wallets::coverage::summary(s, Some(period), now);
+        list = list.child(
+            row()
+                .w_full()
+                .gap(tk.r(0.375))
+                .flex_wrap()
+                .role("listitem")
+                .child(text("•").font(tk.tsm(400.0)).color(ink).a11y_hidden())
+                .child(
+                    text(name.clone())
+                        .font(tk.tsm(500.0))
+                        .color(ink)
+                        .key(format!("rep-coverage-{id}"))
+                        .role("link")
+                        .label(name)
+                        .focusable(true)
+                        .on_press(move |a: &mut App| a.navigate(&format!("/connections/{id}"))),
+                )
+                .child(
+                    text(format!("— {summary}"))
+                        .font(tk.tsm(400.0))
+                        .color(ink)
+                        .wrap(),
+                ),
+        );
+    }
+    let period = period.clone();
+    let action = t("connections:coverage.report.action");
+    let aria = format!(
+        "{action} ({})",
+        crate::wallets::coverage::period_label(&period)
+    );
+    Some(
+        frame("rep-coverage-notice")
+            .child(
+                row()
+                    .w_full()
+                    .gap(tk.r(0.75))
+                    .items_start()
+                    .child(ic(&I::TRIANGLE_ALERT, tk.r(1.0), ink).mt(tk.r(0.125)))
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .gap(tk.r(0.25))
+                            .child(line(t("connections:coverage.report.title"), 500.0))
+                            .child(line(t("connections:coverage.report.body"), 400.0))
+                            .child(list),
+                    ),
+            )
+            .child(
+                row().w_full().justify_end().child(
+                    crate::txdetail::widgets::button(
+                        tk,
+                        "rep-coverage-open",
+                        crate::txdetail::widgets::Variant::Outline,
+                        crate::txdetail::widgets::Size::Xs,
+                        None,
+                        &action,
+                        true,
+                    )
+                    .label(aria)
+                    .on_press(move |a: &mut App| {
+                        a.navigate(&crate::wallets::coverage::search_route(true, Some(&period)))
+                    }),
+                ),
+            ),
+    )
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn unknown_or_behind_coverage_makes_reports_provisional() {
+        assert!(coverage_provisional(None));
+        assert!(coverage_provisional(Some(&Load::Loading)));
+        assert!(coverage_provisional(Some(&Load::Failed("x".into()))));
+        let ok = Load::Ready(json!({"sources": [{"needs_action": false}]}));
+        assert!(!coverage_provisional(Some(&ok)));
+        let behind = Load::Ready(json!({"sources": [{"needs_action": true}]}));
+        assert!(coverage_provisional(Some(&behind)));
+        // 2026-11-17T00:00:00Z: a past year ends on its last day, the running one today.
+        let now = 1_794_873_600.0;
+        assert_eq!(super::super::report_period_end(2025, now), "2025-12-31");
+        assert_eq!(super::super::report_period_end(2026, now), "2026-11-17");
+    }
 }

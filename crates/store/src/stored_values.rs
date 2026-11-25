@@ -57,9 +57,44 @@ fn is_refusal(error: &Error) -> bool {
     error.kind == ErrorKind::UnsupportedSchemaLayout && error.details["reason"] == REASON
 }
 
+/// Every table of the current schema with its column names, read once per
+/// process from the manifest's own definitions created in memory.
+fn expected_columns(
+) -> &'static std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+    static COLUMNS: std::sync::OnceLock<
+        std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+    > = std::sync::OnceLock::new();
+    COLUMNS.get_or_init(|| {
+        let manifest: serde_json::Value =
+            serde_json::from_str(schema::MANIFEST).expect("checked-in schema manifest");
+        let memory = Connection::open_in_memory().expect("in-memory database");
+        let mut columns = std::collections::BTreeMap::new();
+        for object in manifest["objects"].as_array().expect("schema objects") {
+            if object[0] != "table" {
+                continue;
+            }
+            let name = object[1].as_str().expect("table name");
+            memory
+                .execute_batch(object[3].as_str().expect("table definition"))
+                .expect("manifest table definition");
+            let mut statement = memory
+                .prepare("SELECT name FROM pragma_table_info(?1)")
+                .expect("table columns");
+            let names = statement
+                .query_map([name], |row| row.get(0))
+                .expect("table columns")
+                .collect::<rusqlite::Result<_>>()
+                .expect("table columns");
+            columns.insert(name.to_owned(), names);
+        }
+        columns
+    })
+}
+
 /// Whether the ordered pass may have layout work to do: an object of the
-/// current schema (or one it retires) differs by type and name, or a required
-/// audit is missing. Archived `gl_*` objects are ignored; a book whose names
+/// current schema (or one it retires) differs by type and name, a table lacks
+/// or has other columns than the current schema's, a data-only cleanup is
+/// pending, or a required audit is missing. Archived `gl_*` objects are ignored; a book whose names
 /// and audits are current (historical `ALTER` layouts included) skips the
 /// rehearsal, and the gate's own stored-value checks still refuse it before
 /// the pass changes anything.
@@ -96,6 +131,26 @@ pub(crate) fn layout_pending(conn: &Connection) -> crate::Result<bool> {
         .collect();
     if actual != expected {
         return Ok(true);
+    }
+    // Data-only cleanup the pass commits leaves the layout current too
+    // (Codex 4683024220).
+    if crate::exchange_sync_errors::work_pending(conn)? {
+        return Ok(true);
+    }
+    // A column the ordered pass adds to an existing table (the import-run
+    // columns) leaves every name current; compare each table's columns too.
+    for (table, columns) in expected_columns() {
+        let mut statement = conn
+            .prepare("SELECT name FROM pragma_table_info(?1)")
+            .map_err(map_sqlite_error)?;
+        let found: std::collections::BTreeSet<String> = statement
+            .query_map([table], |row| row.get(0))
+            .map_err(map_sqlite_error)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(map_sqlite_error)?;
+        if &found != columns {
+            return Ok(true);
+        }
     }
     let mut statement = conn
         .prepare("SELECT id FROM schema_migration_audits")
@@ -314,6 +369,66 @@ mod tests {
                 layout.to_owned() + &wallet_config(r#"{"ownership_history": null, "fee": NaN}"#);
             refused(false, &sql, "non_finite_number", message);
         }
+    }
+
+    /// Codex 4660357772: a book current except for the import-run columns the
+    /// ordered pass adds. The preflight must count the missing columns as a
+    /// pending layout, or the pass commits them before the gate refuses.
+    fn pre_run_columns() -> String {
+        let manifest: serde_json::Value =
+            serde_json::from_str(crate::schema::MANIFEST).expect("manifest");
+        let mut sql = String::from("PRAGMA foreign_keys=OFF;DROP TABLE import_batches;");
+        for kind in ["table", "index", "trigger"] {
+            for object in manifest["objects"].as_array().unwrap() {
+                if object[0] == kind && object[2] == "import_batches" {
+                    let mut create = object[3].as_str().unwrap().to_owned();
+                    if kind == "table" {
+                        // The definition as it was before the run columns.
+                        let cut = create.find(",\n    -- What the run's file held").unwrap();
+                        create.truncate(cut);
+                        create.push_str("\n)");
+                    }
+                    sql.push_str(&create);
+                    sql.push(';');
+                }
+            }
+        }
+        sql
+    }
+
+    #[test]
+    fn a_book_missing_only_added_columns_is_refused_before_anything_is_written() {
+        let message = "this book stores NaN or infinity where Kassiber needs an exact number";
+        let sql = pre_run_columns() + &wallet_config(r#"{"ownership_history": null, "fee": NaN}"#);
+        refused(false, &sql, "non_finite_number", message);
+        // Without such a value it migrates and gains the columns.
+        let (_root, data, database) = book(false, &pre_run_columns());
+        let conn = encryption::open_container(&database, None).unwrap();
+        assert!(super::layout_pending(&conn).unwrap());
+        drop(conn);
+        let book = Book::open_migrating(&data, OpenOptions::default(), true).unwrap();
+        assert!(!super::layout_pending(book.connection()).unwrap());
+    }
+
+    /// Codex 4683024220: a current book whose only pending work is the
+    /// exchange sync error cleanup is rehearsed too, so an unsupported value
+    /// elsewhere refuses it before the cleanup rewrites anything.
+    #[test]
+    fn a_book_pending_only_data_cleanup_is_refused_before_anything_is_written() {
+        let message = "this book stores NaN or infinity where Kassiber needs an exact number";
+        let legacy = r#""exchange_sync": {"at": "t", "status": "error", "error": {"code": "rate_limited", "message": "429 body"}}"#;
+        let sql = wallet_config(&format!(
+            r#"{{{legacy}, "ownership_history": null, "fee": NaN}}"#
+        ));
+        let (_root, _data, database) = book(false, &sql);
+        let conn = encryption::open_container(&database, None).unwrap();
+        assert!(super::layout_pending(&conn).unwrap());
+        drop(conn);
+        refused(false, &sql, "non_finite_number", message);
+        // Without such a value it migrates, and nothing is pending after.
+        let (_root, data, _database) = book(false, &wallet_config(&format!("{{{legacy}}}")));
+        let book = Book::open_migrating(&data, OpenOptions::default(), true).unwrap();
+        assert!(!super::layout_pending(book.connection()).unwrap());
     }
 
     #[test]

@@ -51,7 +51,7 @@ chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 
 chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
 chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
 chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
-… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+… [6367 bytes, 29 lines fnv128 6f0eaf61a1ef043069807cd8d85028f6]
 === project next
 chain_index_clock: id=i:1 | revision=i:14
 chain_index_dirty: source_table=t:"book_network_bindings" | source_key=i:-1 | revision=i:13
@@ -65,6 +65,6 @@ chain_index_dirty: source_table=t:"journal_custody_decisions" | source_key=i:-1 
 chain_index_dirty: source_table=t:"journal_custody_economic_relations" | source_key=i:-1 | revision=i:9
 chain_index_dirty: source_table=t:"profiles" | source_key=i:-1 | revision=i:7
 chain_index_dirty: source_table=t:"transaction_graph_cache" | source_key=i:-1 | revision=i:2
-… [6367 bytes, 29 lines fnv128 14a5f1c75accc4a059426ff447f7e0f6]
+… [6367 bytes, 29 lines fnv128 6f0eaf61a1ef043069807cd8d85028f6]
 === project occupied
 [110, 111, 116, 32, 97, 32, 100, 97, 116, 97, 98, 97, 115, 101]

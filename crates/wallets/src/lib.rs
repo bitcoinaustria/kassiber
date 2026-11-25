@@ -2,9 +2,11 @@
 //! discovery requires its own explicit action grant and the network gate.
 pub mod btcpay;
 pub mod bull_connect;
+pub mod checkpoints;
 pub mod completeness;
 pub mod config;
 pub mod connections;
+pub mod coverage;
 pub mod file_import;
 mod progress;
 mod silent_payments;

@@ -57,7 +57,7 @@ pub const TABLES: [(&str, &[&str]); 3] = [
             "label",
             "kind",
             "transactions",
-            "last",
+            "coverage",
             "taxFree",
             "balance",
         ],

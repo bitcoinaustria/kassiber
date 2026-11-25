@@ -159,6 +159,15 @@ pub fn execute(
             tx.execute(sql, [&pid]).map_err(sql_error)?;
         }
     }
+    // The book no longer holds the rows any import run read, so no run's
+    // file range covers anything (docs/reference/desktop.md#sources-live-sync-and-file-snapshots).
+    // Runs and their file identity stay; only a new import sets a range.
+    tx.execute(
+        "UPDATE import_batches SET first_row_at = NULL, last_row_at = NULL, rows_read = NULL \
+         WHERE profile_id = ? AND (first_row_at IS NOT NULL OR last_row_at IS NOT NULL OR rows_read IS NOT NULL)",
+        [&pid],
+    )
+    .map_err(sql_error)?;
     // Sync checkpoints and last-sync times describe history this book no
     // longer holds. Clear them so the next sync re-imports every wallet in
     // full, retired wallets included; each source keeps its user flags, as

@@ -111,6 +111,8 @@ pub const RUST_ONLY_LEAVES: &[&str] = &[
     "wallets.import-bitfinex",
     "wallets.sync-bitcoinde",
     "wallets.import-bitcoinde",
+    "wallets.coverage",
+    "wallets.attest-coverage",
     "journals.verify",
     "backends.trust-certificate",
     "projects.demo",

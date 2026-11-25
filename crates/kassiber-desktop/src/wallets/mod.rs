@@ -8,6 +8,8 @@
 //! - `list`: routes/Connections.tsx (+ components/kb/wallets/Wallets*).
 //! - `imports`: routes/Imports.tsx (+ shadcnblocks/settings-integrations4).
 //! - `detail`: routes/ConnectionDetail.tsx (wallet detail and its panels).
+//! - `coverage`, `sources`: lib/sourceCoverage.ts and the Coverage card (SourceCoverageCard.tsx);
+//!   `behind`: the `sources.behind` Needs attention read.
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
@@ -20,13 +22,16 @@
 pub mod add;
 pub mod asset_choice;
 pub mod assets;
+pub mod behind;
 pub mod common;
 pub mod conn;
+pub mod coverage;
 pub mod detail;
 pub mod imports;
 pub mod list;
 pub mod node;
 pub mod reimport;
+pub mod sources;
 
 use rune::{Cx, El, KeyEvent, Tx};
 
@@ -42,6 +47,13 @@ pub struct Ui {
     pub node: node::State,
     pub add: add::State,
     pub assets: assets::State,
+    /// The Coverage card on a wallet's page.
+    pub sources: sources::State,
+    /// The shell's `sources.behind` read: the period end (the previous calendar year's) and how
+    /// many sources do not reach it, once a read answered.
+    pub behind: Option<(String, u64)>,
+    /// Successful file imports this session (the Coverage card judges the one after its Import).
+    pub imports_done: u64,
 }
 
 /// Whether this area renders `path` (the route without its query).
@@ -113,6 +125,13 @@ pub fn on_leave(app: &mut App, from: &str) {
         l.popup = None;
     } else if from.starts_with("/connections/") {
         app.wallets.detail.leave();
+        // The Coverage card's dialogs, file check and import result; its read stays.
+        let s = &mut app.wallets.sources;
+        s.attest = None;
+        s.clear = None;
+        s.file_check = None;
+        s.import_result = None;
+        s.before = None;
         app.wallets.node.leave();
         // `useExchangeSync`'s `lastError`; its status read stays cached.
         app.wallets.add.exchange.sync.last_error = None;
@@ -128,6 +147,8 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     imports::on_reply(app, tag, r);
     detail::on_reply(app, tag, r);
     node::on_reply(app, tag, r);
+    sources::on_reply(app, tag, r);
+    behind::on_reply(app, tag, r);
     add::on_reply(app, tag, r);
     assets::on_reply(app, tag, r);
 }

@@ -457,6 +457,19 @@ pub fn open_history(app: &mut App, wallet: Option<String>) {
     seed_history_source(app);
 }
 
+/// The Coverage card's Import newer export: the history import into `wallet`, opened straight on
+/// `src` when the card knows the parser (`initialSourceId`), else seeded from the wallet's kind.
+pub fn open_history_on(app: &mut App, wallet: String, src: Option<&'static Source>) {
+    open_history(app, Some(wallet));
+    if let Some(src) = src.filter(|s| is_history_source(s)) {
+        mark_history_chosen(app);
+        app.ov.add_category = Some(src.category);
+        app.ov.add_selected = Some(src.id);
+        reset_form(app, src);
+        stm(app).step = Step::Setup;
+    }
+}
+
 /// Seeds the format once, after the wallet list arrives (later refetches and target changes
 /// keep what the user chose).
 pub fn seed_history_source(app: &mut App) {
@@ -684,6 +697,24 @@ fn continue_to_setup(app: &mut App) {
     s.step = Step::Setup;
     s.required_hint = None;
     s.focus_required = None;
+}
+
+/// Submits the setup step (the exchange panel's "Add key to …" offer).
+pub fn submit_setup(app: &mut App) {
+    submit::submit(app);
+}
+
+/// A paired provider's "connect with a key or import a file" choice: the setup moves to that
+/// source (`selectSourceForSetup`).
+pub fn choose_source_mode(app: &mut App, id: &'static str) {
+    let Some(src) = source(id) else {
+        return;
+    };
+    exchange::clear_attach(app);
+    app.ov.add_category = Some(src.category);
+    app.ov.add_selected = Some(src.id);
+    reset_form(app, src);
+    stm(app).step = Step::Setup;
 }
 
 pub fn dialog(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) {
@@ -1130,6 +1161,15 @@ pub const SCENES: &[crate::app::Scene] = &[
     }),
     ("wallets-add-exchange-binance-continue", |a| {
         scene_continue(a, "binance-api")
+    }),
+    // The key-or-file choice on the file side, and (SYNTHETIC: no save ran) the offer to add the
+    // key to an existing CSV wallet of the same exchange.
+    ("wallets-add-binance-file-choice", |a| {
+        scene_setup(a, "binance")
+    }),
+    ("wallets-add-exchange-binance-attach", |a| {
+        scene_setup(a, "binance-api");
+        a.wallets.add.exchange.attach_offer = Some(("w-synthetic".into(), "Binance".into()));
     }),
     ("wallets-add-exchange-bitpanda-continue", |a| {
         scene_continue(a, "bitpanda")

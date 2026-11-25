@@ -347,6 +347,18 @@ pub fn sync_running(app: &App) -> bool {
         || crate::wallets::add::exchange::sync_pending(app)
 }
 
+/// The Coverage card's Sync now (network egress, only from a press): an exchange wallet syncs
+/// through its exchange request, as its sync card does (Codex 4660315085); every other
+/// live source through the page's Refresh.
+pub fn sync_now(app: &mut App) {
+    let shown = crate::wallets::conn::find(app, &app.wallets.detail.wallet);
+    if let Some(c) = shown.filter(|c| exchange_kind(app, c).is_some()) {
+        crate::wallets::add::exchange::sync_wallet(app, &c);
+        return;
+    }
+    actions::sync(app, false);
+}
+
 /// `encryptedWorkspace`: `status.database_encrypted`.
 pub fn encrypted(app: &App) -> bool {
     app.wallets.detail.encrypted
@@ -542,6 +554,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
     if exchange_kind(app, &c).is_some() {
         changed |= crate::wallets::add::exchange::sync_poll(app, tx, &c);
     }
+    changed |= super::sources::poll(app, &c);
     changed
 }
 
@@ -608,6 +621,9 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if current(app).is_none() {
         return false;
     }
+    if super::sources::on_key(app, ev) {
+        return true;
+    }
     if matches!(ev.key, Key::Escape) && app.wallets.detail.cert.open {
         // The trust dialog is the innermost overlay (it stays while a request runs).
         crate::settings::certtrust::close(app, &CERT_HOST);
@@ -660,6 +676,10 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
     page = page
         .child(hero::header(app, cx, tk, layer, c))
         .child(hero::hero(app, tk, c, width));
+    // Coverage: how far the source reaches and the one action that fixes it.
+    if let Some(card) = super::sources::card(app, tk, c) {
+        page = page.child(card);
+    }
     if exchange_kind(app, c).is_some() {
         page = page.child(crate::wallets::add::exchange::sync_card(
             app,
@@ -679,6 +699,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
         Tab::Details => page.children(info::panel(app, tk, c, width)),
     };
     dialogs::mount(app, tk, layer, c);
+    super::sources::mount(app, tk, layer);
     page
 }
 
@@ -957,6 +978,21 @@ pub const SCENES: &[crate::app::Scene] = &[
         with_tab(a, SPENDING, Tab::Coins);
         a.wallets.detail.utxo_sort = Sort::SizeDesc;
     }),
+    // SYNTHETIC coverage (`sources::scene_sample`): a file source behind with a statement gap,
+    // a changed remembered file and a scan warning; then the statement dialog.
+    ("wallets-detail-coverage", |a| {
+        open_by_label(a, SPENDING);
+        super::sources::scene_sample(a, false);
+    }),
+    ("wallets-detail-coverage-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        open_by_label(a, SPENDING);
+        super::sources::scene_sample(a, false);
+    }),
+    ("wallets-detail-coverage-attest", |a| {
+        open_by_label(a, SPENDING);
+        super::sources::scene_sample(a, true);
+    }),
     ("wallets-detail-notfound", |a| {
         super::scene_route(a, "/connections/does-not-exist")
     }),
@@ -982,6 +1018,33 @@ pub fn forget_pending_copy() {
 #[cfg(test)]
 mod transient_tests {
     use super::*;
+
+    /// Codex 4660315085: Sync now on an exchange wallet's Coverage card sends its exchange
+    /// sync; the page's Refresh would return without a request for an exchange wallet.
+    #[test]
+    fn coverage_sync_now_syncs_an_exchange_wallet_from_its_exchange() {
+        let mut app = crate::app::tests::quiet_app();
+        let snapshot = crate::app::Reply {
+            kind: "ui.overview.snapshot".into(),
+            data: serde_json::json!({"connections": [{"id": "x", "label": "Kraken", "kind": "kraken"}]}),
+            error: None,
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        };
+        app.reads.insert("ui.overview.snapshot".into(), snapshot);
+        app.wallets.detail.wallet = "x".into();
+        // An exchange wallet is an API connection once its config names a backend.
+        app.wallets.detail.wallets = Read::Ready(vec![serde_json::json!({
+            "id": "x", "label": "Kraken", "kind": "kraken", "backend": {"name": "kraken"}
+        })]);
+        sync_now(&mut app);
+        let ex = &app.wallets.add.exchange;
+        assert!(
+            ex.syncs.iter().any(|(w, _, _)| w == "x"),
+            "the exchange sync was sent"
+        );
+        assert!(!app.wallets.detail.syncing, "not the generic wallet sync");
+    }
 
     /// A book refresh re-reads the open wallet once and starts no refresh of its own (which
     /// would bump the generation again and loop).

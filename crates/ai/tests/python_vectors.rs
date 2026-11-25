@@ -82,7 +82,18 @@ fn messages(value: &Value) -> Option<&[Value]> {
 /// Tools only the Rust runtime offers (`docs/reference/rust-shell.md#rust-only-commands`),
 /// last in the catalog so every Python tool keeps its index; the frozen
 /// vectors never name them.
-const RUST_ONLY_TOOLS: &[&str] = &["ui.journals.verify"];
+const RUST_ONLY_TOOLS: &[&str] = &[
+    "ui.journals.verify",
+    "ui.sources.coverage",
+    "ui.sources.attest_coverage",
+];
+
+/// The source coverage tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots)
+/// and their capabilities, checked here since Python's vectors lack them.
+const RUST_ONLY: [(&str, &[&str]); 2] = [
+    ("ui.sources.coverage", &["operations", "wallets"]),
+    ("ui.sources.attest_coverage", &["operations", "wallets"]),
+];
 
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
     tools()
@@ -96,6 +107,11 @@ fn tool_capabilities_match_python() {
     let Some(Value::Dict(expected)) = get(vectors(), "capabilities") else {
         panic!("capabilities");
     };
+    for (name, want) in RUST_ONLY {
+        let tool = tools().iter().find(|tool| tool.name == name).unwrap();
+        let have: Vec<&str> = tool_capabilities(tool).into_iter().collect();
+        assert_eq!(have, want, "{name}");
+    }
     assert_eq!(expected.len(), python_tools().count());
     for tool in python_tools() {
         let want: Vec<Value> = match get(vectors(), "capabilities").and_then(|c| get(c, &tool.name))
