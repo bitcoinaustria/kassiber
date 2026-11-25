@@ -738,6 +738,10 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.connections.exchange.preview",
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
+    "ui.reports.wealth_preview",
+    "ui.reports.export_wealth_pdf",
+    "ui.reports.export_wealth_xlsx",
+    "ui.reports.export_wealth_csv",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

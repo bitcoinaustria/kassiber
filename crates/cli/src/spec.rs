@@ -129,6 +129,10 @@ pub const RUST_ONLY_NEW_COMMANDS: &[&str] = &[
     "documents.statement-imports",
     "documents.rollback-statement",
     "source-funds.bank-lines.",
+    "reports.wealth",
+    "reports.export-wealth-pdf",
+    "reports.export-wealth-xlsx",
+    "reports.export-wealth-csv",
 ];
 
 /// Whether a dotted command path is one of [`RUST_ONLY_NEW_COMMANDS`].

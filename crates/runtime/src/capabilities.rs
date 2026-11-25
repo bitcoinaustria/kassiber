@@ -62,7 +62,7 @@ const CLI_READ_PATHS: &str = "
     reports.tax-summary reports.balance-sheet reports.portfolio-summary
     reports.capital-gains reports.explain-capital-gain reports.journal-entries reports.privacy-hygiene
     reports.privacy-mirror reports.psbt-privacy reports.austrian-e1kv
-    reports.austrian-tax-summary reports.exit-tax reports.filed-snapshots.list
+    reports.austrian-tax-summary reports.exit-tax reports.wealth reports.filed-snapshots.list
     reports.balance-history reports.lightning-profitability
     reports.commercial-subledger reports.source-funds rates.pairs rates.latest
     rates.range ai.providers.list ai.providers.get ai.models
@@ -111,7 +111,8 @@ const CLI_OPERATOR_PATHS: &str = "
     reports.export-source-funds-bundle reports.export-austrian-e1kv-pdf
     reports.export-austrian reports.export-austrian-e1kv-xlsx
     reports.export-austrian-e1kv-csv reports.export-exit-tax-pdf
-    reports.export-exit-tax-xlsx reports.export-year-handoff reports.cross-check rates.sync
+    reports.export-exit-tax-xlsx reports.export-wealth-pdf reports.export-wealth-xlsx
+    reports.export-wealth-csv reports.export-year-handoff reports.cross-check rates.sync
     rates.rebuild rates.set
     diagnostics.collect diagnostics.replay-bundle.export
 ";
@@ -211,7 +212,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.transactions.export_platform_csv
     ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
     ui.reports.portfolio_summary ui.reports.tax_summary
-    ui.reports.balance_history ui.reports.exit_tax_preview
+    ui.reports.balance_history ui.reports.exit_tax_preview ui.reports.wealth_preview
     ui.transfers.review_context ui.transactions.review_context
     ui.report.blockers
     ui.rates.latest ui.attachments.add ui.attachments.copy
@@ -225,6 +226,7 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.reports.export_capital_gains_csv ui.reports.export_austrian_e1kv_pdf
     ui.reports.export_austrian_e1kv_xlsx ui.reports.export_austrian_e1kv_csv
     ui.reports.export_exit_tax_pdf ui.reports.export_exit_tax_xlsx
+    ui.reports.export_wealth_pdf ui.reports.export_wealth_xlsx ui.reports.export_wealth_csv
     ui.reports.export_year_handoff ui.reports.export_cross_check
     ui.reports.export_audit_package ui.source_funds.sources.create
     ui.source_funds.sources.attach ui.source_funds.links.create

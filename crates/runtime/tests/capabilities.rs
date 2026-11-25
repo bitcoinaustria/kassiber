@@ -83,6 +83,10 @@ fn tables_match_python() {
         ),
         ("diagnostics.replay-bundle.verify", "journals.list"),
         ("diagnostics.replay-bundle.export", "diagnostics.collect"),
+        ("reports.wealth", "reports.exit-tax"),
+        ("reports.export-wealth-pdf", "reports.export-exit-tax-pdf"),
+        ("reports.export-wealth-xlsx", "reports.export-exit-tax-xlsx"),
+        ("reports.export-wealth-csv", "reports.export-csv"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -153,6 +157,16 @@ fn tables_match_python() {
             "ui.diagnostics.replay_bundle.export",
             "ui.transactions.export_csv",
         ),
+        ("ui.reports.wealth_preview", "ui.reports.exit_tax_preview"),
+        (
+            "ui.reports.export_wealth_pdf",
+            "ui.reports.export_exit_tax_pdf",
+        ),
+        (
+            "ui.reports.export_wealth_xlsx",
+            "ui.reports.export_exit_tax_xlsx",
+        ),
+        ("ui.reports.export_wealth_csv", "ui.reports.export_csv"),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");

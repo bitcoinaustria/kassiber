@@ -51,10 +51,27 @@ the authoritative tax handoff.
 
 `ui.reports.export_year_handoff` writes the bookkeeping year handoff workbook
 (`kassiber reports export-year-handoff`) into the managed exports directory. It
-accepts only an integer `year` and returns `reconciled` plus `warnings`, so the
+accepts an integer `year`, plus optional `draft` (explicit watermarked draft
+bypassing readiness blockers without registering a saved report snapshot) and
+`privacy_mode` (anonymises wallet labels to custody classes, omits transaction
+IDs and raw wallet inventory), and returns `reconciled` plus `warnings`, so the
 caller can show a reconciliation difference or a fallback year-end rate next to
 the saved file. Like the other final exports, it fails closed on stale journals,
-source freshness failures, and quarantines dated in or before the year.
+source freshness failures, and quarantines dated in or before the year unless
+`draft: true` is passed.
+
+`ui.reports.wealth_preview` (read) and `ui.reports.export_wealth_{pdf,xlsx,csv}`
+(export) compute and render a point-in-time wealth statement (`Stichtag`
+`as_of`, defaulting to today in the book's calendar). They accept optional
+`as_of` (`YYYY-MM-DD` or RFC3339 with offset), `wallets` (list of wallet ids or
+labels), `include_regime` (Alt-/Neubestand split), `include_valuation`
+(cost basis, spot rate, market value, lower of cost or market),
+`include_wallets` (per-wallet holdings table), `privacy_mode` (replaces
+wallet labels with custody categories and strips transaction IDs), and `draft`
+(explicitly marked draft with diagonal PDF watermark; no `report_snapshots`
+record). `draft` and `privacy_mode` are also accepted by the other report
+export kinds (`export_pdf`, `export_xlsx`, `export_csv`, `export_summary_pdf`,
+`export_austrian_e1kv_*`, `export_exit_tax_*`, `export_year_handoff`).
 
 `ui.journals.verify` (read) runs the [reproducibility check](replay-bundle.md) on
 the open book; it accepts only `limit` (1-200, default 20) and returns the

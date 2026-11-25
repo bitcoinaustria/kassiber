@@ -29,6 +29,10 @@ pub const COMMANDS: &[&str] = &[
     "reports.export-xlsx",
     "reports.exit-tax",
     "reports.export-exit-tax-xlsx",
+    "reports.wealth",
+    "reports.export-wealth-pdf",
+    "reports.export-wealth-xlsx",
+    "reports.export-wealth-csv",
     "reports.export-austrian-e1kv-csv",
     "reports.export-austrian-e1kv-xlsx",
     "transactions.export",
@@ -136,6 +140,15 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
     }
     if command == "reports.cross-check" {
         return book.reports(command, &cross_check_request(args));
+    }
+    if command == "reports.wealth" {
+        return book.reports(command, &wealth_request(args));
+    }
+    if matches!(
+        command,
+        "reports.export-wealth-pdf" | "reports.export-wealth-xlsx" | "reports.export-wealth-csv"
+    ) {
+        return book.reports(command, &wealth_export_request(args));
     }
     if matches!(
         command,
@@ -333,6 +346,43 @@ fn read_psbt_file(path: &str) -> Result<String, AppError> {
         }
     }
     Ok(text.to_owned())
+}
+
+fn wealth_request(args: &Namespace) -> Value {
+    dict(
+        [
+            "workspace",
+            "profile",
+            "as_of",
+            "wallet",
+            "wallets",
+            "include_regime",
+            "include_valuation",
+            "include_wallets",
+            "privacy_mode",
+            "draft",
+        ]
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+    )
+}
+
+fn wealth_export_request(args: &Namespace) -> Value {
+    dict(
+        [
+            "workspace",
+            "profile",
+            "as_of",
+            "wallet",
+            "wallets",
+            "include_regime",
+            "include_valuation",
+            "include_wallets",
+            "privacy_mode",
+            "draft",
+            "file",
+        ]
+        .map(|key| (key, args.get(key).cloned().unwrap_or(Value::Null))),
+    )
 }
 
 fn export_request(args: &Namespace) -> Value {

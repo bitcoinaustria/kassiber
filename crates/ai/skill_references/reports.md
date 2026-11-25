@@ -308,6 +308,37 @@ ordinary realized-report snapshot. PDF/XLSX stamp `departureTimezone`, `journalI
 quotes for manual freshness comparison, without automatic amendment tracking.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
 
+## Wealth statement (Stichtag / point-in-time holdings)
+
+```bash
+kassiber --machine reports wealth --as-of 2025-12-31
+kassiber reports export-wealth-pdf --as-of 2025-12-31 --file wealth-2025.pdf
+kassiber reports export-wealth-xlsx --as-of 2025-12-31 --file wealth-2025.xlsx --privacy-mode
+kassiber reports export-wealth-csv --as-of 2025-12-31 --file wealth-2025.csv --no-include-valuation
+```
+
+Point-in-time holdings statement as of `--as-of` (`YYYY-MM-DD` or RFC3339 with
+offset; defaults to today in the book's calendar, Europe/Vienna for Austrian
+books, UTC otherwise). Optional flags:
+
+- `--wallet` (repeatable) restricts scope to selected wallets.
+- `--include-regime` / `--no-include-regime` toggles the Altbestand / Neubestand
+  split (default on for Austrian books).
+- `--include-valuation` / `--no-include-valuation` toggles book value, cutoff
+  spot rate, market value, and lower-of-cost-or-market (default on).
+- `--include-wallets` / `--no-include-wallets` toggles the per-wallet breakdown
+  table (default on).
+- `--privacy-mode` (also supported on other report exports) replaces self-custody
+  wallet names with `Eigenverwahrung` / `Self-custody`, exchange wallet names
+  with custody categories, and omits transaction IDs.
+- `--draft` (also supported on other report exports) explicitly marks the export
+  as a draft with a diagonal PDF watermark and skips saving a `report_snapshots`
+  entry; when readiness blockers exist, wealth statements fall back to draft
+  automatically instead of hard-blocking.
+
+Daemon kinds: `ui.reports.wealth_preview`, `ui.reports.export_wealth_pdf`,
+`ui.reports.export_wealth_xlsx`, `ui.reports.export_wealth_csv`.
+
 ## Journal entries
 
 ```bash

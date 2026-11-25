@@ -78,6 +78,22 @@ const DESKTOP_ONLY_KINDS: &[(&str, &str)] = &[
         "ui.report.blockers",
         "The Rune Reports page reads the core's report-readiness barrier (docs/reference/desktop.md); the Tauri Reports screen never did",
     ),
+    (
+        "ui.reports.wealth_preview",
+        "Point-in-time wealth statement (Stichtag Vermögensübersicht) is built for the Rune desktop app; the outgoing Tauri shell does not expose it",
+    ),
+    (
+        "ui.reports.export_wealth_pdf",
+        "Point-in-time wealth statement PDF export is built for the Rune desktop app",
+    ),
+    (
+        "ui.reports.export_wealth_xlsx",
+        "Point-in-time wealth statement XLSX export is built for the Rune desktop app",
+    ),
+    (
+        "ui.reports.export_wealth_csv",
+        "Point-in-time wealth statement CSV bundle export is built for the Rune desktop app",
+    ),
 ];
 
 fn tauri_list(name: &str) -> BTreeSet<String> {
