@@ -486,6 +486,12 @@ pub fn menu_entries(app: &App, tk: &Tk) -> Vec<Entry> {
         width: tk.r(8.0),
         entries: limits,
     });
+    entries.push(Entry::Sep);
+    entries.push(Entry::Item {
+        key: "ov-menu-export-wealth".into(),
+        label: t("overview:holdings.exportWealth"),
+        on: Rc::new(crate::reports::report::open_wealth),
+    });
     entries
 }
 

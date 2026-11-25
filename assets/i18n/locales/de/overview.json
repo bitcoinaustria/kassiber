@@ -237,7 +237,8 @@
     },
     "transactions_one": "{{count}} Transaktion",
     "transactions_other": "{{count}} Transaktionen",
-    "trendChange": "{{change}} in 12 Monaten"
+    "trendChange": "{{change}} in 12 Monaten",
+    "exportWealth": "Vermögensübersicht exportieren…"
   },
   "recentTx": {
     "title": "Letzte Transaktionen",

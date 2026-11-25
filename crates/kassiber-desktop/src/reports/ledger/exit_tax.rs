@@ -361,7 +361,7 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, _tx: &mut Tx) -> bool {
 // ---- Calendar -----------------------------------------------------------------------------
 
 /// `parseISO`: (year, month 0–11, day); today (UTC) when it doesn't parse.
-fn parse_iso(v: &str) -> (i32, u32, u32) {
+pub(crate) fn parse_iso(v: &str) -> (i32, u32, u32) {
     let b = v.as_bytes();
     if b.len() >= 10
         && b[4] == b'-'
@@ -404,20 +404,20 @@ fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn days_in_month(y: i32, m0: u32) -> u32 {
+pub(crate) fn days_in_month(y: i32, m0: u32) -> u32 {
     let (ny, nm) = if m0 == 11 { (y + 1, 1) } else { (y, m0 + 2) };
     (days_from_civil(ny, nm, 1) - days_from_civil(y, m0 + 1, 1)) as u32
 }
 
 /// Monday-first weekday of the month's first day (0 = Monday).
-fn first_weekday(y: i32, m0: u32) -> u32 {
+pub(crate) fn first_weekday(y: i32, m0: u32) -> u32 {
     // 1970-01-01 was a Thursday (Monday-first index 3).
     ((days_from_civil(y, m0 + 1, 1) + 3).rem_euclid(7)) as u32
 }
 
 /// The calendar's month names and Monday-first weekday initials (`Intl` in the web's UI
 /// locale: en-US, de-AT with `Jänner`).
-fn months(l: Lang) -> [&'static str; 12] {
+pub(crate) fn months(l: Lang) -> [&'static str; 12] {
     match l {
         Lang::En => [
             "January",
@@ -450,7 +450,20 @@ fn months(l: Lang) -> [&'static str; 12] {
     }
 }
 
-fn weekdays(l: Lang) -> [&'static str; 7] {
+/// The short month names `formatDisplay` uses (en-US `Dec`, de-AT `Dez.`).
+pub(crate) fn months_short(l: Lang) -> [&'static str; 12] {
+    match l {
+        Lang::En => [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ],
+        Lang::De => [
+            "Jän.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.", "Nov.",
+            "Dez.",
+        ],
+    }
+}
+
+pub(crate) fn weekdays(l: Lang) -> [&'static str; 7] {
     match l {
         Lang::En => ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
         Lang::De => ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
@@ -465,19 +478,8 @@ pub fn format_display(v: &str, l: Lang) -> String {
     }
     let (y, m, d) = parse_iso(v);
     match l {
-        Lang::En => format!(
-            "{} {d:02}, {y}",
-            [
-                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-            ][m as usize]
-        ),
-        Lang::De => format!(
-            "{d:02}. {} {y}",
-            [
-                "Jän.", "Feb.", "März", "Apr.", "Mai", "Juni", "Juli", "Aug.", "Sep.", "Okt.",
-                "Nov.", "Dez."
-            ][m as usize]
-        ),
+        Lang::En => format!("{} {d:02}, {y}", months_short(l)[m as usize]),
+        Lang::De => format!("{d:02}. {} {y}", months_short(l)[m as usize]),
     }
 }
 
