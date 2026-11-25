@@ -120,6 +120,34 @@ pub(super) fn stamp_provenance(
     raw: Json,
 ) -> Result<(String, Json), AppError> {
     let label = kassiber_pytext::lower(kassiber_pytext::strip(label)).replace('_', "-");
+    if label.starts_with("btcpay-bark:") {
+        let is_bark_onchain_send = raw
+            .get("source")
+            .and_then(Json::as_str)
+            .is_some_and(|s| s.trim().eq_ignore_ascii_case("btcpay_bark_wallet"))
+            && raw
+                .get("part")
+                .and_then(Json::as_str)
+                .is_some_and(|s| s.trim().eq_ignore_ascii_case("principal"))
+            && raw.get("kind").and_then(Json::as_str).is_some_and(|s| {
+                matches!(
+                    s.trim().to_ascii_lowercase().as_str(),
+                    "send-onchain" | "offboard" | "onchain-send"
+                )
+            });
+        if !is_bark_onchain_send {
+            return Ok((raw_json, raw));
+        }
+        let Ok(Py::Dict(mut items)) = kassiber_pytext::loads(&raw_json) else {
+            return Ok((raw_json, raw));
+        };
+        items.push((
+            Key::from("_kassiber_provenance"),
+            kassiber_envelope::dict([("import_source", Py::Str("btcpay-bark".into()))]),
+        ));
+        let parsed = Py::Dict(items);
+        return Ok((dump(&parsed)?, projection(&parsed)));
+    }
     if !["lnd", "core-lightning"].contains(&label.as_str()) {
         return Ok((raw_json, raw));
     }

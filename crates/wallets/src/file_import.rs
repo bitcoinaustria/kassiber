@@ -1449,10 +1449,18 @@ fn merge(existing: &Fields, r: &Record, fp: &str, settlement: bool) -> Result<Fi
             .and_then(Json::as_str)
             .is_some_and(|s| s.trim().eq_ignore_ascii_case("btcpay_bark_wallet"))
     };
+    let has_bark_provenance = |v: &Json| {
+        v.get("_kassiber_provenance")
+            .and_then(|p| p.get("import_source"))
+            .and_then(Json::as_str)
+            .is_some_and(|s| s.trim().eq_ignore_ascii_case("btcpay-bark"))
+    };
+    let bark_provenance_upgrade =
+        r.bark_sync && !has_bark_provenance(&raw) && has_bark_provenance(&raw_incoming);
     // `_may_replace_observation_payload`: a native settlement keeps full power
     // over its own evidence. A file import must never forge or overwrite a
     // Bark-synced raw payload.
-    if (!updates.is_empty() || graph_upgrade)
+    if (!updates.is_empty() || graph_upgrade || bark_provenance_upgrade)
         && (settlement || !committed && (graph_upgrade || !legs(&raw) || legs(&raw_incoming)))
         && (r.bark_sync || !(bark_payload(&raw) || bark_payload(&raw_incoming)))
         && incoming["raw_json"] != existing["raw_json"]

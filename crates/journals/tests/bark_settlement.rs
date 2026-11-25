@@ -170,14 +170,15 @@ fn stamp_authoritative_receipt(
     .unwrap();
 }
 
-fn bark_raw(
+fn bark_raw_with_provenance(
     kind: &str,
     row_id: &str,
     raw_amount_msat: i64,
     fee_msat: i64,
     tx_hash: Option<&str>,
+    with_sync_provenance: bool,
 ) -> String {
-    json!({
+    let mut obj = json!({
         "amount_msat": raw_amount_msat,
         "bark_payment_hash": null,
         "bark_row_id": row_id,
@@ -190,8 +191,21 @@ fn bark_raw(
         "source": "btcpay_bark_wallet",
         "store_id": "shop",
         "transaction_hash": tx_hash,
-    })
-    .to_string()
+    });
+    if with_sync_provenance && matches!(kind, "send-onchain" | "offboard" | "onchain-send") {
+        obj["_kassiber_provenance"] = json!({"import_source": "btcpay-bark"});
+    }
+    obj.to_string()
+}
+
+fn bark_raw(
+    kind: &str,
+    row_id: &str,
+    raw_amount_msat: i64,
+    fee_msat: i64,
+    tx_hash: Option<&str>,
+) -> String {
+    bark_raw_with_provenance(kind, row_id, raw_amount_msat, fee_msat, tx_hash, true)
 }
 
 fn receipt_raw(txid: &str, input_vout: i64, value_sats: i64, owned_script: &str) -> String {
@@ -694,6 +708,7 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
             "fiat_currency": "EUR",
             "fiat_rate": "80000",
             "raw_json": {
+                "_kassiber_provenance": {"import_source": "btcpay-bark"},
                 "amount_msat": -32_802_000,
                 "bark_payment_hash": null,
                 "bark_row_id": "forged-1",
@@ -751,9 +766,10 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
         );
     }
 
-    // Pre-upgrade file-enrichment attack: a Bark row enriched on an older build
-    // (adding a payment_hash and swapping transaction_hash without creating an
-    // import_batch_transactions link) must not gain bark_txid_exact authority.
+    // Pre-upgrade legacy Bark row (including one enriched via generic JSON
+    // `manual_override`, with no sync-written `_kassiber_provenance` commitment)
+    // must NOT acquire `bark_txid_exact` authority until a real Bark sync
+    // upgrades it in place.
     let conn = open_book();
     insert_wallet(
         &conn,
@@ -796,7 +812,7 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
     );
     insert_tx(
         &conn,
-        "out-enriched",
+        "out-legacy",
         "w-bark",
         "btcpay-bark:shop:send-1",
         None,
@@ -805,18 +821,19 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
         30_000_000,
         2_802_000,
         "withdrawal",
-        &bark_raw(
+        &bark_raw_with_provenance(
             "send-onchain",
             "send-1",
             -32_802_000,
             2_802_000,
             Some(TXID_SEND),
+            false,
         ),
         80_000.0,
     );
     conn.execute(
-        "UPDATE transactions SET payment_hash = ?1, payment_hash_source = 'generic' WHERE id = 'out-enriched'",
-        [TXID_UNRELATED],
+        "UPDATE transactions SET pricing_source_kind = 'manual_override', fiat_price_source = 'manual' WHERE id = 'out-legacy'",
+        [],
     )
     .unwrap();
     let raw = receipt_raw(TXID_SEND, 0, 30_000, &owned_script);
@@ -836,7 +853,7 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
     );
     stamp_authoritative_receipt(&conn, "in-multi", "w-multi", TXID_SEND, 30_000_000, &raw);
     run_journals(&conn);
-    let enriched_auto: i64 = conn
+    let legacy_auto: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM journal_custody_decisions WHERE state = 'internal_verified'",
             [],
@@ -844,8 +861,42 @@ fn generic_file_import_cannot_claim_bark_authority_even_into_bark_wallet() {
         )
         .unwrap();
     assert_eq!(
-        enriched_auto, 0,
-        "pre-upgrade enriched Bark row with payment_hash must not qualify for bark_txid_exact"
+        legacy_auto, 0,
+        "pre-upgrade legacy Bark row without sync-written _kassiber_provenance must not promote"
+    );
+    let legacy_reason: String = conn
+        .query_row(
+            "SELECT reason FROM journal_quarantines WHERE transaction_id = 'out-legacy'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(legacy_reason, "recorded_transfer_authority_conflict");
+
+    // Once Bark sync writes the `_kassiber_provenance` commitment onto the
+    // existing row, rebuilding promotes it to `bark_txid_exact`.
+    conn.execute(
+        "UPDATE transactions SET raw_json = ?1 WHERE id = 'out-legacy'",
+        [bark_raw(
+            "send-onchain",
+            "send-1",
+            -32_802_000,
+            2_802_000,
+            Some(TXID_SEND),
+        )],
+    )
+    .unwrap();
+    run_journals(&conn);
+    let resynced_auto: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM journal_custody_decisions WHERE state = 'internal_verified' AND reason = 'bark_txid_exact'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        resynced_auto, 1,
+        "a Bark row carrying sync-written _kassiber_provenance must promote to bark_txid_exact"
     );
 }
 
@@ -1360,4 +1411,173 @@ fn bark_adapter_rows_agree_between_evidence_event_key_and_transaction_graph_txid
     );
     assert_eq!(get(&unexplained[0], "transaction_id"), Some(&s("tx-send")));
     assert_eq!(get(&unexplained[0], "status"), Some(&s("external_record")));
+}
+
+#[test]
+fn upgrade_invalidates_retained_exchange_txid_exact_with_missing_prevouts() {
+    let root = ScratchDir::new("exchange-upgrade");
+    let owned_script = kassiber_wallets::config::bitcoin_address_script(MULTISIG_ADDRESS)
+        .expect("P2WSH multisig script");
+    {
+        let book = kassiber_store::Book::create(root.path(), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(
+            "INSERT INTO workspaces(id,label,created_at) VALUES('w','Shop','2026-01-01T00:00:00Z');
+             INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,created_at) VALUES('p','w','Main','EUR','generic','2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+        kassiber_setup::context::execute(
+            conn,
+            "context.set",
+            &dict([("workspace", s("w")), ("profile", s("p"))]),
+        )
+        .unwrap();
+        insert_wallet(
+            conn,
+            "w-river",
+            "River",
+            "custom",
+            json!({
+                "chain": "bitcoin",
+                "network": "main",
+            }),
+        );
+        insert_wallet(
+            conn,
+            "w-multi",
+            "Store multisig",
+            "address",
+            json!({
+                "chain": "bitcoin",
+                "network": "main",
+                "addresses": [MULTISIG_ADDRESS],
+            }),
+        );
+        insert_tx(
+            conn,
+            "buy-river",
+            "w-river",
+            "river-buy-1",
+            None,
+            "2026-11-10T10:00:00Z",
+            "inbound",
+            100_000_000,
+            0,
+            "buy",
+            &json!({"source": "river_csv"}).to_string(),
+            80_000.0,
+        );
+        insert_tx(
+            conn,
+            "out-river",
+            "w-river",
+            TXID_SEND,
+            Some("txid"),
+            "2026-11-11T10:00:00Z",
+            "outbound",
+            30_000_000,
+            0,
+            "withdrawal",
+            &json!({"source": "river_csv", "txid": TXID_SEND}).to_string(),
+            80_000.0,
+        );
+        // Authoritative BDK-style receipt missing input prevout data.
+        let incomplete_raw = json!({
+            "txid": TXID_SEND,
+            "status": {"confirmed": true, "block_height": 840000},
+            "vin": [{"txid": FOREIGN_INPUT_TXID, "vout": 0}],
+            "vout": [
+                {"scriptpubkey": FOREIGN_SCRIPT, "value": 40_000},
+                {"scriptpubkey": owned_script, "value": 30_000}
+            ]
+        })
+        .to_string();
+        insert_tx(
+            conn,
+            "in-multi",
+            "w-multi",
+            TXID_SEND,
+            Some("txid"),
+            "2026-11-11T10:01:00Z",
+            "inbound",
+            30_000_000,
+            0,
+            "deposit",
+            &incomplete_raw,
+            80_000.0,
+        );
+        stamp_authoritative_receipt(
+            conn,
+            "in-multi",
+            "w-multi",
+            TXID_SEND,
+            30_000_000,
+            &incomplete_raw,
+        );
+        let sem = kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION;
+        conn.execute(
+            "UPDATE profiles SET last_processed_at = '2026-11-12T00:00:00Z', \
+             last_processed_tx_count = 3, journal_input_version = 1, \
+             last_processed_input_version = 1, journal_semantics_version = ?1, \
+             required_journal_semantics_version = ?1 WHERE id = 'p'",
+            [sem],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,created_at) \
+             VALUES(?1,'w','p','out-river','in-multi',?1,0,30000000,?1,0,30000000,'main','main','onchain','onchain','BTC','BTC','internal_verified','eligible','exchange_txid_exact','2026-11-12T00:00:00Z')",
+            [TXID_SEND],
+        )
+        .unwrap();
+    }
+
+    // Reopening via Book::open_migrating must invalidate the retained exchange_txid_exact book.
+    {
+        let book = kassiber_store::Book::open_migrating(
+            root.path(),
+            kassiber_store::OpenOptions::default(),
+            true,
+        )
+        .unwrap();
+        let (context, active) =
+            kassiber_workspace::readiness::scope(book.connection(), None).unwrap();
+        let health =
+            kassiber_workspace::readiness::health(book.connection(), &context, active.as_ref())
+                .unwrap();
+        let coverage = kassiber_journals::report_blockers::rates_coverage(
+            book.connection(),
+            &dict([("limit", Py::Int(10.into()))]),
+        )
+        .unwrap();
+        let blockers = kassiber_journals::report_blockers::snapshot(
+            book.connection(),
+            health.clone(),
+            coverage,
+        )
+        .unwrap();
+        let journal_before = get(&health, "journals").unwrap();
+        assert_eq!(get(journal_before, "status"), Some(&s("not_processed")));
+        assert_eq!(get(&blockers, "ready"), Some(&Py::Bool(false)));
+
+        // Rebuilding rejects exchange_txid_exact on the missing-prevout receipt.
+        run_journals(book.connection());
+        let auto_moves: i64 = book
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM journal_custody_decisions WHERE state = 'internal_verified'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(auto_moves, 0);
+        let held: String = book
+            .connection()
+            .query_row(
+                "SELECT reason FROM journal_quarantines WHERE transaction_id = 'out-river'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(held, "recorded_transfer_authority_conflict");
+    }
 }

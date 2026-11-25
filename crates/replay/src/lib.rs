@@ -502,6 +502,72 @@ fn rebind_observations(
             }
         }
     }
+    let bark_updates: Vec<(usize, Option<String>, Option<String>)> =
+        if let (Some(orig_rows), Some(pseudo_rows), Some(orig_bark), Some(pseudo_bark)) = (
+            original["transactions"].as_array(),
+            pseudonymized["transactions"].as_array(),
+            original
+                .get("bark_sync_provenance")
+                .and_then(Value::as_array),
+            pseudonymized
+                .get("bark_sync_provenance")
+                .and_then(Value::as_array),
+        ) {
+            let orig_by_id: BTreeMap<&str, &Value> = orig_rows
+                .iter()
+                .filter_map(|r| r.get("id").and_then(Value::as_str).map(|id| (id, r)))
+                .collect();
+            let pseudo_by_id: BTreeMap<&str, &Value> = pseudo_rows
+                .iter()
+                .filter_map(|r| r.get("id").and_then(Value::as_str).map(|id| (id, r)))
+                .collect();
+            orig_bark
+                .iter()
+                .zip(pseudo_bark.iter())
+                .enumerate()
+                .filter_map(|(index, (before, after))| {
+                    let orig_id = before.get("transaction_id").and_then(Value::as_str)?;
+                    let pseudo_id = after.get("transaction_id").and_then(Value::as_str)?;
+                    let orig_row = orig_by_id.get(orig_id)?;
+                    let pseudo_row = pseudo_by_id.get(pseudo_id)?;
+                    let orig_obs = kassiber_custody::evidence::observed_hash(orig_row)
+                        .ok()
+                        .map(|(h, _)| h);
+                    let orig_graph = kassiber_custody::evidence::graph_hash(&orig_row["raw_json"])
+                        .ok()
+                        .map(|(h, _)| h);
+                    if orig_obs.as_deref() != before.get("observed_hash").and_then(Value::as_str)
+                        || orig_graph.as_deref() != before.get("graph_hash").and_then(Value::as_str)
+                    {
+                        return None;
+                    }
+                    let obs = kassiber_custody::evidence::observed_hash(pseudo_row)
+                        .ok()
+                        .map(|(h, _)| h);
+                    let graph = kassiber_custody::evidence::graph_hash(&pseudo_row["raw_json"])
+                        .ok()
+                        .map(|(h, _)| h);
+                    Some((index, obs, graph))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+    if let Some(pseudo_bark) = pseudonymized
+        .get_mut("bark_sync_provenance")
+        .and_then(Value::as_array_mut)
+    {
+        for (index, obs, graph) in bark_updates {
+            if let Some(after) = pseudo_bark.get_mut(index) {
+                if let Some(obs) = obs {
+                    after["observed_hash"] = Value::String(obs);
+                }
+                if let Some(graph) = graph {
+                    after["graph_hash"] = Value::String(graph);
+                }
+            }
+        }
+    }
 }
 
 /// Reviewed custody components bind their anchors' evidence by digest. For

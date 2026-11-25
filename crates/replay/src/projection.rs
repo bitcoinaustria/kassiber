@@ -580,7 +580,7 @@ const SAMOURAI: Schema = &[
 
 /// The on-chain and Lightning payload fields the graph, confirmation,
 /// network and channel interpreters read from `raw_json`.
-static RAW_FIELDS: [(&str, F); 87] = [
+static RAW_FIELDS: [(&str, F); 88] = [
     ("txid", F::External),
     ("hash", F::External),
     ("tx_hash", F::External),
@@ -682,6 +682,7 @@ static RAW_FIELDS: [(&str, F); 87] = [
     ("asset", F::Enum(ASSETS)),
     ("direction", F::Enum(DIRECTIONS)),
     ("tag", F::Enum(CHANNEL_TAGS)),
+    ("part", F::Enum(&["principal", "fee"])),
 ];
 const RAW: Schema = &RAW_FIELDS;
 const ELECTRUM_HISTORY: Schema = &[("height", F::Int)];
@@ -692,7 +693,7 @@ const ELECTRUM_GRAPH: Schema = &[
 
 /// The importers that stamp `_kassiber_provenance.import_source`
 /// (`chain/src/lightning/lnd_wallet.rs`, `wallets/src/file_import/generic_json.rs`).
-const IMPORT_SOURCES: &[&str] = &["lnd_adapter", "lnd", "core-lightning"];
+const IMPORT_SOURCES: &[&str] = &["lnd_adapter", "lnd", "core-lightning", "btcpay-bark"];
 const PROVENANCE: Schema = &[("import_source", F::Enum(IMPORT_SOURCES))];
 
 /// The observers whose HTLC proofs the interpreter trusts, and others that
@@ -1127,6 +1128,12 @@ const OWNED_MATCH: Schema = &[
     ("branch_label", F::Text),
 ];
 
+const BARK_SYNC_PROVENANCE: Schema = &[
+    ("transaction_id", F::Row),
+    ("observed_hash", F::Digest),
+    ("graph_hash", F::Digest),
+];
+
 /// Every section of the snapshot and the schema of its rows.
 pub const SECTIONS: &[(&str, Schema)] = &[
     ("profile", PROFILE),
@@ -1140,6 +1147,7 @@ pub const SECTIONS: &[(&str, Schema)] = &[
     ("channel_records", CHANNEL_RECORD),
     ("loan_legs", LOAN_LEG),
     ("evidence_snapshots", EVIDENCE_SNAPSHOT),
+    ("bark_sync_provenance", BARK_SYNC_PROVENANCE),
     ("migration_issues", MIGRATION_ISSUE),
     ("import_duplicate_quarantines", QUARANTINE),
     ("reset_hold_quarantines", QUARANTINE),

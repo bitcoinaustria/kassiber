@@ -23,6 +23,10 @@ const BARK_ACTIVE_ONCHAIN_ROW_SQL: &str = "EXISTS (SELECT 1 FROM transactions t 
       AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal' \
       AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive') \
       AND length(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = 64)";
+const EXCHANGE_TXID_DECISION_SQL: &str = "EXISTS (SELECT 1 FROM journal_custody_decisions d \
+    WHERE d.profile_id = ?1 \
+      AND d.state = 'internal_verified' \
+      AND d.reason = 'exchange_txid_exact')";
 /// The semantics version that holds a price stored in another currency than
 /// the book's.
 const PRICE_CURRENCY_REQUIRED: i64 = 10;
@@ -411,7 +415,7 @@ pub(crate) fn bark_onchain_settlement(
     if already {
         return Ok(());
     }
-    let affected = "(last_processed_at IS NOT NULL OR EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))\n        AND EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id\n            AND t.excluded = 0\n            AND json_valid(t.raw_json)\n            AND json_type(t.raw_json) = 'object'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.source'), ''))) = 'btcpay_bark_wallet'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive')\n            AND length(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = 64)";
+    let affected = "(last_processed_at IS NOT NULL OR EXISTS (\n        SELECT 1 FROM journal_entries WHERE profile_id = profiles.id))\n        AND (EXISTS (SELECT 1 FROM transactions t WHERE t.profile_id = profiles.id\n            AND t.excluded = 0\n            AND json_valid(t.raw_json)\n            AND json_type(t.raw_json) = 'object'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.source'), ''))) = 'btcpay_bark_wallet'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.part'), ''))) = 'principal'\n            AND lower(trim(coalesce(json_extract(t.raw_json, '$.kind'), ''))) IN ('send-onchain', 'offboard', 'onchain-send', 'onchain-receive')\n            AND length(trim(coalesce(json_extract(t.raw_json, '$.transaction_hash'), ''))) = 64)\n        OR EXISTS (SELECT 1 FROM journal_custody_decisions d WHERE d.profile_id = profiles.id\n            AND d.state = 'internal_verified'\n            AND d.reason = 'exchange_txid_exact'))";
     let pending: i64 = conn
         .query_row(
             &format!("SELECT COUNT(*) FROM profiles WHERE {affected}"),
@@ -504,7 +508,28 @@ pub fn mark_bark_onchain_settlement_current(conn: &Connection, profile_id: &str)
             |r| r.get(0),
         )
         .map_err(map_sqlite_error)?;
-    if !has_bark {
+    let has_exchange_txid: bool = if has_bark {
+        false
+    } else {
+        let has_decisions: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='journal_custody_decisions')",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(map_sqlite_error)?;
+        if has_decisions {
+            conn.query_row(
+                &format!("SELECT {EXCHANGE_TXID_DECISION_SQL}"),
+                [profile_id],
+                |r| r.get(0),
+            )
+            .map_err(map_sqlite_error)?
+        } else {
+            false
+        }
+    };
+    if !has_bark && !has_exchange_txid {
         return Ok(false);
     }
     let impact = python_value(&serde_json::json!({
@@ -863,24 +888,32 @@ mod tests {
         );
         crate::schema::verify(&clean.connection).unwrap();
 
-        // Processed book with an active Bark send-onchain row is invalidated once,
-        // passes schema::verify, and ignores excluded or unprocessed profiles.
+        // Processed book with an active Bark send-onchain row or a retained
+        // exchange_txid_exact decision is invalidated once, passes schema::verify,
+        // and ignores excluded or unprocessed profiles.
         let (_root_aff, mut aff) = book();
         aff.connection
             .execute_batch(&format!(
                 "INSERT INTO workspaces VALUES('ws','shop','fixed');
                  INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,last_processed_at,last_processed_tx_count,journal_semantics_version,required_journal_semantics_version,created_at) VALUES
                    ('affected','ws','Affected','EUR','generic','FIFO','fixed',1,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed'),
+                   ('exchange','ws','Exchange','EUR','generic','FIFO','fixed',2,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed'),
                    ('excluded','ws','Excluded','EUR','generic','FIFO','fixed',0,{JOURNAL_CALCULATION_SEMANTICS_VERSION},{JOURNAL_CALCULATION_SEMANTICS_VERSION},'fixed'),
                    ('unprocessed','ws','Unprocessed','EUR','generic','FIFO',NULL,0,0,0,'fixed');
                  INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES
                    ('w1','ws','affected','Bark','custom','fixed'),
                    ('w2','ws','excluded','Bark','custom','fixed'),
-                   ('w3','ws','unprocessed','Bark','custom','fixed');
+                   ('w3','ws','unprocessed','Bark','custom','fixed'),
+                   ('w4','ws','exchange','River','custom','fixed'),
+                   ('w5','ws','exchange','Vault','address','fixed');
                  INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,excluded,created_at) VALUES
                    ('t1','ws','affected','w1','fp1','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"send-onchain\",\"transaction_hash\":\"{txid}\"}}',0,'fixed'),
                    ('t2','ws','excluded','w2','fp2','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"offboard\",\"transaction_hash\":\"{txid}\"}}',1,'fixed'),
-                   ('t3','ws','unprocessed','w3','fp3','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"onchain-send\",\"transaction_hash\":\"{txid}\"}}',0,'fixed');"
+                   ('t3','ws','unprocessed','w3','fp3','fixed','outbound','BTC',30000000,'{{\"source\":\"btcpay_bark_wallet\",\"part\":\"principal\",\"kind\":\"onchain-send\",\"transaction_hash\":\"{txid}\"}}',0,'fixed'),
+                   ('t4','ws','exchange','w4','fp4','fixed','outbound','BTC',30000000,'{{}}',0,'fixed'),
+                   ('t5','ws','exchange','w5','fp5','fixed','inbound','BTC',30000000,'{{}}',0,'fixed');
+                 INSERT INTO journal_custody_decisions(decision_id,workspace_id,profile_id,source_transaction_id,target_transaction_id,source_observation_hash,source_start_msat,source_end_msat,target_observation_hash,target_start_msat,target_end_msat,source_network,target_network,source_rail,target_rail,source_asset,target_asset,state,basis_state,reason,created_at) VALUES
+                   ('{txid}','ws','exchange','t4','t5','{txid}',0,30000000,'{txid}',0,30000000,'main','main','onchain','onchain','BTC','BTC','internal_verified','eligible','exchange_txid_exact','fixed');"
             ))
             .unwrap();
         bark_onchain_settlement(&mut aff.connection, &mut |_| Ok(())).unwrap();
@@ -899,6 +932,7 @@ mod tests {
             profiles,
             [
                 ("affected".to_owned(), None, 0, 1),
+                ("exchange".to_owned(), None, 0, 1),
                 ("excluded".to_owned(), Some("fixed".to_owned()), 0, 0),
                 ("unprocessed".to_owned(), None, 0, 0),
             ]

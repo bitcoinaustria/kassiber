@@ -675,7 +675,8 @@ fn bark_sync_provenance(conn: &Connection, profile_id: &str) -> Result<Vec<Value
     if !table_exists(conn, "import_batch_transactions")? {
         return Ok(Vec::new());
     }
-    const ALLOWED_BARK_KEYS: [&str; 12] = [
+    const ALLOWED_BARK_KEYS: [&str; 13] = [
+        "_kassiber_provenance",
         "amount_msat",
         "bark_payment_hash",
         "bark_row_id",
@@ -761,8 +762,22 @@ fn bark_sync_provenance(conn: &Connection, profile_id: &str) -> Result<Vec<Value
         let Some(raw) = raw_val.as_object() else {
             continue;
         };
-        // Reject payloads carrying any key outside the Bark sync schema.
+        // Reject payloads carrying any key outside the Bark sync schema or
+        // lacking the sync-written `_kassiber_provenance` commitment (which
+        // file imports always strip).
         if !raw.keys().all(|k| ALLOWED_BARK_KEYS.contains(&k.as_str())) {
+            continue;
+        }
+        let has_sync_provenance = raw
+            .get("_kassiber_provenance")
+            .and_then(J::as_object)
+            .is_some_and(|p| {
+                p.len() == 1
+                    && p.get("import_source")
+                        .and_then(J::as_str)
+                        .is_some_and(|s| s == "btcpay-bark")
+            });
+        if !has_sync_provenance {
             continue;
         }
         let source = raw
