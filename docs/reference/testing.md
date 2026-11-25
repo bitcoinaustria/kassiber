@@ -402,6 +402,16 @@ sign-off.
 
 ## Pull-request CI
 
+Pull requests run CI only on request, not on every push: adding the `ci`
+label starts one run of `ci.yml`, `credential-platforms.yml`,
+`linux-packaging.yml` and `prerelease-binaries.yml` (each within its path
+filter) on the pull request's head at that moment. The run takes the label
+off again, so adding it once more requests the next run, for example after
+new commits: `gh pr edit <number> --add-label ci`. Request a run before
+merging; a pull request nobody labeled has no checks for its head. Other
+labels start runs whose jobs all skip. Pushes to `main` still run every
+workflow.
+
 The required PR workflow (`.github/workflows/ci.yml`) runs independent jobs
 that each fetch the locked test data first:
 
@@ -443,8 +453,8 @@ that each fetch the locked test data first:
    (unpublished, `dev` channel) on pull requests that touch Rust, packaging or
    release paths.
 
-A pull request whose base is another pull request's branch (a stacked layer)
-runs a fast lane: `Recorded sessions`, `Chain observers` and the macOS and
+A requested run on a pull request whose base is another pull request's branch
+(a stacked layer) is a fast lane: `Recorded sessions`, `Chain observers` and the macOS and
 Windows desktop builds are skipped, and `required` accepts those skips. Pull
 requests into `main` and pushes to `main` run every job. A stack pays the full
 lane on the layer that targets `main`, and each later layer pays it once it is
