@@ -118,8 +118,21 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    let draft = draft_mode(args);
+    let reasons = if draft {
+        require_context_admit(conn, profile, true, true)?
+    } else {
+        Vec::new()
+    };
     let model = model(conn, workspace, profile, args, sources)?;
-    let (bytes, pages) = report_design::pdf(&report_design::austrian(&model))?;
+    let mut doc = report_design::austrian(&model);
+    if privacy_mode(args) {
+        doc.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(profile, "id"))?);
+    }
+    if draft {
+        doc.apply_draft(&reasons);
+    }
+    let (bytes, pages) = report_design::pdf(&doc)?;
     let report = value(&model, "report");
     let year = value(report, "tax_year").clone();
     Ok(Prepared {
@@ -152,7 +165,7 @@ pub(super) fn prepare(
                 ),
             ),
         ]),
-        completion: Some(crate::export_completion::Completion {
+        completion: (!draft).then(|| crate::export_completion::Completion {
             kind: "austrian-e1kv.pdf".into(),
             year: Some(year),
             end_year: None,

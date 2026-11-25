@@ -9,9 +9,22 @@ pub(super) fn project(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<(Value, Document)> {
+    let draft = draft_mode(args);
     let model = exit_pdf::model(conn, args, sources)?;
     let report = value(&model, "report");
-    let document = report_design::xlsx_document(&report_design::exit_tax(&model));
+    let mut design = report_design::exit_tax(&model);
+    if privacy_mode(args) {
+        let (_, profile) = kassiber_setup::references::scope(conn, args)?;
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(&profile, "id"))?);
+    }
+    if draft {
+        let reasons: Vec<String> = list(value(&model, "draft_reasons"))
+            .iter()
+            .map(py_str)
+            .collect();
+        design.apply_draft(&reasons);
+    }
+    let document = report_design::xlsx_document(&design);
     let metadata = dict([
         ("scope", s("exit_tax")),
         ("format", s("xlsx")),

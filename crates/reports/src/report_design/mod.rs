@@ -27,6 +27,7 @@ mod strings_es;
 mod strings_ja;
 mod summary;
 mod us;
+mod wealth;
 mod year_handoff;
 pub use austrian::austrian;
 pub use cross_check::cross_check;
@@ -36,6 +37,7 @@ pub use locale::Lang;
 pub use source_funds::source_funds;
 pub(crate) use summary::prepare as prepare_summary;
 pub use summary::{summary, summary_model};
+pub use wealth::wealth;
 pub use year_handoff::year_handoff;
 
 /// The CSV bundle's schema identifier, versioned with the layout.
@@ -285,10 +287,222 @@ pub struct Document {
     pub fiat: String,
     pub country: String,
     pub lang: Lang,
+    /// Diagonal page watermark (for example `DRAFT` / `ENTWURF`); `None` for
+    /// final reports so their PDF bytes stay untouched.
+    pub watermark: Option<String>,
+    /// Minimal-disclosure export mode: replaces individual wallet labels with
+    /// generic custody classes (e.g. `Eigenverwahrung` / `Self-custody`) and
+    /// omits transaction IDs and hardware/observer metadata.
+    pub privacy_mode: bool,
     pub sections: Vec<Section>,
 }
 
 impl Document {
+    /// Mark a finished document as a draft: diagonal watermark on every PDF
+    /// page, draft notice on the XLSX summary sheet and CSV manifest, and an
+    /// accented explanation at the top of the first section.
+    pub fn apply_draft(&mut self, reasons: &[String]) {
+        let lang = self.lang;
+        self.watermark = Some(lang.t("doc.watermark.draft").into());
+        let note = if reasons.is_empty() {
+            lang.t("draft.notice").to_owned()
+        } else {
+            format!("{} {}", lang.t("draft.notice"), reasons.join(" "))
+        };
+        if let Some(first) = self.sections.first_mut() {
+            first.blocks.insert(
+                0,
+                Block::Note {
+                    text: note,
+                    accent: true,
+                },
+            );
+        }
+    }
+    /// Apply minimal-disclosure redaction across every section and table:
+    /// removes transaction identifiers and technical wallet/observer columns,
+    /// drops raw wallet-inventory tables, replaces specific wallet labels with
+    /// custody categories (`Eigenverwahrung` / `Handelsplattform`), and records
+    /// the disclosure mode in Scope and the CSV manifest.
+    pub fn apply_privacy_mode(&mut self) {
+        self.apply_privacy_mode_for(&std::collections::BTreeMap::new());
+    }
+
+    pub fn apply_privacy_mode_for(
+        &mut self,
+        custody_by_label: &std::collections::BTreeMap<String, &'static str>,
+    ) {
+        self.privacy_mode = true;
+        let lang = self.lang;
+        let self_custody = lang.t("privacy.self_custody");
+        let platform = lang.t("privacy.platform");
+        let custody_col = lang.t("privacy.col.custody");
+        let total_label = lang.t("doc.total");
+
+        let label_for = |raw: &str| -> &'static str {
+            if raw == platform || custody_by_label.get(raw) == Some(&"platform") {
+                platform
+            } else {
+                self_custody
+            }
+        };
+
+        // If `period` carries a wallet label (e.g. single-wallet full report),
+        // redact it to its custody class so headers/subtitles never leak names.
+        if let Some(kind) = custody_by_label.get(&self.period) {
+            self.period = if *kind == "platform" {
+                platform.into()
+            } else {
+                self_custody.into()
+            };
+        }
+
+        // Derive the scope custody summary from the book's actual wallet kinds.
+        let has_self = custody_by_label.values().any(|k| *k != "platform");
+        let has_platform = custody_by_label.values().any(|k| *k == "platform");
+        let scope_custody: String = match (has_self, has_platform) {
+            (false, true) => platform.into(),
+            (true, true) => format!("{self_custody}, {platform}"),
+            _ => self_custody.into(),
+        };
+
+        const STRIP_COLS: &[&str] = &[
+            "reference",
+            "references",
+            "transaction",
+            "transaction_id",
+            "transaction_ref",
+            "transactions",
+            "other_leg_transaction_id",
+            "pair_ref",
+            "journal_entry_id",
+            "external_id",
+            "txid",
+            "hash",
+            "tx_hash",
+            "timing_notes",
+            "event",
+            "wallet_kind",
+            "scope",
+            "backend",
+            "gap_limit",
+            "chain",
+            "network",
+            "last_synced_at",
+        ];
+
+        for section in &mut self.sections {
+            section.blocks.retain_mut(|block| match block {
+                Block::Table(table) => {
+                    if table.id == "wallets" {
+                        return false;
+                    }
+                    let keep: Vec<usize> = table
+                        .columns
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, c)| !STRIP_COLS.contains(&c.key))
+                        .map(|(i, _)| i)
+                        .collect();
+                    let new_cols: Vec<Column> = keep
+                        .iter()
+                        .map(|&i| {
+                            let mut c = table.columns[i].clone();
+                            if matches!(c.key, "wallet" | "venues") {
+                                c.label = custody_col.into();
+                            }
+                            c
+                        })
+                        .collect();
+                    let redact_cell = |key: &str, cell: &Cell, is_total: bool| -> Cell {
+                        if matches!(key, "wallet" | "other_wallet" | "account") {
+                            match cell {
+                                Cell::Text(s) if !s.is_empty() => {
+                                    if (is_total && s == total_label)
+                                        || s == self_custody
+                                        || s == platform
+                                    {
+                                        cell.clone()
+                                    } else {
+                                        Cell::Text(label_for(s).into())
+                                    }
+                                }
+                                _ => cell.clone(),
+                            }
+                        } else if key == "venues" {
+                            match cell {
+                                Cell::Text(s) if !s.is_empty() => {
+                                    let mut mapped = Vec::new();
+                                    for part in
+                                        s.split(',').map(str::trim).filter(|p| !p.is_empty())
+                                    {
+                                        let m = label_for(part);
+                                        if !mapped.contains(&m) {
+                                            mapped.push(m);
+                                        }
+                                    }
+                                    Cell::Text(mapped.join(", "))
+                                }
+                                _ => cell.clone(),
+                            }
+                        } else {
+                            cell.clone()
+                        }
+                    };
+                    let new_rows: Vec<Vec<Cell>> = table
+                        .rows
+                        .iter()
+                        .map(|row| {
+                            keep.iter()
+                                .map(|&i| redact_cell(table.columns[i].key, &row[i], false))
+                                .collect()
+                        })
+                        .collect();
+                    let new_total = table.total.as_ref().map(|tot| {
+                        keep.iter()
+                            .map(|&i| redact_cell(table.columns[i].key, &tot[i], true))
+                            .collect()
+                    });
+                    table.columns = new_cols;
+                    table.rows = new_rows;
+                    table.total = new_total;
+                    true
+                }
+                Block::Facts(facts) => {
+                    for f in facts.iter_mut() {
+                        if matches!(f.key, "wallets" | "wallets_used" | "wallet_scope") {
+                            let already_redacted = matches!(
+                                &f.value,
+                                Cell::Text(s)
+                                    if s == self_custody
+                                        || s == platform
+                                        || s == &format!("{self_custody}, {platform}")
+                                        || s == &format!("{platform}, {self_custody}")
+                            );
+                            if !already_redacted {
+                                f.value = Cell::Text(scope_custody.clone());
+                                f.display = Some(scope_custody.clone());
+                            }
+                        }
+                    }
+                    if section.id == "scope" && !facts.iter().any(|f| f.key == "disclosure") {
+                        let minimal = lang.t("privacy.minimal_label");
+                        facts.push(Fact {
+                            display: Some(minimal.into()),
+                            ..fact(
+                                "disclosure",
+                                lang.t("privacy.disclosure"),
+                                Cell::Text("minimal".into()),
+                            )
+                        });
+                    }
+                    true
+                }
+                _ => true,
+            });
+        }
+        self.sections.retain(|s| !s.blocks.is_empty());
+    }
     /// The notice of a preview country (`kassiber_tax_countries`), which
     /// every rendering carries: the PDF's first page and footers, the XLSX
     /// summary sheet, the CSV summary and manifest.
@@ -1031,6 +1245,9 @@ fn pdf_data(doc: &Document, stamp: kassiber_pdf::engine::Stamp) -> Value {
     if let Some(notice) = doc.preview_notice() {
         kassiber_envelope::set(&mut meta, "notice", s(notice));
     }
+    if let Some(watermark) = &doc.watermark {
+        kassiber_envelope::set(&mut meta, "watermark", s(watermark.as_str()));
+    }
     obj([
         ("meta", meta),
         (
@@ -1233,15 +1450,30 @@ pub fn xlsx_document(doc: &Document) -> kassiber_xlsx::Document {
             style: MUTED,
         },
     ];
+    let mut row = 2u32;
     if let Some(notice) = doc.preview_notice() {
         summary.push(Operation::Cell {
-            row: 2,
+            row,
             col: 0,
             value: XCell::String(notice.into()),
             style: HEADER,
         });
+        row += 1;
     }
-    let mut row = 3u32;
+    if let Some(watermark) = &doc.watermark {
+        summary.push(Operation::Cell {
+            row,
+            col: 0,
+            value: XCell::String(format!("{watermark} — {}", doc.lang.t("draft.notice"))),
+            style: HEADER,
+        });
+        row += 1;
+    }
+    if row == 2 {
+        row = 3;
+    } else {
+        row += 1;
+    }
     let mut sheets = Vec::new();
     for section in &doc.sections {
         let mut facts = Vec::new();
@@ -1437,6 +1669,12 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     if let Some(notice) = doc.coverage_notice() {
         facts.push(("source_coverage", "notice", Cell::Text(notice.into())));
     }
+    if doc.watermark.is_some() {
+        facts.push(("draft", "status", Cell::Text("draft".into())));
+    }
+    if doc.privacy_mode {
+        facts.push(("privacy", "disclosure", Cell::Text("minimal".into())));
+    }
     let mut files: Vec<(String, Vec<u8>, Vec<&str>, usize)> = Vec::new();
     for section in &doc.sections {
         for block in &section.blocks {
@@ -1530,6 +1768,12 @@ pub fn csv(doc: &Document) -> Result<Vec<(String, Vec<u8>)>> {
     }
     if let Some(notice) = doc.coverage_notice() {
         kassiber_envelope::set(&mut manifest, "source_coverage_notice", s(notice));
+    }
+    if doc.watermark.is_some() {
+        kassiber_envelope::set(&mut manifest, "draft", Value::Bool(true));
+    }
+    if doc.privacy_mode {
+        kassiber_envelope::set(&mut manifest, "privacy_mode", Value::Bool(true));
     }
     let mut text = kassiber_pyjson::dumps(
         &manifest,

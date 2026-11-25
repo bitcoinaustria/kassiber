@@ -818,6 +818,8 @@ pub fn summary(model: &Value) -> Document {
         fiat: currency,
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }
@@ -831,7 +833,8 @@ pub fn summary_model(
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
-    require_context(conn, &profile, false)?;
+    let draft = crate::draft_mode(args);
+    let reasons = crate::require_context_admit(conn, &profile, false, draft)?;
     let report = summary_pdf::model(conn, &workspace, &profile, args, sources)?;
     let taxed = crate::country::taxed_days(&profile);
     let mut settings = dict(
@@ -878,11 +881,19 @@ pub fn summary_model(
             kennzahlen.push((year.to_string(), value(&annual, "kennzahl_totals").clone()));
         }
     }
-    Ok(dict([
+    let mut out = dict([
         ("summary", report),
         ("profile", settings),
         ("kennzahlen", dict(kennzahlen)),
-    ]))
+    ]);
+    if draft {
+        replace(
+            &mut out,
+            "draft_reasons",
+            Value::List(reasons.into_iter().map(s).collect()),
+        );
+    }
+    Ok(out)
 }
 
 /// `reports.export-summary-pdf`: the summary report in the shared design.
@@ -893,8 +904,21 @@ pub(crate) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<crate::artifact_csv::Prepared> {
+    let draft = crate::draft_mode(args);
     let model = summary_model(conn, args, sources)?;
-    let (bytes, pages) = super::pdf(&summary(&model))?;
+    let mut doc = summary(&model);
+    if crate::privacy_mode(args) {
+        let (_, profile) = kassiber_setup::references::scope(conn, args)?;
+        doc.apply_privacy_mode_for(&crate::wealth::wallet_custody_map(
+            conn,
+            &text(&profile, "id"),
+        )?);
+    }
+    if draft {
+        let reasons: Vec<String> = list(&model, "draft_reasons").iter().map(py_str).collect();
+        doc.apply_draft(&reasons);
+    }
+    let (bytes, pages) = super::pdf(&doc)?;
     let report = value(&model, "summary");
     let timeframe = value(report, "timeframe");
     let snapshot = value(report, "snapshot");
@@ -960,15 +984,10 @@ pub(crate) fn prepare(
         .iter()
         .map(|w| s(py_str(value(w, "id"))))
         .collect();
-    Ok(crate::artifact_csv::Prepared {
-        files: vec![crate::artifact_csv::File {
-            name: "summary.pdf".into(),
-            sheet: String::new(),
-            bytes,
-            rows: 0,
-        }],
-        metadata,
-        completion: Some(crate::export_completion::Completion {
+    let completion = if draft {
+        None
+    } else {
+        Some(crate::export_completion::Completion {
             kind: "summary.pdf".into(),
             year: Some(year("start")?),
             end_year: Some(year("end")?),
@@ -977,7 +996,17 @@ pub(crate) fn prepare(
                 ("occurred_at_start", timeframe_value(timeframe, "start")),
                 ("occurred_at_end", timeframe_value(timeframe, "end")),
             ]),
-        }),
+        })
+    };
+    Ok(crate::artifact_csv::Prepared {
+        files: vec![crate::artifact_csv::File {
+            name: "summary.pdf".into(),
+            sheet: String::new(),
+            bytes,
+            rows: 0,
+        }],
+        metadata,
+        completion,
     })
 }
 

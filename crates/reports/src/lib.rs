@@ -90,6 +90,7 @@ mod transaction_csv;
 pub mod us_tax;
 mod verification;
 mod verification_xlsx;
+pub mod wealth;
 mod year_handoff;
 mod year_handoff_xlsx;
 pub use kassiber_pytext::zone;
@@ -307,11 +308,18 @@ pub fn execute_with_sources(
                 Value::List(snapshots::list(conn, &text(&profile, "id"))?),
             )]));
         }
+        if matches!(command, "reports.wealth" | "ui.reports.wealth_preview") {
+            return wealth::report(conn, &workspace, &profile, args, sources);
+        }
         let austrian = matches!(
             command,
             "reports.austrian-e1kv" | "reports.austrian-tax-summary"
         );
-        require_context(conn, &profile, austrian)?;
+        if draft_mode(args) {
+            require_context_admit(conn, &profile, austrian, true)?;
+        } else {
+            require_context(conn, &profile, austrian)?;
+        }
         if command == "ui.reports.balance_sheet" || command == "ui.reports.portfolio_summary" {
             let Value::List(rows) =
                 holdings::report(conn, &profile, command == "ui.reports.portfolio_summary")?
@@ -405,6 +413,32 @@ fn semantics_current(profile: &Value) -> bool {
             int(profile, "required_journal_semantics_version"),
             int(profile, "journal_semantics_version"),
         )
+}
+
+pub(crate) fn draft_mode(args: &Value) -> bool {
+    truthy(value(args, "draft"))
+}
+
+pub(crate) fn privacy_mode(args: &Value) -> bool {
+    truthy(value(args, "privacy_mode"))
+}
+
+/// Admits a report either strictly (final export) or in draft mode. In draft
+/// mode, mixed networks, unknown countries and non-Austrian E 1kv requests
+/// still fail closed; stale journals, freshness failures and custody blockers
+/// are collected as draft notes instead of refusing the export.
+pub(crate) fn require_context_admit(
+    conn: &Connection,
+    profile: &Value,
+    austrian: bool,
+    draft: bool,
+) -> Result<Vec<String>> {
+    if draft {
+        wealth::draft_admission_reasons(conn, profile, austrian)
+    } else {
+        require_context(conn, profile, austrian)?;
+        Ok(Vec::new())
+    }
 }
 
 fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result<()> {

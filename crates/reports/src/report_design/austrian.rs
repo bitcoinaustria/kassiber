@@ -938,6 +938,8 @@ pub fn austrian(model: &Value) -> Document {
         fiat: "EUR".into(),
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

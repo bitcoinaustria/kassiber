@@ -8,7 +8,7 @@ fn metadata() -> &'static Value {
 fn note(key: &str) -> Value {
     value(metadata(), key).clone()
 }
-fn exact(row: &Value, key: &str) -> Result<Option<Decimal>> {
+pub(crate) fn exact(row: &Value, key: &str) -> Result<Option<Decimal>> {
     for v in [value(row, &format!("{key}_exact")), value(row, key)] {
         if !matches!(v, Value::Null) && v != &s("") {
             return decimal(v).map(Some);
@@ -16,7 +16,7 @@ fn exact(row: &Value, key: &str) -> Result<Option<Decimal>> {
     }
     Ok(None)
 }
-fn eur(d: Option<&Decimal>) -> Result<Value> {
+pub(crate) fn eur(d: Option<&Decimal>) -> Result<Value> {
     d.map(|d| {
         float(
             &d.quantize(-2, &Context::new(32, Rounding::HalfUp))
@@ -26,7 +26,7 @@ fn eur(d: Option<&Decimal>) -> Result<Value> {
     .transpose()
     .map(|v| v.unwrap_or(Value::Null))
 }
-fn sats(d: &Decimal) -> Result<Value> {
+pub(crate) fn sats(d: &Decimal) -> Result<Value> {
     austrian::integer(
         &d.mul(&Decimal::from(100_000_000), &DECIMAL)
             .map_err(arithmetic)?
@@ -34,14 +34,14 @@ fn sats(d: &Decimal) -> Result<Value> {
             .map_err(arithmetic)?,
     )
 }
-fn marker(row: &Value) -> Option<String> {
+pub(crate) fn marker(row: &Value) -> Option<String> {
     text(row, "description")
         .split(|c: char| kassiber_pytext::is_space(c as u32))
         .find_map(|t| t.strip_prefix("at_regime="))
         .filter(|v| ["alt", "neu"].contains(v))
         .map(String::from)
 }
-fn alt(row: &Value) -> Result<bool> {
+pub(crate) fn alt(row: &Value) -> Result<bool> {
     if let Some(m) = marker(row) {
         return Ok(m == "alt");
     }
@@ -149,7 +149,7 @@ fn transaction_value(row: &Value, key: &str) -> Result<Option<Decimal>> {
         decimal(stored).map(Some)
     }
 }
-fn fallback_rates(
+pub(crate) fn fallback_rates(
     conn: &Connection,
     profile: &Value,
     cutoff: i64,
@@ -194,7 +194,7 @@ fn fallback_rates(
     }
     Ok(result)
 }
-fn fmv(
+pub(crate) fn fmv(
     conn: &Connection,
     asset: &str,
     fiat: &str,

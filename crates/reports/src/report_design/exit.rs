@@ -417,6 +417,8 @@ pub fn exit_tax(model: &Value) -> Document {
         fiat: currency,
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

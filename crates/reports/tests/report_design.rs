@@ -348,6 +348,8 @@ fn formula_cells_name_their_own_row_and_cache_the_value() {
         fiat: "EUR".into(),
         country: String::new(),
         lang: Lang::En,
+        watermark: None,
+        privacy_mode: false,
         sections: vec![Section {
             id: "checks",
             title: "Checks".into(),

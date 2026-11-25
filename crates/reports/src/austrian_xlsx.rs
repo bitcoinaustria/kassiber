@@ -11,9 +11,17 @@ fn project(
 ) -> Result<(Value, Document)> {
     // The export transport holds admission through publication and completion.
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
-    require_context(conn, &profile, false)?;
+    let draft = draft_mode(args);
+    let reasons = require_context_admit(conn, &profile, false, draft)?;
     let model = austrian_pdf::model(conn, &workspace, &profile, args, sources)?;
-    let document = report_design::xlsx_document(&report_design::austrian(&model));
+    let mut design = report_design::austrian(&model);
+    if privacy_mode(args) {
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(&profile, "id"))?);
+    }
+    if draft {
+        design.apply_draft(&reasons);
+    }
+    let document = report_design::xlsx_document(&design);
     Ok((value(&model, "report").clone(), document))
 }
 
@@ -22,6 +30,7 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    let draft = draft_mode(args);
     let (report, document) = project(conn, args, sources)?;
     let bytes = kassiber_xlsx::render(&document)
         .map_err(|e| AppError::new("internal_error", e.to_string()))?;
@@ -54,7 +63,7 @@ pub(super) fn prepare(
                 Value::Int(list(value(&report, "summary_rows")).len().into()),
             ),
         ]),
-        completion: Some(export_completion::Completion {
+        completion: (!draft).then(|| export_completion::Completion {
             kind: "austrian-e1kv.xlsx".into(),
             year: Some(value(&report, "tax_year").clone()),
             end_year: None,

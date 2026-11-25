@@ -212,7 +212,11 @@ pub fn year_handoff(report: &Value) -> Document {
                 Cell::Text(if reconciled { "OK" } else { "DIFFERENCES" }.into()),
             )
         },
-        fact("quarantined", t("yh.quarantined"), Cell::Count(0)),
+        fact(
+            "quarantined",
+            t("yh.quarantined"),
+            Cell::Count(int(report, "quarantined_count")),
+        ),
     ];
     for (key, label, list_key) in [
         (
@@ -385,6 +389,8 @@ pub fn year_handoff(report: &Value) -> Document {
         fiat,
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

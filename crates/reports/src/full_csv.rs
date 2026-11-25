@@ -211,8 +211,20 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    let draft = draft_mode(args);
+    let reasons = if draft {
+        require_context_admit(conn, profile, false, true)?
+    } else {
+        Vec::new()
+    };
     let model = full_pdf::model(conn, workspace, profile, args, sources)?;
-    let design = report_design::full(&model);
+    let mut design = report_design::full(&model);
+    if privacy_mode(args) {
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(profile, "id"))?);
+    }
+    if draft {
+        design.apply_draft(&reasons);
+    }
     let tables: Vec<(&str, usize)> = design
         .sections
         .iter()
@@ -259,7 +271,7 @@ pub(super) fn prepare(
             ),
             ("rows", Value::Int(rows.into())),
         ]),
-        completion: Some(crate::export_completion::Completion {
+        completion: (!draft).then(|| crate::export_completion::Completion {
             kind: "full-report.csv".into(),
             year: None,
             end_year: None,
