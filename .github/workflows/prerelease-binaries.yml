@@ -1,7 +1,10 @@
 name: prerelease-binaries
 
 on:
+  # Pull requests run only on request: adding the `ci` label (see the note in
+  # ci.yml and docs/reference/testing.md#pull-request-ci).
   pull_request:
+    types: [labeled]
     paths:
       - ".github/workflows/prerelease-binaries.yml"
       - ".github/workflows/finalize-signed-release.yml"
@@ -80,7 +83,8 @@ env:
   HOMEBREW_FORMULA_PATH: Formula/kassiber-cli.rb
 
 concurrency:
-  group: prerelease-binaries-${{ github.ref }}
+  # Another label's run does nothing; it must not displace a requested run.
+  group: prerelease-binaries-${{ (github.event_name == 'pull_request' && github.event.label.name != 'ci' && format('other-label-{0}', github.run_id)) || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -88,7 +92,7 @@ jobs:
     name: Build ${{ matrix.label }} CLI
     # Stacked pull requests (based on another pull request's branch) skip the
     # package builds; they run once the layer targets main (ci.yml lane note).
-    if: github.event_name != 'pull_request' || github.base_ref == 'main'
+    if: github.event_name != 'pull_request' || (github.event.label.name == 'ci' && github.base_ref == 'main')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # The CLI and the desktop sidecar are the Rust `kassiber` binary (plan 21,
