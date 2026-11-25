@@ -408,9 +408,11 @@ label starts one run of `ci.yml`, `credential-platforms.yml`,
 filter) on the pull request's head at that moment. The run takes the label
 off again, so adding it once more requests the next run, for example after
 new commits: `gh pr edit <number> --add-label ci`. Request a run before
-merging; a pull request nobody labeled has no checks for its head. Other
-labels start runs whose jobs all skip. Pushes to `main` still run every
-workflow.
+merging; a pull request nobody labeled has no checks for its head. Another
+label starts a run whose jobs skip and whose `required` fails with "CI was
+not requested for this head" (a skipped `required` would read as passing),
+even on a head an earlier requested run passed; add `ci` again then. Pushes
+to `main` still run every workflow.
 
 The required PR workflow (`.github/workflows/ci.yml`) runs independent jobs
 that each fetch the locked test data first:

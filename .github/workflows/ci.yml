@@ -31,7 +31,9 @@ concurrency:
 # Pushes to main run every job. A pull request runs only when someone adds the
 # `ci` label: one run per label, on the head at that moment. The `ci-label` job
 # takes the label off again, so adding it once more requests the next run (for
-# example after new commits). Any other label starts a run whose jobs all skip.
+# example after new commits). Any other label starts a run whose jobs skip and
+# whose `required` fails ("not requested"): a skipped required job would count
+# as passing.
 #
 # A requested run on a pull request into another pull request's branch (a
 # stacked layer) is the fast lane: frontend, Rust crates, tooling and the Linux
@@ -459,7 +461,10 @@ jobs:
 
   required:
     name: required
-    if: always() && (github.event_name == 'push' || github.event.label.name == 'ci')
+    # Runs for every label, not only `ci`: a skipped required job would count as
+    # a passing check, so another label's run must fail it instead. A head that
+    # shows a failed `required` from such a run is untested; add `ci` for it.
+    if: always() && github.event_name != 'workflow_dispatch'
     needs:
       - frontend
       - tax-engine
@@ -470,6 +475,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Refuse a run nobody requested
+        if: github.event_name == 'pull_request' && github.event.label.name != 'ci'
+        run: |
+          echo "::error::CI was not requested for this head; add the ci label to run it."
+          exit 1
+
+
       - name: Record required-check results
         run: |
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
