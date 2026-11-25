@@ -1169,6 +1169,16 @@ fn pdf_and_audit_package_exports_run_under_their_own_kinds() {
             ]),
             "ui.reports.export_exit_tax_pdf",
         ),
+        (
+            dict([
+                ("report", s("wealth")),
+                ("format", s("pdf")),
+                ("as_of", s("2025-12-31")),
+                ("privacy_mode", Value::Bool(true)),
+                ("draft", Value::Bool(true)),
+            ]),
+            "ui.reports.export_wealth_pdf",
+        ),
     ] {
         let result = write(&mut fake, &mut state, "ui.reports.export", arguments, None);
         let envelope = get(&result, "envelope").unwrap_or_else(|| panic!("{result:?}"));
@@ -1198,13 +1208,22 @@ fn pdf_and_audit_package_exports_run_under_their_own_kinds() {
             "ui.reports.export_pdf:gui",
             "ui.reports.export_audit_package:gui",
             "ui.reports.export_exit_tax_pdf:gui",
+            "ui.reports.export_wealth_pdf:gui",
             "ui.source_funds.export_pdf:gui",
             "ui.source_funds.export_bundle:gui",
         ]
     );
     // The package receives its scope field; a case reference is stripped.
     assert_eq!(fake.written[2], dict([("transaction", s("a"))]));
-    assert_eq!(fake.written[4], dict([("case", s("c"))]));
+    assert_eq!(
+        fake.written[4],
+        dict([
+            ("as_of", s("2025-12-31")),
+            ("privacy_mode", Value::Bool(true)),
+            ("draft", Value::Bool(true)),
+        ])
+    );
+    assert_eq!(fake.written[5], dict([("case", s("c"))]));
 }
 
 #[test]

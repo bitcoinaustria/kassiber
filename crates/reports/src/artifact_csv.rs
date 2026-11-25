@@ -84,6 +84,12 @@ pub fn prepare(
         if command == "reports.export-summary-pdf" {
             return report_design::prepare_summary(conn, &args, sources);
         }
+        if command == "reports.export-capital-gains-csv" && draft_mode(&args) {
+            return Err(AppError::new(
+                "validation",
+                "Capital-gains CSV does not support draft exports; resolve blockers or export a draft PDF/XLSX/wealth statement instead.",
+            ));
+        }
         if draft_mode(&args) {
             require_context_admit(conn, &profile, false, true)?;
         } else {

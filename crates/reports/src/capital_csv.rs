@@ -77,7 +77,6 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
             "cost_basis",
             "gain_loss",
             "fiat_currency",
-            "description",
         ]
     } else {
         vec![
@@ -125,8 +124,10 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
                 amount(row, "cost_basis")?,
                 amount(row, "gain_loss")?,
                 fiat.clone(),
-                text(row, "description"),
             ]);
+            if !privacy {
+                cells.push(text(row, "description"));
+            }
             if austria {
                 cells.push(artifact_csv::cell(value(row, "at_category")));
                 cells.push(artifact_csv::cell(value(row, "at_kennzahl")));

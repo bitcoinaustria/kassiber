@@ -512,6 +512,11 @@ fn execute_admitted(
             "austrian_e1kv",
         ),
         "ui.reports.export_capital_gains_csv" => {
+            if draft {
+                return Err(validation(
+                    "Capital-gains CSV does not support draft exports; resolve blockers or export a draft PDF/XLSX/wealth statement instead.",
+                ));
+            }
             let year = value(raw, "year");
             let stem = if matches!(year, Value::Null) {
                 "kassiber-capital-gains".into()

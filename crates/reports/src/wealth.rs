@@ -497,6 +497,9 @@ pub fn report(
     }
 
     // Count quarantines dated strictly before `cutoff` (or undated).
+    // On any book with a shared/pooled basis (`global` or `global_then_wallet`),
+    // a quarantine in an unselected wallet still corrupts the shared pool, so
+    // check book-wide quarantines independently of the display wallet filter.
     let quarantine_rows = rows(
         conn,
         "SELECT jq.transaction_id, jq.reason, t.occurred_at, t.wallet_id \
@@ -505,19 +508,26 @@ pub fn report(
          WHERE jq.profile_id = ?",
         [&profile_id],
     )?;
-    let quarantines_before_cutoff: usize = quarantine_rows
+    let before_cutoff = |row: &&Value| {
+        let at = text(row, "occurred_at");
+        at.is_empty() || kassiber_rates::time::parse(&at).is_none_or(|ts| ts < cutoff)
+    };
+    let book_quarantines_before_cutoff: usize =
+        quarantine_rows.iter().filter(before_cutoff).count();
+    let scoped_quarantines_before_cutoff: usize = quarantine_rows
         .iter()
         .filter(|row| {
-            let in_wallet = wallet_filter
+            wallet_filter
                 .as_ref()
-                .is_none_or(|set| set.contains(&text(row, "wallet_id")));
-            if !in_wallet {
-                return false;
-            }
-            let at = text(row, "occurred_at");
-            at.is_empty() || kassiber_rates::time::parse(&at).is_none_or(|ts| ts < cutoff)
+                .is_none_or(|set| set.contains(&text(row, "wallet_id")))
+                && before_cutoff(row)
         })
         .count();
+    let quarantines_before_cutoff = if pool_scope == "wallet" {
+        scoped_quarantines_before_cutoff
+    } else {
+        book_quarantines_before_cutoff
+    };
     if quarantines_before_cutoff > 0 {
         draft_reasons.push(format!(
             "{quarantines_before_cutoff} quarantined transaction(s) fall on or before {as_of_day}."
@@ -531,8 +541,8 @@ pub fn report(
 
     // Can we trust journal-derived basis & Alt/Neu classification?
     // Quarantined transactions are absent from `journal_entries`, so any
-    // quarantine on or before cutoff forces observed-quantity fallback instead
-    // of silently dropping quarantined coins or guessing cost basis/regime.
+    // quarantine affecting the active pool on or before cutoff forces
+    // observed-quantity fallback instead of dropping coins or guessing basis.
     let journals_usable = journals_current
         && comp_blockers.is_empty()
         && qty_issues_before_cutoff.is_empty()
@@ -541,9 +551,13 @@ pub fn report(
     // Per-(wallet_id, asset) exact quantities (msat) and optional wallet-level basis.
     let mut wallet_qty: BTreeMap<(String, String), i128> = BTreeMap::new();
     let mut wallet_basis: BTreeMap<(String, String), Decimal> = BTreeMap::new();
-    // Assets with self-transfers before cutoff: raw `journal_entries` transfer
-    // legs carry no per-wallet basis carry-over, so wallet-level basis falls
-    // back to proportional allocation from the exact asset pool basis.
+    // Engine-persisted per-wallet holdings basis (transition- and transfer-aware
+    // whenever no journal entries exist at or after `cutoff` for an asset).
+    let mut stored_wallet_basis: BTreeMap<(String, String), Decimal> = BTreeMap::new();
+    let mut stored_wallet_assets: BTreeSet<String> = BTreeSet::new();
+    // Assets with entries at/after cutoff, pre-2025 entries, or self-transfers.
+    let mut asset_has_post_cutoff: BTreeSet<String> = BTreeSet::new();
+    let mut asset_has_pre_2025: BTreeSet<String> = BTreeSet::new();
     let mut asset_has_transfers: BTreeSet<String> = BTreeSet::new();
     // Global per-asset total quantity & basis across ALL wallets (needed for global pool avg cost).
     let mut global_asset_qty: BTreeMap<String, i128> = BTreeMap::new();
@@ -553,6 +567,27 @@ pub fn report(
     let mut regime_resolved = false;
 
     let data_source = if journals_usable {
+        if per_wallet_basis {
+            let wh_rows = rows(
+                conn,
+                "SELECT wallet_id, asset, cost_basis FROM journal_wallet_holdings WHERE profile_id = ?",
+                [&profile_id],
+            )?;
+            for row in &wh_rows {
+                let wid = text(row, "wallet_id");
+                let asset = text(row, "asset");
+                if wid.is_empty() || asset.is_empty() {
+                    continue;
+                }
+                if let Some(cb) = exit_tax::exact(row, "cost_basis")? {
+                    stored_wallet_assets.insert(asset.clone());
+                    let entry = stored_wallet_basis
+                        .entry((wid, asset))
+                        .or_insert_with(Decimal::zero);
+                    *entry = entry.add(&cb, &DECIMAL).map_err(arithmetic)?;
+                }
+            }
+        }
         let entries = rows(
             conn,
             "SELECT e.*, w.label AS wallet_label FROM journal_entries e \
@@ -566,12 +601,16 @@ pub fn report(
             let Some(instant) = kassiber_rates::time::parse(&at) else {
                 continue;
             };
-            if instant >= cutoff {
-                continue;
-            }
             let asset = text(row, "asset");
             if asset.is_empty() {
                 continue;
+            }
+            if instant >= cutoff {
+                asset_has_post_cutoff.insert(asset);
+                continue;
+            }
+            if at.as_str() < "2025-01-01T00:00:00Z" {
+                asset_has_pre_2025.insert(asset.clone());
             }
             let kind = text(row, "entry_type");
             let qty_msat = i128::from(int(row, "quantity"));
@@ -849,7 +888,37 @@ pub fn report(
                 continue;
             }
             total_qty_msat += qty_msat;
-            let wallet_basis_exact = pool_scope == "wallet" && !asset_has_transfers.contains(asset);
+            let exact_wallet_basis = |wid: &str, asset: &str| -> Option<Decimal> {
+                if !per_wallet_basis {
+                    return None;
+                }
+                if !asset_has_post_cutoff.contains(asset) && stored_wallet_assets.contains(asset) {
+                    return Some(
+                        stored_wallet_basis
+                            .get(&(wid.to_owned(), asset.to_owned()))
+                            .cloned()
+                            .unwrap_or_else(Decimal::zero)
+                            .max(Decimal::zero()),
+                    );
+                }
+                let entries_exact = (pool_scope == "wallet"
+                    && !asset_has_transfers.contains(asset))
+                    || (pool_scope == "global_then_wallet"
+                        && as_of_day.as_str() >= "2025-01-01"
+                        && !asset_has_pre_2025.contains(asset)
+                        && !asset_has_transfers.contains(asset));
+                if entries_exact {
+                    Some(
+                        wallet_basis
+                            .get(&(wid.to_owned(), asset.to_owned()))
+                            .cloned()
+                            .unwrap_or_else(Decimal::zero)
+                            .max(Decimal::zero()),
+                    )
+                } else {
+                    None
+                }
+            };
             let basis_opt = if !journals_usable {
                 None
             } else if wallet_filter.is_none() {
@@ -859,19 +928,20 @@ pub fn report(
                         .cloned()
                         .unwrap_or_else(Decimal::zero),
                 )
-            } else if wallet_basis_exact {
+            } else if let Some(exact_sum) = filtered_wallet_qty
+                .keys()
+                .filter(|(_, a)| a == asset)
+                .map(|(wid, a)| exact_wallet_basis(wid, a))
+                .collect::<Option<Vec<Decimal>>>()
+            {
                 let mut sum = Decimal::zero();
-                for (wid, a) in filtered_wallet_qty.keys() {
-                    if a == asset {
-                        if let Some(wb) = wallet_basis.get(&(wid.clone(), a.clone())) {
-                            sum = sum.add(wb, &DECIMAL).map_err(arithmetic)?;
-                        }
-                    }
+                for wb in exact_sum {
+                    sum = sum.add(&wb, &DECIMAL).map_err(arithmetic)?;
                 }
                 Some(sum)
             } else {
-                // Global pool (or wallet pool with self-transfers whose legs carry no
-                // per-wallet basis): allocate proportionally from total asset basis.
+                // Global pool (or historical mid-history cutoff with transfers / pre-2025
+                // transition carryover): allocate proportionally from total asset basis.
                 let gq = *global_asset_qty.get(asset).unwrap_or(&0);
                 let gb = global_asset_basis
                     .get(asset)
@@ -902,6 +972,37 @@ pub fn report(
     }
 
     // Build per-wallet (or grouped custody-class in privacy mode) holdings rows.
+    let exact_wallet_basis = |wid: &str, asset: &str| -> Option<Decimal> {
+        if !per_wallet_basis {
+            return None;
+        }
+        if !asset_has_post_cutoff.contains(asset) && stored_wallet_assets.contains(asset) {
+            return Some(
+                stored_wallet_basis
+                    .get(&(wid.to_owned(), asset.to_owned()))
+                    .cloned()
+                    .unwrap_or_else(Decimal::zero)
+                    .max(Decimal::zero()),
+            );
+        }
+        let entries_exact = (pool_scope == "wallet" && !asset_has_transfers.contains(asset))
+            || (pool_scope == "global_then_wallet"
+                && as_of_day.as_str() >= "2025-01-01"
+                && !asset_has_pre_2025.contains(asset)
+                && !asset_has_transfers.contains(asset));
+        if entries_exact {
+            Some(
+                wallet_basis
+                    .get(&(wid.to_owned(), asset.to_owned()))
+                    .cloned()
+                    .unwrap_or_else(Decimal::zero)
+                    .max(Decimal::zero()),
+            )
+        } else {
+            None
+        }
+    };
+    let mut any_wallet_basis_allocated = false;
     let mut wallet_holdings = Vec::new();
     if privacy {
         // Merge self-custody wallets together and platform wallets together so
@@ -926,17 +1027,12 @@ pub fn report(
             } else {
                 None
             };
-            let wallet_basis_exact = pool_scope == "wallet" && !asset_has_transfers.contains(asset);
             let (basis_opt, allocated) = if !include_valuation || !journals_usable {
                 (None, false)
-            } else if wallet_basis_exact {
-                let b = wallet_basis
-                    .get(&(wid.clone(), asset.clone()))
-                    .cloned()
-                    .unwrap_or_else(Decimal::zero)
-                    .max(Decimal::zero());
+            } else if let Some(b) = exact_wallet_basis(wid, asset) {
                 (Some(b), false)
             } else {
+                any_wallet_basis_allocated = true;
                 let gq = *global_asset_qty.get(asset).unwrap_or(&0);
                 let gb = global_asset_basis
                     .get(asset)
@@ -1019,17 +1115,12 @@ pub fn report(
             } else {
                 None
             };
-            let wallet_basis_exact = pool_scope == "wallet" && !asset_has_transfers.contains(asset);
             let (basis_opt, allocated) = if !include_valuation || !journals_usable {
                 (None, false)
-            } else if wallet_basis_exact {
-                let b = wallet_basis
-                    .get(&(wid.clone(), asset.clone()))
-                    .cloned()
-                    .unwrap_or_else(Decimal::zero)
-                    .max(Decimal::zero());
+            } else if let Some(b) = exact_wallet_basis(wid, asset) {
                 (Some(b), false)
             } else {
+                any_wallet_basis_allocated = true;
                 let gq = *global_asset_qty.get(asset).unwrap_or(&0);
                 let gb = global_asset_basis
                     .get(asset)
@@ -1113,7 +1204,10 @@ pub fn report(
         ("asOfTimezone", s(tz_label)),
         ("method", s(method)),
         ("costBasisPoolScope", s(pool_scope)),
-        ("perWalletBasis", Value::Bool(per_wallet_basis)),
+        (
+            "perWalletBasis",
+            Value::Bool(per_wallet_basis && !any_wallet_basis_allocated),
+        ),
         ("includeRegime", Value::Bool(include_regime && is_at)),
         ("regimeResolved", Value::Bool(regime_resolved)),
         ("includeValuation", Value::Bool(include_valuation)),

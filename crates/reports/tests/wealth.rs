@@ -804,4 +804,160 @@ fn privacy_mode_skips_full_xlsx_verification_and_redacts_capital_csv_and_platfor
         disp_csv.contains("Handelsplattform"),
         "exchange wallet must map to Handelsplattform in privacy_mode: {disp_csv}"
     );
+    // Descriptions (which can carry `Transfer <from> -> <to>` or raw row IDs) must be omitted.
+    assert!(
+        !cg_csv.contains("description"),
+        "capital_csv must omit description column in privacy_mode: {cg_csv}"
+    );
+    let tx_csv = std::fs::read_to_string(csv_dir.join("transactions.csv")).unwrap();
+    assert!(
+        !tx_csv.lines().next().unwrap_or("").contains("description"),
+        "transactions.csv must omit description column in privacy_mode: {tx_csv}"
+    );
+}
+
+#[test]
+fn wallet_filtered_global_pool_respects_book_wide_quarantines() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    // Add a quarantine in `w-hot` (Sparrow), then query wealth filtered to `w-cold` (Coldcard).
+    conn.execute_batch(
+        r#"
+        UPDATE profiles SET last_processed_tx_count = 4 WHERE id = 'prof-at';
+        INSERT INTO transactions(
+            id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at,
+            direction, asset, amount, fee, fiat_value, excluded, created_at
+        ) VALUES (
+            'tx-unselected-q', 'ws-1', 'prof-at', 'w-hot', 'fp-unselected-q',
+            '2025-05-01T12:00:00Z', 'inbound', 'BTC',
+            10000000000, 0, NULL, 0, '2025-05-01T12:00:00Z'
+        );
+        INSERT INTO journal_quarantines(
+            transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+        ) VALUES (
+            'tx-unselected-q', 'ws-1', 'prof-at', 'missing_price', '{}', '2026-02-01T10:00:00Z'
+        );
+        "#,
+    )
+    .unwrap();
+
+    let args = dict([
+        ("workspace", s("Privat")),
+        ("profile", s("Hauptbuch AT")),
+        ("as_of", s("2025-12-31")),
+        ("wallets", Value::List(vec![s("w-cold")])),
+    ]);
+    let report =
+        kassiber_reports::execute_with_sources(conn, "reports.wealth", &args, &Fixed).unwrap();
+    assert_eq!(field(&report, "isDraft"), &Value::Bool(true));
+    assert_eq!(py_str(field(&report, "status")), "draft");
+    assert_eq!(py_str(field(&report, "dataSource")), "observed");
+    assert_eq!(
+        field(field(&report, "totals"), "costBasis"),
+        &Value::Null,
+        "pooled basis must be withheld when an unselected wallet has a quarantine before cutoff"
+    );
+}
+
+#[test]
+fn capital_gains_csv_refuses_draft_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    conn.execute_batch(
+        r#"
+        INSERT OR REPLACE INTO settings(key, value) VALUES
+            ('context_workspace', 'ws-1'),
+            ('context_profile', 'prof-at'),
+            ('database_instance_id', '0123456789abcdef0123456789abcdef');
+        "#,
+    )
+    .unwrap();
+    let err = kassiber_reports::export_request::execute(
+        conn,
+        "ui.reports.export_capital_gains_csv",
+        &dict([
+            ("year", Value::Int(2025.into())),
+            ("draft", Value::Bool(true)),
+        ]),
+        dir.path(),
+        &Fixed,
+    )
+    .unwrap_err();
+    assert_eq!(err.code, "validation");
+}
+
+#[test]
+fn us_global_then_wallet_post_2025_reports_exact_wallet_basis() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    conn.execute_batch(
+        r#"
+        INSERT INTO workspaces(id, label, created_at) VALUES ('ws-us', 'US', '2025-01-01T00:00:00Z');
+        INSERT INTO profiles(
+            id, workspace_id, label, fiat_currency, tax_country,
+            gains_algorithm, cost_basis_pool_scope,
+            last_processed_at, last_processed_tx_count,
+            journal_input_version, last_processed_input_version,
+            created_at
+        ) VALUES (
+            'prof-us', 'ws-us', 'US Main', 'USD', 'us',
+            'fifo', 'global_then_wallet',
+            '2026-01-05T10:00:00Z', 2,
+            2, 2,
+            '2025-01-01T00:00:00Z'
+        );
+        INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+        VALUES
+            ('w-1', 'ws-us', 'prof-us', 'Wallet 1', 'descriptor', '{"chain":"bitcoin","network":"mainnet"}', '2025-01-01T00:00:00Z'),
+            ('w-2', 'ws-us', 'prof-us', 'Wallet 2', 'descriptor', '{"chain":"bitcoin","network":"mainnet"}', '2025-01-01T00:00:00Z');
+        INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at, direction, asset, amount, fee, fiat_value, excluded, created_at)
+        VALUES
+            ('t1', 'ws-us', 'prof-us', 'w-1', 'fp-us-1', '2025-03-01T10:00:00Z', 'inbound', 'BTC', 100000000000, 0, 10000.0, 0, '2025-03-01T10:00:00Z'),
+            ('t2', 'ws-us', 'prof-us', 'w-2', 'fp-us-2', '2025-04-01T10:00:00Z', 'inbound', 'BTC', 100000000000, 0, 90000.0, 0, '2025-04-01T10:00:00Z');
+        INSERT INTO journal_entries(id, workspace_id, profile_id, wallet_id, transaction_id, occurred_at, entry_type, asset, quantity, fiat_value, cost_basis, created_at)
+        VALUES
+            ('j1', 'ws-us', 'prof-us', 'w-1', 't1', '2025-03-01T10:00:00Z', 'acquisition', 'BTC', 100000000000, 10000.0, 10000.0, '2026-01-05T10:00:00Z'),
+            ('j2', 'ws-us', 'prof-us', 'w-2', 't2', '2025-04-01T10:00:00Z', 'acquisition', 'BTC', 100000000000, 90000.0, 90000.0, '2026-01-05T10:00:00Z');
+        INSERT INTO rates_cache(pair, timestamp, rate, rate_exact, source, fetched_at)
+        VALUES ('BTC-USD', '2025-12-31T23:55:00Z', 80000.0, '80000', 'kraken_csv', '2026-01-01T00:00:00Z');
+        "#,
+    )
+    .unwrap();
+
+    let all_args = dict([
+        ("workspace", s("US")),
+        ("profile", s("US Main")),
+        ("as_of", s("2025-12-31")),
+    ]);
+    let all =
+        kassiber_reports::execute_with_sources(conn, "reports.wealth", &all_args, &Fixed).unwrap();
+    assert_eq!(field(&all, "perWalletBasis"), &Value::Bool(true));
+    let wallets = list(field(&all, "walletHoldings"));
+    assert_eq!(wallets.len(), 2);
+    assert!((num(field(&wallets[0], "costBasis")) - 10000.0).abs() < 1e-6);
+    assert_eq!(
+        field(&wallets[0], "costBasisAllocated"),
+        &Value::Bool(false)
+    );
+    assert!((num(field(&wallets[1], "costBasis")) - 90000.0).abs() < 1e-6);
+    assert_eq!(
+        field(&wallets[1], "costBasisAllocated"),
+        &Value::Bool(false)
+    );
+
+    // Filtering to Wallet 1 must report $10,000, not $50,000 pro-rata.
+    let one_args = dict([
+        ("workspace", s("US")),
+        ("profile", s("US Main")),
+        ("as_of", s("2025-12-31")),
+        ("wallets", Value::List(vec![s("Wallet 1")])),
+    ]);
+    let one =
+        kassiber_reports::execute_with_sources(conn, "reports.wealth", &one_args, &Fixed).unwrap();
+    assert!((num(field(field(&one, "totals"), "costBasis")) - 10000.0).abs() < 1e-6);
 }

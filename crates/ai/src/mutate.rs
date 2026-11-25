@@ -259,7 +259,7 @@ pub fn report_export_target(arguments: &Value) -> Result<(&'static str, Value), 
             "ui.reports.export requires report and format",
         ));
     };
-    let mapping: [(&str, &str, &'static str); 11] = [
+    let mapping: [(&str, &str, &'static str); 14] = [
         ("full", "pdf", "ui.reports.export_pdf"),
         ("full", "xlsx", "ui.reports.export_xlsx"),
         ("full", "csv", "ui.reports.export_csv"),
@@ -286,6 +286,9 @@ pub fn report_export_target(arguments: &Value) -> Result<(&'static str, Value), 
         ),
         ("exit_tax", "pdf", "ui.reports.export_exit_tax_pdf"),
         ("exit_tax", "xlsx", "ui.reports.export_exit_tax_xlsx"),
+        ("wealth", "pdf", "ui.reports.export_wealth_pdf"),
+        ("wealth", "xlsx", "ui.reports.export_wealth_xlsx"),
+        ("wealth", "csv", "ui.reports.export_wealth_csv"),
         (
             "audit_package",
             "package",
@@ -311,17 +314,29 @@ pub fn report_export_target(arguments: &Value) -> Result<(&'static str, Value), 
         ])));
     };
     let allowed: &[&str] = match kind {
-        "ui.reports.export_pdf" | "ui.reports.export_csv" => &["wallet"],
+        "ui.reports.export_pdf" | "ui.reports.export_csv" => &["wallet", "draft", "privacy_mode"],
         // The book's tax year, resolved by the core like the Reports page's.
-        "ui.reports.export_summary_pdf" => &["wallet", "year"],
-        "ui.reports.export_xlsx" => &["wallet", "verify"],
-        "ui.reports.export_capital_gains_csv"
-        | "ui.reports.export_austrian_e1kv_pdf"
+        "ui.reports.export_summary_pdf" => &["wallet", "year", "draft", "privacy_mode"],
+        "ui.reports.export_xlsx" => &["wallet", "verify", "draft", "privacy_mode"],
+        "ui.reports.export_capital_gains_csv" => &["year", "privacy_mode"],
+        "ui.reports.export_austrian_e1kv_pdf"
         | "ui.reports.export_austrian_e1kv_xlsx"
-        | "ui.reports.export_austrian_e1kv_csv" => &["year"],
+        | "ui.reports.export_austrian_e1kv_csv" => &["year", "draft", "privacy_mode"],
         "ui.reports.export_exit_tax_pdf" | "ui.reports.export_exit_tax_xlsx" => {
-            &["departure_date", "destination"]
+            &["departure_date", "destination", "draft", "privacy_mode"]
         }
+        "ui.reports.export_wealth_pdf"
+        | "ui.reports.export_wealth_xlsx"
+        | "ui.reports.export_wealth_csv" => &[
+            "as_of",
+            "wallet",
+            "wallets",
+            "include_regime",
+            "include_valuation",
+            "include_wallets",
+            "privacy_mode",
+            "draft",
+        ],
         _ => &["transaction", "transactions", "source_funds_case"],
     };
     let mut forwarded: Vec<(Key, Value)> = match arguments {
@@ -332,13 +347,23 @@ pub fn report_export_target(arguments: &Value) -> Result<(&'static str, Value), 
             .collect(),
         _ => Vec::new(),
     };
-    if kind == "ui.reports.export_summary_pdf" {
+    if matches!(
+        kind,
+        "ui.reports.export_summary_pdf"
+            | "ui.reports.export_wealth_pdf"
+            | "ui.reports.export_wealth_xlsx"
+            | "ui.reports.export_wealth_csv"
+    ) {
         if let Some(index) = forwarded
             .iter()
             .position(|(key, _)| *key == Key::from("wallet"))
         {
             let (_, wallet) = forwarded.remove(index);
-            if matches!(wallet, Value::Str(_)) {
+            if matches!(wallet, Value::Str(_))
+                && !forwarded
+                    .iter()
+                    .any(|(key, _)| *key == Key::from("wallets"))
+            {
                 forwarded.push((
                     Key::from("wallets"),
                     Value::List(vec![get(arguments, "wallet")

@@ -167,7 +167,28 @@ fn selection_matches_python() {
 fn catalog_validation_matches_python() {
     for case in section("validation") {
         let tool = get_tool(text(field(case, "tool"))).unwrap();
-        let have = outcome(validate_arguments(tool, field(case, "arguments")));
+        let mut have = outcome(validate_arguments(tool, field(case, "arguments")));
+        // `wealth` is a Rust-only report kind added after the frozen Python vector.
+        if tool.name == "ui.reports.export" {
+            if let Value::Dict(ref mut top) = have {
+                if let Some((_, Value::Dict(err))) = top
+                    .iter_mut()
+                    .find(|(k, _)| *k == kassiber_pyjson::Key::from("error"))
+                {
+                    if let Some((_, Value::Dict(details))) = err
+                        .iter_mut()
+                        .find(|(k, _)| *k == kassiber_pyjson::Key::from("details"))
+                    {
+                        if let Some((_, Value::List(allowed))) = details
+                            .iter_mut()
+                            .find(|(k, _)| *k == kassiber_pyjson::Key::from("allowed"))
+                        {
+                            allowed.retain(|v| *v != s("wealth"));
+                        }
+                    }
+                }
+            }
+        }
         assert_eq!(&have, field(case, "result"), "{case:?}");
     }
 }
