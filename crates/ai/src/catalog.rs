@@ -149,7 +149,6 @@ pub const RUST_ONLY_TOOLS: &[&str] = &[
     "ui.source_funds.bank_lines.suggest",
     "ui.source_funds.bank_lines.accept",
     "ui.source_funds.bank_lines.reject",
-    "ui.reports.wealth_preview",
 ];
 
 pub fn tools() -> &'static [ToolEntry] {

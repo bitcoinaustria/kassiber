@@ -96,9 +96,10 @@ fn add_opt(a: Option<Decimal>, b: Option<&Decimal>) -> Result<Option<Decimal>> {
 pub(crate) fn custody_class(kind: &str) -> &'static str {
     match kind.trim().to_ascii_lowercase().as_str() {
         "exchange" | "exchange_api" | "exchange_csv" | "broker" | "custodial" | "platform"
-        | "kraken" | "coinbase" | "bitpanda" | "binance" | "bitstamp" | "bitvavo" | "relai"
-        | "pocket" | "21bitcoin" | "coinfinity" => "platform",
-        "lightning" | "lnd" | "cln" | "phoenix" | "zeus" | "alby" | "breez" => {
+        | "kraken" | "coinbase" | "bitpanda" | "binance" | "bitstamp" | "bitvavo" | "bitfinex"
+        | "bitcoinde" | "strike" | "river" | "bullbitcoin" | "relai" | "pocket"
+        | "pocketbitcoin" | "21bitcoin" | "coinfinity" => "platform",
+        "lightning" | "lnd" | "cln" | "coreln" | "nwc" | "phoenix" | "zeus" | "alby" | "breez" => {
             "self_custody_lightning"
         }
         "liquid" | "elements" => "self_custody_liquid",

@@ -961,3 +961,56 @@ fn us_global_then_wallet_post_2025_reports_exact_wallet_basis() {
         kassiber_reports::execute_with_sources(conn, "reports.wealth", &one_args, &Fixed).unwrap();
     assert!((num(field(field(&one, "totals"), "costBasis")) - 10000.0).abs() < 1e-6);
 }
+
+#[test]
+fn custodial_exchange_kinds_classify_as_platform() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    conn.execute_batch(
+        r#"
+        UPDATE profiles SET last_processed_tx_count = 6 WHERE id = 'prof-at';
+        INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+        VALUES
+            ('w-strike', 'ws-1', 'prof-at', 'Strike App', 'strike', '{"chain":"bitcoin","network":"mainnet"}', '2024-01-01T00:00:00Z'),
+            ('w-bitfinex', 'ws-1', 'prof-at', 'Bitfinex Main', 'bitfinex', '{"chain":"bitcoin","network":"mainnet"}', '2024-01-01T00:00:00Z'),
+            ('w-bitcoinde', 'ws-1', 'prof-at', 'Bitcoin.de', 'bitcoinde', '{"chain":"bitcoin","network":"mainnet"}', '2024-01-01T00:00:00Z');
+        INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at, direction, asset, amount, fee, fiat_value, excluded, created_at)
+        VALUES
+            ('t-st', 'ws-1', 'prof-at', 'w-strike', 'fp-st', '2025-01-10T10:00:00Z', 'inbound', 'BTC', 10000000000, 0, 8000.0, 0, '2025-01-10T10:00:00Z'),
+            ('t-bf', 'ws-1', 'prof-at', 'w-bitfinex', 'fp-bf', '2025-01-11T10:00:00Z', 'inbound', 'BTC', 10000000000, 0, 8000.0, 0, '2025-01-11T10:00:00Z'),
+            ('t-bd', 'ws-1', 'prof-at', 'w-bitcoinde', 'fp-bd', '2025-01-12T10:00:00Z', 'inbound', 'BTC', 10000000000, 0, 8000.0, 0, '2025-01-12T10:00:00Z');
+        INSERT INTO journal_entries(id, workspace_id, profile_id, wallet_id, transaction_id, occurred_at, entry_type, asset, quantity, fiat_value, cost_basis, created_at)
+        VALUES
+            ('j-st', 'ws-1', 'prof-at', 'w-strike', 't-st', '2025-01-10T10:00:00Z', 'acquisition', 'BTC', 10000000000, 8000.0, 8000.0, '2026-02-01T10:00:00Z'),
+            ('j-bf', 'ws-1', 'prof-at', 'w-bitfinex', 't-bf', '2025-01-11T10:00:00Z', 'acquisition', 'BTC', 10000000000, 8000.0, 8000.0, '2026-02-01T10:00:00Z'),
+            ('j-bd', 'ws-1', 'prof-at', 'w-bitcoinde', 't-bd', '2025-01-12T10:00:00Z', 'acquisition', 'BTC', 10000000000, 8000.0, 8000.0, '2026-02-01T10:00:00Z');
+        "#,
+    )
+    .unwrap();
+
+    let report = kassiber_reports::execute_with_sources(
+        conn,
+        "reports.wealth",
+        &dict([
+            ("workspace", s("Privat")),
+            ("profile", s("Hauptbuch AT")),
+            ("as_of", s("2025-12-31")),
+            ("privacy_mode", Value::Bool(true)),
+        ]),
+        &Fixed,
+    )
+    .unwrap();
+    let holdings = list(field(&report, "walletHoldings"));
+    assert_eq!(
+        holdings.len(),
+        2,
+        "must split into platform and self_custody: {holdings:?}"
+    );
+    let platform = holdings
+        .iter()
+        .find(|row| py_str(field(row, "custodyClass")) == "platform")
+        .expect("platform row");
+    assert_eq!(py_str(field(platform, "quantityMsat")), "30000000000");
+}

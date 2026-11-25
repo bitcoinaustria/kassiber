@@ -86,13 +86,14 @@ const RUST_ONLY_TOOLS: &[&str] = &[
     "ui.journals.verify",
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
+    "ui.reports.wealth_preview",
 ];
 
-/// The source coverage tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots)
-/// and their capabilities, checked here since Python's vectors lack them.
-const RUST_ONLY: [(&str, &[&str]); 2] = [
+/// Rust-only tools and their capabilities, checked here since Python's vectors lack them.
+const RUST_ONLY: [(&str, &[&str]); 3] = [
     ("ui.sources.coverage", &["operations", "wallets"]),
     ("ui.sources.attest_coverage", &["operations", "wallets"]),
+    ("ui.reports.wealth_preview", &["reports"]),
 ];
 
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
