@@ -299,6 +299,68 @@ pub fn wallet_utxos_for_ai(payload: Value) -> Value {
     payload
 }
 
+/// Checkpoint fields the assistant never sees: where a figure was imported
+/// from (a file name or backend name) and which managed file holds it.
+const CHECKPOINT_PRIVATE_FIELDS: [&str; 2] = ["origin_ref", "attachment_id"];
+
+/// One checkpoint (an add's or remove's result) without the fields the
+/// list hides, so a write never shows more than the read.
+pub fn checkpoint_entry_for_ai(payload: Value) -> Value {
+    match payload {
+        Value::Dict(fields) => Value::Dict(
+            fields
+                .into_iter()
+                .filter(|(key, _)| !matches!(key, Key::Str(name) if CHECKPOINT_PRIVATE_FIELDS.iter().any(|f| name.is(f))))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+/// `ui.wallets.checkpoints.list` for the assistant: every checkpoint with its
+/// comparison, without import references or attachment ids
+/// (docs/reference/balance-checkpoints.md).
+pub fn checkpoints_for_ai(payload: Value) -> Value {
+    let project = |rows: Option<&Value>| {
+        match rows {
+        Some(Value::List(rows)) => Value::List(
+            rows.iter()
+                .filter_map(|row| match row {
+                    Value::Dict(fields) => Some(Value::Dict(
+                        fields
+                            .iter()
+                            .filter(|(key, _)| !matches!(key, Key::Str(name) if CHECKPOINT_PRIVATE_FIELDS.iter().any(|f| name.is(f))))
+                            .cloned()
+                            .collect(),
+                    )),
+                    _ => None,
+                })
+                .collect(),
+        ),
+        _ => Value::List(vec![]),
+    }
+    };
+    let mut payload = payload;
+    let checkpoints = project(get(&payload, "checkpoints"));
+    set(&mut payload, "checkpoints", checkpoints);
+    let wallets = match get(&payload, "wallets") {
+        Some(Value::List(wallets)) => Value::List(
+            wallets
+                .iter()
+                .map(|wallet| {
+                    let mut wallet = wallet.clone();
+                    let latest = project(get(&wallet, "latest"));
+                    set(&mut wallet, "latest", latest);
+                    wallet
+                })
+                .collect(),
+        ),
+        _ => Value::List(vec![]),
+    };
+    set(&mut payload, "wallets", wallets);
+    payload
+}
+
 /// `core_ownership.redact_result_for_ai(item)`: the ownership verdict, without
 /// scripts, derivation paths or address indexes.
 pub fn identify_result_for_ai(item: &Value) -> Value {
@@ -861,6 +923,7 @@ pub fn read_for_ai(
             Ok(node_snapshot_for_ai(&book.read(kind, arguments, "gui")?))
         }
         "ui.wallets.utxos" => Ok(wallet_utxos_for_ai(book.read(kind, arguments, "gui")?)),
+        "ui.wallets.checkpoints.list" => Ok(checkpoints_for_ai(book.read(kind, arguments, "gui")?)),
         "ui.transactions.history" => {
             refuse_unknown(arguments, &HISTORY_FIELDS, "ui.transactions.history")?;
             if !has_text(arguments, "transaction") {

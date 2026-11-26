@@ -110,9 +110,12 @@ const EGRESS_WITHOUT_FLAG: [&str; 6] = [
 /// `MUTATING_TOOL_HINTS`: `(destructiveHint, idempotentHint)` for every
 /// mutating tool MCP exposes. A mutating tool missing here is not exposed
 /// until a reviewer classifies it.
-pub const MUTATING_TOOL_HINTS: [(&str, bool, bool); 62] = [
+pub const MUTATING_TOOL_HINTS: [(&str, bool, bool); 64] = [
     // Rust only: a coverage statement, set or cleared, replaces the last one.
     ("ui.sources.attest_coverage", false, true),
+    // Rust only (docs/reference/balance-checkpoints.md); removing deletes.
+    ("ui.wallets.checkpoints.add", false, false),
+    ("ui.wallets.checkpoints.remove", true, true),
     ("ui.wallets.sync", false, true),
     ("ui.journals.process", false, true),
     ("ui.maintenance.configure", false, true),

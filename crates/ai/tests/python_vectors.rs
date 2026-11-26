@@ -87,13 +87,19 @@ const RUST_ONLY_TOOLS: &[&str] = &[
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
     "ui.reports.wealth_preview",
+    "ui.wallets.checkpoints.add",
+    "ui.wallets.checkpoints.list",
+    "ui.wallets.checkpoints.remove",
 ];
 
 /// Rust-only tools and their capabilities, checked here since Python's vectors lack them.
-const RUST_ONLY: [(&str, &[&str]); 3] = [
+const RUST_ONLY: [(&str, &[&str]); 6] = [
     ("ui.sources.coverage", &["operations", "wallets"]),
     ("ui.sources.attest_coverage", &["operations", "wallets"]),
     ("ui.reports.wealth_preview", &["reports"]),
+    ("ui.wallets.checkpoints.add", &["operations", "wallets"]),
+    ("ui.wallets.checkpoints.list", &["operations", "wallets"]),
+    ("ui.wallets.checkpoints.remove", &["operations", "wallets"]),
 ];
 
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {

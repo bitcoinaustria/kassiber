@@ -48,6 +48,7 @@ const JOURNAL_CHECK: &str = "ui.journals.verify";
 fn rust_only(entry: &str) -> bool {
     entry == JOURNAL_CHECK
         || RUST_ONLY.iter().any(|(name, _)| *name == entry)
+        || CHECKPOINT_TOOLS.iter().any(|(name, ..)| *name == entry)
         || bank_statement_tool(entry)
 }
 
@@ -69,6 +70,32 @@ fn rust_only_tools_are_exposed_at_their_grant() {
         assert_eq!(tool.required.as_str(), required, "{entry}");
         assert!(
             !tool.egress && !tool.destructive && tool.idempotent,
+            "{entry}"
+        );
+    }
+}
+
+/// The balance checkpoint tools (docs/reference/balance-checkpoints.md), Rust
+/// only: `(entry, grant, destructive, idempotent)`. The read is listed at every
+/// grant, the consented writes from operator up.
+const CHECKPOINT_TOOLS: [(&str, &str, bool, bool); 3] = [
+    ("ui.wallets.checkpoints.list", "read", false, true),
+    ("ui.wallets.checkpoints.add", "operator", false, false),
+    ("ui.wallets.checkpoints.remove", "operator", true, true),
+];
+
+#[test]
+fn balance_checkpoint_tools_are_exposed_at_their_grant() {
+    for (entry, required, destructive, idempotent) in CHECKPOINT_TOOLS {
+        let tool = mcp_tools()
+            .iter()
+            .find(|tool| tool.entry.name == entry)
+            .unwrap_or_else(|| panic!("{entry} not exposed"));
+        assert_eq!(tool.required.as_str(), required, "{entry}");
+        assert!(!tool.egress, "{entry}");
+        assert_eq!(
+            (tool.destructive, tool.idempotent),
+            (destructive, idempotent),
             "{entry}"
         );
     }
