@@ -245,6 +245,18 @@ pub fn execute_recording(
         kassiber_envelope::set(&mut result, "swap_pairs", Py::from(pairs.unwrap_or(0)));
         Ok(result)
     })
+    // The provider's balance this sync already read becomes an `api` balance
+    // checkpoint in the same write, so a refused publication stores neither.
+    .map(|mut result| {
+        let source = format!("{kind}:api:{}", lossy(&name));
+        let stored = balance
+            .as_ref()
+            .and_then(|balance| balance_checkpoint(conn, profile, &wallet.id, balance, source));
+        if let Some(id) = stored {
+            kassiber_envelope::set(&mut result, "balance_checkpoint_id", s(id));
+        }
+        result
+    })
     .and_then(|result| client.authorize().map(|()| result));
     match &result {
         Ok(_) => conn.execute_batch("RELEASE exchange_api_import"),
@@ -543,6 +555,36 @@ fn provider_balance(
         ("book_msat", Py::from(book)),
         ("difference_msat", Py::from(book as i128 - provider as i128)),
     ]))
+}
+
+/// Stores the provider's known BTC balance as an `api` balance checkpoint
+/// (docs/reference/balance-checkpoints.md) of the synced wallet and returns
+/// its id; an identical checkpoint already stored is reused. A balance is a
+/// diagnostic: an unknown figure stores nothing, and a checkpoint that cannot
+/// be stored is rolled back alone and never fails the sync.
+fn balance_checkpoint(
+    conn: &Connection,
+    profile: &str,
+    wallet: &str,
+    balance: &contract::Balance,
+    source: String,
+) -> Option<String> {
+    let msat = *balance.msat.as_ref().ok()?;
+    let lock = kassiber_store::WriteLock::begin(conn, "exchange_balance_checkpoint").ok()?;
+    let new = crate::checkpoints::New {
+        wallet_id: wallet.to_owned(),
+        asset: "BTC".to_owned(),
+        as_of: balance.as_of.clone(),
+        amount_msat: msat,
+        origin: "api",
+        scope: Some(balance.scope.to_owned()),
+        origin_ref: Some(source),
+        attachment_id: None,
+        note: None,
+    };
+    let (id, _) = crate::checkpoints::record(&lock, profile, &new).ok()?;
+    lock.commit().ok()?;
+    Some(id)
 }
 
 /// The backend's name and its exchange kind, which must be `expected` when

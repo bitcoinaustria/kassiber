@@ -129,6 +129,13 @@ In both scopes the envelope gains `assets` (`scope`, `skipped` and `excluded`
 by ticker, and `next_step`) and `swap_pairs`. A Kraken sync sets `skipped` to
 `{"fiat_only_entries", "other_asset_entries", "internal_moves"}` counts.
 
+Binance, Bitvavo, Bitstamp and Bitfinex read their BTC balance last (the
+table above); Bitpanda and Bitcoin.de derive it from the history they read.
+The [contract](exchange-contract.md#balances) reports it as
+`provider_balance`/`reported_balance` and stores a known figure as an `api`
+[balance checkpoint](balance-checkpoints.md#exchange-syncs) with the rows,
+without another request. Kraken and Coinbase read no balance.
+
 ## Stored rows
 
 Each exchange record is a Python import dict: `txid`, `occurred_at`,

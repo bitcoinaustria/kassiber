@@ -49,7 +49,8 @@ hex HMAC-SHA384 of `/api/` + path + nonce + body), re-signed on every retry:
    `protocol_error`.
 3. `/v2/auth/r/wallets`: `reported_balance`, scope
    `exchange_and_funding_wallets` (the BTC `BALANCE` of both, orders'
-   reserved and lent-out BTC included; the margin wallet is not counted).
+   reserved and lent-out BTC included; the margin wallet is not counted). The sync stores it
+   as an `api` [balance checkpoint](balance-checkpoints.md#exchange-syncs).
 
 JSON numbers are kept as written and must be whole msat, never read as
 floats. Error arrays (`["error", code, message]`) keep only the status and

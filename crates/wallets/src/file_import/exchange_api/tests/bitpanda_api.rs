@@ -582,7 +582,16 @@ fn edited(id: &str, edit: impl Fn(&mut J)) -> Script {
 fn provider_balance(script: Script) -> String {
     let (_, run) = sync(script);
     let result = run.result.unwrap();
-    kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap()
+    let card =
+        kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap();
+    // Only a known balance becomes a checkpoint; an unknown one stores none.
+    let stored = count(
+        &run.conn,
+        "SELECT count(*) FROM balance_checkpoints WHERE origin='api'",
+    );
+    let known = at(at(&result, "provider_balance"), "status") != &s("unavailable");
+    assert_eq!(stored, i64::from(known), "{card}");
+    card
 }
 
 #[test]

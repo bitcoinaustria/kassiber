@@ -69,7 +69,11 @@ An exchange that states its own BTC balance returns it from `fetch` as a
 The envelope then carries `provider_balance` (the figure against the wallet's
 book balance after the import: `matches`, `mismatch` or `unavailable`) and,
 when the figure is known, `reported_balance` (`{asset, amount_msat, as_of,
-scope}`). A mismatch is reported, never corrected.
+scope}`). A mismatch is reported, never corrected. A known figure is also
+stored as an `api` [balance checkpoint](balance-checkpoints.md#exchange-syncs)
+in the same write as the rows (the envelope adds `balance_checkpoint_id`); an
+unknown one stores nothing, and a checkpoint that cannot be stored never fails
+the sync.
 
 ## File exports
 

@@ -545,3 +545,75 @@ fn bitstamp_crypto_scope_refuses_what_it_cannot_place() {
         assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
     }
 }
+
+type Checkpoint = (String, String, String, i64, String, String, Option<String>);
+fn checkpoints(conn: &Connection) -> Vec<Checkpoint> {
+    let sql = "SELECT id, asset, as_of, amount_msat, origin, scope, origin_ref FROM balance_checkpoints ORDER BY created_at, id";
+    let mut statement = conn.prepare(sql).unwrap();
+    let read = |r: &kassiber_store::rusqlite::Row<'_>| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?));
+    statement.query_map([], read).unwrap().collect::<Result<_, _>>().unwrap()
+}
+
+/// The balance the sync already read is stored as an `api` checkpoint of the
+/// synced wallet, with no request of its own; the card output is unchanged.
+#[test]
+fn bitstamp_sync_stores_its_reported_balance_as_a_checkpoint() {
+    let (fake, _) = serve_script(Script::new());
+    let conn = book();
+    let result = sync_into(&conn, &fake);
+    assert_eq!(targets(&fake).len(), 3);
+    let stored = checkpoints(&conn);
+    assert_eq!(stored.len(), 1, "{stored:?}");
+    let (id, asset, as_of, msat, origin, scope, source) = &stored[0];
+    assert_eq!(at(&result, "balance_checkpoint_id"), &s(id.as_str()));
+    assert_eq!((asset.as_str(), *msat, origin.as_str(), scope.as_str()), ("BTC", 851_000_000, "api", "account_available_plus_reserved"));
+    assert_eq!(source.as_deref(), Some("bitstamp:api:fixture"));
+    assert_eq!(at(at(&result, "reported_balance"), "as_of"), &s(as_of.as_str()));
+    let wallet: String = conn.query_row("SELECT wallet_id FROM balance_checkpoints", [], |r| r.get(0)).unwrap();
+    assert_eq!(count(&conn, &format!("SELECT count(*) FROM wallets WHERE id='{wallet}' AND kind='bitstamp'")), 1);
+    let card = kassiber_pyjson::dumps(at(&result, "provider_balance"), &Default::default()).unwrap();
+    assert_eq!(card, r#"{"status": "mismatch", "asset": "BTC", "provider_msat": 851000000, "book_msat": 941000000, "difference_msat": 90000000}"#);
+}
+
+/// A checkpoint that cannot be stored is rolled back alone: the history is
+/// imported and the card still compares the balance.
+#[test]
+fn a_balance_checkpoint_that_cannot_be_stored_never_fails_the_sync() {
+    let (fake, _) = serve_script(Script::new());
+    let conn = book();
+    conn.execute_batch("CREATE TEMP TRIGGER refuse_checkpoint BEFORE INSERT ON balance_checkpoints BEGIN SELECT RAISE(ABORT, 'refused'); END;").unwrap();
+    let result = sync_into(&conn, &fake);
+    assert_eq!(at(&result, "imported"), &Py::from(8));
+    assert_eq!(at(&result, "balance_checkpoint_id"), &Py::Null);
+    assert_eq!(at(at(&result, "provider_balance"), "status"), &s("mismatch"));
+    assert_eq!(rows(&conn), expected());
+    assert!(checkpoints(&conn).is_empty());
+    assert!(conn.is_autocommit(), "the sync's write is closed");
+}
+
+/// A sync that fails, or is refused before publication, stores no checkpoint.
+#[test]
+fn a_failed_or_unpublished_sync_stores_no_checkpoint() {
+    let mut script = Script::new();
+    script.faults = vec![(2, 200, r#"{"currency": "btc", "total": "1", "available": "0", "reserved": "0"}"#.into())];
+    let (_, run) = sync(script);
+    assert_eq!(run.result.unwrap_err().code, "protocol_error");
+    assert!(checkpoints(&run.conn).is_empty());
+
+    use kassiber_store::rusqlite::functions::FunctionFlags;
+    let fake = serve_script(Script::new()).0;
+    let offline = online();
+    let flag = offline.clone();
+    let run = loopback::run_prepared(&backend("bitstamp", &fake.url), "bitstamp", "", true, offline, &move |conn| {
+        let flag = flag.clone();
+        conn.create_scalar_function("go_offline", 0, FunctionFlags::SQLITE_UTF8, move |_| {
+            flag.store(true, Ordering::SeqCst);
+            Ok(0)
+        })
+        .unwrap();
+        conn.execute_batch("CREATE TEMP TRIGGER offline_on_checkpoint AFTER INSERT ON balance_checkpoints BEGIN SELECT go_offline(); END;").unwrap();
+    });
+    assert_eq!(run.result.unwrap_err().code, "network_egress_disabled");
+    assert!(checkpoints(&run.conn).is_empty());
+    assert_eq!(count(&run.conn, "SELECT count(*) FROM transactions"), 0);
+}
