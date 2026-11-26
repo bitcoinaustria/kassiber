@@ -2332,10 +2332,12 @@
       "after_last_sync": "Das Buch hat Transaktionen nach dem Coin-Stand der letzten Synchronisierung; synchronisiere erneut, um zu vergleichen."
     },
     "scope": {
-      "kraken_spot": "Krakens Wert ist das Spot-Guthaben; Staking- und Earn-Guthaben sind nicht enthalten.",
-      "coinbase_btc_accounts": "Coinbases Wert umfasst alle BTC-Konten, inklusive Tresore und laufender Überweisungen.",
-      "binance_spot_free_plus_locked": "Binances Wert ist die Spot-Wallet; Spot-Trades werden über die API nicht importiert.",
-      "bitpanda_wallet_balance_after": "Bitpandas Wert ist das Guthaben jeder BTC-Wallet nach ihrer letzten Transaktion.",
+      "spot_free_plus_locked": "Binances Wert ist die Spot-Wallet (frei plus in offenen Orders gebunden); Earn, Funding, Margin und Futures sind nicht enthalten. Spot-Trades werden über die API nicht importiert und erscheinen daher als Differenz.",
+      "wallets_balance_after_latest_transaction": "Bitpandas Wert ist das Guthaben jeder BTC-Wallet nach ihrer letzten BTC-Transaktion; Staking- und Earn-Guthaben außerhalb dieser Wallets sind nicht enthalten.",
+      "spot_available_plus_in_order": "Bitvavos Wert ist das Spot-Guthaben (verfügbar plus in offenen Orders); Staking und andere Produkte sind nicht enthalten.",
+      "account_available_plus_reserved": "Bitstamps Wert ist das gesamte BTC-Guthaben des Kontos (verfügbar plus in offenen Orders reserviert).",
+      "exchange_and_funding_wallets": "Bitfinex' Wert sind die BTC der Exchange- und Funding-Wallets, inklusive BTC in offenen Orders oder verliehen; die Margin-Wallet ist nicht enthalten.",
+      "account_statement_balance_after_last_booking": "Der Wert von Bitcoin.de ist der Kontoauszugssaldo nach seiner letzten Buchung.",
       "kraken_ledger_balance": "Der Wert ist das Guthaben nach der letzten BTC-Zeile des Exports.",
       "file_running_balance": "Der Wert ist das Guthaben nach der letzten Zeile der Datei.",
       "chain_utxo_set": "Der Wert sind die unverbrauchten Coins der letzten Synchronisierung.",

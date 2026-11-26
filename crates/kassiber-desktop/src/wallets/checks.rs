@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use super::detail::Read;
 use super::detail::ui::{self as dui, amber, emerald_text};
-use crate::app::{App, Privacy, Reply};
+use crate::app::{App, Privacy, Reply, Ticket};
 use crate::i18n::{has, t, tc, tr};
 use crate::icons as I;
 use crate::theme::Tk;
@@ -27,6 +27,10 @@ pub struct State {
     /// once read.
     pub book: Option<Value>,
     pub card: Card,
+    /// Add balance requests in flight. The dialog keeps its own request's ticket, so only that
+    /// dialog takes the answer; these copies outlive a dialog closed or a card started over
+    /// meanwhile, whose saved balance still has the screens read again.
+    pub adds: Vec<Ticket>,
 }
 
 /// The card on one connection's page.
@@ -54,6 +58,8 @@ pub struct AddForm {
     pub note: TextEdit,
     pub error: Option<String>,
     pub pending: bool,
+    /// The request this dialog sent.
+    pub ticket: Option<Ticket>,
 }
 
 // ---- Model -----------------------------------------------------------------------------------
@@ -226,12 +232,22 @@ fn card_rows(card: &Card) -> Vec<&Value> {
 }
 
 /// The asset of a manual balance on connection `c`: LBTC on Liquid, BTC everywhere else (a
-/// Lightning node's balance is BTC).
+/// Lightning node's balance is BTC). Decided by the connection's chain, or its asset when it
+/// names no chain, never by the user's label (`Conn::asset_label` also reads the label, which
+/// is fine for display but not for a stored asset).
 pub fn checkpoint_asset(c: &Conn) -> &'static str {
-    if c.asset_label() == "LBTC" {
-        "LBTC"
-    } else {
-        "BTC"
+    let liquid = |v: &str| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "liquid" | "liquidv1" | "lbtc" | "l-btc"
+        )
+    };
+    fn named(v: &Option<String>) -> Option<&str> {
+        v.as_deref().filter(|v| !v.trim().is_empty())
+    }
+    match named(&c.chain).or_else(|| named(&c.asset)) {
+        Some(v) if liquid(v) => "LBTC",
+        _ => "BTC",
     }
 }
 
@@ -325,7 +341,11 @@ fn submit_add(a: &mut App) {
     f.pending = true;
     f.error = None;
     let args = add_args(&wallet, asset, f);
-    a.send("ui.wallets.checkpoints.add", args, "wallets.checks.add");
+    let ticket = a.send_ticket("ui.wallets.checkpoints.add", args, "wallets.checks.add");
+    a.wallets.checks.adds.push(ticket.clone());
+    if let Some(f) = a.wallets.checks.card.add.as_mut() {
+        f.ticket = Some(ticket);
+    }
 }
 
 fn remove(a: &mut App, id: String) {
@@ -371,18 +391,30 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
                 None => Read::Ready(r.data.clone()),
             };
         }
-        "wallets.checks.add" => match &r.error {
-            Some(e) => {
-                if let Some(f) = app.wallets.checks.card.add.as_mut() {
-                    f.pending = false;
-                    f.error = Some(e.clone());
+        "wallets.checks.add" => {
+            // Only the dialog that sent the request takes its answer: one closed meanwhile, or
+            // reopened as a new dialog, is not this request's (Codex 4710534560).
+            let Some(at) = app.wallets.checks.adds.iter().position(|m| m.answers(app)) else {
+                return;
+            };
+            let ticket = app.wallets.checks.adds.swap_remove(at);
+            let card = &mut app.wallets.checks.card;
+            let mine = card.add.as_ref().and_then(|f| f.ticket.as_ref()) == Some(&ticket);
+            match &r.error {
+                Some(e) => {
+                    if let Some(f) = card.add.as_mut().filter(|_| mine) {
+                        f.pending = false;
+                        f.error = Some(e.clone());
+                    }
+                }
+                None => {
+                    if mine {
+                        card.add = None;
+                    }
+                    after_write(app);
                 }
             }
-            None => {
-                app.wallets.checks.card.add = None;
-                after_write(app);
-            }
-        },
+        }
         "wallets.checks.remove" => {
             app.wallets.checks.card.removing = false;
             match &r.error {
@@ -964,6 +996,14 @@ mod tests {
         assert_eq!(checkpoint_asset(&liquid), "LBTC");
         assert_eq!(checkpoint_asset(&node), "BTC");
         assert_eq!(checkpoint_asset(&chain), "BTC");
+        // Codex 4710534574: the user's label never decides the stored asset.
+        let named = Conn::parse(
+            &json!({"id": "w2", "kind": "descriptor", "chain": "bitcoin", "label": "Liquid savings"}),
+        );
+        assert_eq!(checkpoint_asset(&named), "BTC");
+        let unnamed =
+            Conn::parse(&json!({"id": "w3", "kind": "descriptor", "label": "L-BTC stash"}));
+        assert_eq!(checkpoint_asset(&unnamed), "BTC");
         let f = AddForm {
             btc: TextEdit::new("0.5"),
             date: TextEdit::new("2024-12-31"),
@@ -1051,5 +1091,116 @@ mod tests {
             reads.iter().any(|args| args["wallet"] == "node-1"),
             "the card's read: {reads:?}"
         );
+    }
+
+    fn sent(app: &mut App, send: fn(&mut App)) -> String {
+        let before: Vec<String> = app.pending.keys().cloned().collect();
+        send(app);
+        app.pending
+            .keys()
+            .find(|id| !before.contains(id))
+            .cloned()
+            .expect("a request")
+    }
+
+    fn add_reply(error: Option<&str>) -> Reply {
+        Reply {
+            kind: "ui.wallets.checkpoints.add".into(),
+            data: json!({}),
+            error: error.map(str::to_owned),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Codex 4710534560: a balance saved from a dialog that was closed and reopened answers
+    /// into neither the new dialog's draft nor its error; the new dialog's own answer does.
+    #[test]
+    fn a_closed_dialogs_answer_leaves_the_reopened_dialog_alone() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.checks.card.wallet = "w1".into();
+        let filled = |a: &mut App| {
+            open_add(a);
+            let f = a.wallets.checks.card.add.as_mut().unwrap();
+            f.btc = TextEdit::new("0.5");
+            f.date = TextEdit::new("2024-12-31");
+        };
+        filled(&mut app);
+        let first = sent(&mut app, submit_add);
+        close_add(&mut app);
+        filled(&mut app);
+        let second = sent(&mut app, submit_add);
+        app.deliver_as("wallets.checks.add", &first, add_reply(Some("refused")));
+        let f = app
+            .wallets
+            .checks
+            .card
+            .add
+            .as_ref()
+            .expect("the new dialog");
+        assert!(
+            f.pending && f.error.is_none(),
+            "the old failure is not the new dialog's"
+        );
+        app.deliver_as("wallets.checks.add", &second, add_reply(None));
+        assert!(
+            app.wallets.checks.card.add.is_none(),
+            "its own answer closes it"
+        );
+
+        filled(&mut app);
+        let third = sent(&mut app, submit_add);
+        close_add(&mut app);
+        open_add(&mut app);
+        app.deliver_as("wallets.checks.add", &third, add_reply(None));
+        assert!(
+            app.wallets.checks.card.add.is_some(),
+            "the old success does not close the new dialog"
+        );
+        assert!(app.wallets.checks.adds.is_empty());
+    }
+
+    /// Codex 4710534589: every scope `kassiber_wallets::checkpoints::scope_note` explains has
+    /// its translation under the same name, in both languages.
+    #[test]
+    fn every_backend_scope_has_its_note() {
+        const SCOPES: [&str; 10] = [
+            "spot_free_plus_locked",
+            "wallets_balance_after_latest_transaction",
+            "spot_available_plus_in_order",
+            "account_available_plus_reserved",
+            "exchange_and_funding_wallets",
+            "account_statement_balance_after_last_booking",
+            "kraken_ledger_balance",
+            "file_running_balance",
+            "chain_utxo_set",
+            "cln_bookkeeper_accounts",
+        ];
+        let bundles = [
+            (
+                "en",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../assets/i18n/locales/en/connections.json"
+                )),
+            ),
+            (
+                "de",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../assets/i18n/locales/de/connections.json"
+                )),
+            ),
+        ];
+        for (lang, bundle) in bundles {
+            let bundle: Value = serde_json::from_str(bundle).expect("a locale bundle");
+            for scope in SCOPES {
+                let note = bundle.pointer(&format!("/balanceChecks/scope/{scope}"));
+                assert!(
+                    note.and_then(Value::as_str).is_some_and(|n| !n.is_empty()),
+                    "{lang}: balanceChecks.scope.{scope}"
+                );
+            }
+        }
     }
 }
