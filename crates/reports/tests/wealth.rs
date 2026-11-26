@@ -1120,3 +1120,44 @@ fn draft_flag_does_not_admit_blocked_reads() {
         );
     }
 }
+
+#[test]
+fn daemon_exit_tax_draft_export_admits_a_stale_book() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 9, last_processed_input_version = 5 WHERE id = 'prof-at'",
+        [],
+    )
+    .unwrap();
+    // Desktop exports act on the selected book.
+    conn.execute_batch(
+        "INSERT INTO settings(key,value) VALUES('context_workspace','ws-1'),('context_profile','prof-at')",
+    )
+    .unwrap();
+    for command in [
+        "ui.reports.export_exit_tax_pdf",
+        "ui.reports.export_exit_tax_xlsx",
+    ] {
+        let base = [
+            ("workspace", s("Privat")),
+            ("profile", s("Hauptbuch AT")),
+            ("departure_date", s("2025-12-31")),
+        ];
+        // Final stays strict.
+        kassiber_reports::export_request::execute(
+            conn,
+            command,
+            &dict(base.clone()),
+            dir.path(),
+            &Fixed,
+        )
+        .expect_err(command);
+        let mut draft = base.to_vec();
+        draft.push(("draft", Value::Bool(true)));
+        kassiber_reports::export_request::execute(conn, command, &dict(draft), dir.path(), &Fixed)
+            .unwrap_or_else(|e| panic!("{command} draft: {} {}", e.code, e.message));
+    }
+}

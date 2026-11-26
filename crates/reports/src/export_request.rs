@@ -465,8 +465,15 @@ fn execute_admitted(
             (native, stem, suffix, "wealth")
         }
         "ui.reports.export_exit_tax_xlsx" | "ui.reports.export_exit_tax_pdf" => {
-            let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
-            let departure = value(&report, "departureDate").clone();
+            // A draft export resolves its departure date through the writer's
+            // draft-aware model; the strict read would refuse a blocked book.
+            let departure = if draft_mode(&args) {
+                let model = crate::exit_pdf::model(conn, &args, sources)?;
+                value(value(&model, "report"), "departureDate").clone()
+            } else {
+                let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
+                value(&report, "departureDate").clone()
+            };
             replace(&mut args, "departure_date", departure.clone());
             let pdf = command == "ui.reports.export_exit_tax_pdf";
             (
