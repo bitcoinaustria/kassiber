@@ -120,7 +120,7 @@ pub const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.exit_tax_preview",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
-    // Desktop-only (desktop_boundaries.rs `DESKTOP_ONLY_KINDS`): Point-in-time wealth statement.
+    // Point-in-time wealth statement (docs/reference/daemon.md).
     "ui.reports.wealth_preview",
     "ui.reports.export_wealth_pdf",
     "ui.reports.export_wealth_xlsx",
