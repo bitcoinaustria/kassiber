@@ -56,7 +56,7 @@ for f in "$rune_bin" "$kassiber_bin" "$build_info"; do [ -f "$f" ] || die "missi
 case "$arch" in amd64) triple=x86_64-unknown-linux-gnu; appimage_arch=x86_64; label=linux-x64 ;; arm64) triple=aarch64-unknown-linux-gnu; appimage_arch=aarch64; label=linux-arm64 ;; *) die "--arch is amd64 or arm64" ;; esac
 
 mkdir -p "$output"
-work="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux.XXXXXX")"; work="$(cd "$work" && pwd)"
 trap 'rm -rf "$work"' EXIT
 
 # --- the shared tree ------------------------------------------------------------------------
@@ -98,8 +98,9 @@ fi
 
 for tool in dpkg-deb readelf; do command -v "$tool" >/dev/null || die "missing $tool (run on the Linux runner)"; done
 # A shipped app must refuse every headless/scripted run (Rune prints WITHOUT_TOOLING and exits
-# before any window or GPU state exists), as packaging/macos/build-app.sh checks.
-if probe="$(cd "${TMPDIR:-/tmp}" && "$rune_bin" --tree /dev/null 2>&1)"; then
+# before any window or GPU state exists), as packaging/macos/build-app.sh checks. It probes the
+# staged copy: an absolute path (a relative --rune-bin would not survive the cd) and the shipped file.
+if probe="$(cd "${TMPDIR:-/tmp}" && "$deb_root/usr/bin/kassiber-ui" --tree /dev/null 2>&1)"; then
   die "the Rune binary accepted --tree: it was built with the tooling feature"
 fi
 case "$probe" in *"no agent tooling"*) ;; *) die "unexpected answer to --tree: $probe" ;; esac
