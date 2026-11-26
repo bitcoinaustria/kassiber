@@ -26,6 +26,9 @@ pub struct State {
     /// The open book's latest checkpoints (`ui.wallets.checkpoints.list` without a wallet),
     /// once read.
     pub book: Option<Value>,
+    /// The book-wide read in flight: only the latest one's answer is kept (a book switch
+    /// starts this state over, so an older book's answer reaches nobody).
+    pub book_ticket: Option<Ticket>,
     pub card: Card,
     /// Add balance requests in flight. The dialog keeps its own request's ticket, so only that
     /// dialog takes the answer; these copies outlive a dialog closed or a card started over
@@ -43,6 +46,9 @@ pub struct Card {
     /// View history: every checkpoint, each stored one with Remove.
     pub history: bool,
     pub read: Read<Value>,
+    /// The read this card sent last: an answer for another wallet or the other history
+    /// setting, sent before the card started over or toggled, is not this card's.
+    pub read_ticket: Option<Ticket>,
     /// The book refresh cycle the read follows (`App::book_generation`).
     pub generation: u64,
     /// The asset a manual balance of this connection is in (`checkpoint_asset`).
@@ -277,11 +283,12 @@ pub fn add_args(wallet: &str, asset: &str, f: &AddForm) -> Value {
 
 /// The book-wide read, with the shell's reads and each book refresh cycle's.
 pub fn read_book(app: &mut App) {
-    app.send(
+    let ticket = app.send_ticket(
         "ui.wallets.checkpoints.list",
         json!({}),
         "wallets.checks.book",
     );
+    app.wallets.checks.book_ticket = Some(ticket);
 }
 
 /// The card's read for `wallet` (another wallet starts the card over).
@@ -295,11 +302,12 @@ pub fn read_card(app: &mut App, wallet: &str) {
     }
     card.generation = app.book_generation;
     let history = card.history;
-    app.send(
+    let ticket = app.send_ticket(
         "ui.wallets.checkpoints.list",
         json!({"wallet": wallet, "history": history}),
         "wallets.checks.card",
     );
+    app.wallets.checks.card.read_ticket = Some(ticket);
 }
 
 /// Every frame on a connection's page: read when the card has no read for it, and again after
@@ -385,13 +393,27 @@ fn after_write(a: &mut App) {
     }
 }
 
+/// Whether the answer being delivered is `ticket`'s.
+fn answers(app: &App, ticket: Option<&Ticket>) -> bool {
+    ticket.is_some_and(|t| t.answers(app))
+}
+
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
         "wallets.checks.book" => {
+            if !answers(app, app.wallets.checks.book_ticket.as_ref()) {
+                return;
+            }
+            app.wallets.checks.book_ticket = None;
             // A failed read decides nothing (an older book may not have the table).
             app.wallets.checks.book = r.error.is_none().then(|| r.data.clone());
         }
         "wallets.checks.card" => {
+            // Only the card's latest read lands (Codex 4710752673).
+            if !answers(app, app.wallets.checks.card.read_ticket.as_ref()) {
+                return;
+            }
+            app.wallets.checks.card.read_ticket = None;
             app.wallets.checks.card.read = match &r.error {
                 Some(e) => Read::Failed(e.clone()),
                 None => Read::Ready(r.data.clone()),
@@ -1210,6 +1232,51 @@ mod tests {
             "a successful removal reads the card again"
         );
         assert!(app.wallets.checks.removes.is_empty());
+    }
+
+    fn list_reply(rows: Value, error: Option<&str>) -> Reply {
+        Reply {
+            kind: "ui.wallets.checkpoints.list".into(),
+            data: report(rows),
+            error: error.map(str::to_owned),
+            error_detail: Value::Null,
+            elapsed: Default::default(),
+        }
+    }
+
+    /// Codex 4710752673: a read sent for connection A, or for the other history setting,
+    /// does not land on the card once it moved on; the latest read does. The book-wide read
+    /// keeps only its latest answer the same way.
+    #[test]
+    fn only_the_latest_read_lands() {
+        let mut app = crate::app::tests::quiet_app();
+        let a = sent(&mut app, |a| read_card(a, "w1"));
+        let b = sent(&mut app, |a| read_card(a, "w2"));
+        app.deliver_as(
+            "wallets.checks.card",
+            &a,
+            list_reply(json!([]), Some("gone")),
+        );
+        assert!(
+            app.wallets.checks.card.read.ready().is_none()
+                && !matches!(app.wallets.checks.card.read, Read::Failed(_)),
+            "A's failure is not B's"
+        );
+        let rows = json!([{"wallet_id": "w2", "status": "matches"}]);
+        app.deliver_as("wallets.checks.card", &b, list_reply(rows, None));
+        assert_eq!(card_rows(&app.wallets.checks.card).len(), 1);
+
+        let old = sent(&mut app, read_book);
+        let new = sent(&mut app, read_book);
+        let differs =
+            json!([{"wallet_id": "w1", "wallet": "K", "status": "differs", "reason": ""}]);
+        app.deliver_as("wallets.checks.book", &new, list_reply(differs, None));
+        app.deliver_as("wallets.checks.book", &old, list_reply(json!([]), None));
+        assert_eq!(
+            book_diffs(&app).len(),
+            1,
+            "the older answer does not replace the newer"
+        );
     }
 
     /// Codex 4710534589: every scope `kassiber_wallets::checkpoints::scope_note` explains has
