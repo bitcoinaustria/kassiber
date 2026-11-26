@@ -328,10 +328,12 @@ books, UTC otherwise). Optional flags:
   spot rate, market value, and lower-of-cost-or-market (default on).
 - `--include-wallets` / `--no-include-wallets` toggles the per-wallet breakdown
   table (default on).
-- `--privacy-mode` (also supported on other report exports) replaces self-custody
+- `--privacy-mode` (also `privacy_mode` on the desktop and assistant report
+  exports; the CLI has it only on the wealth commands) replaces self-custody
   wallet names with `Eigenverwahrung` / `Self-custody`, exchange wallet names
   with custody categories, and omits transaction IDs.
-- `--draft` (also supported on other report exports) explicitly marks the export
+- `--draft` (also `draft` on the desktop and assistant report exports; the CLI
+  has it only on the wealth commands) explicitly marks the export
   as a draft with a diagonal PDF watermark and skips saving a `report_snapshots`
   entry; when readiness blockers exist, wealth statements fall back to draft
   automatically instead of hard-blocking. Only exports and the wealth statement
