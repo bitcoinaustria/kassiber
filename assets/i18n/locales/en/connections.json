@@ -2295,5 +2295,65 @@
       "stale": "The source changed after the check. Kassiber checked it again; answer for what it holds now.",
       "staleImport": "The file changed after the check and was not imported. Choose it again on the connection's page to import it."
     }
+  },
+  "balanceChecks": {
+    "title": "Balance checks",
+    "description": "Balances a source reported, compared with the book's balance at the same time. A difference means the import or sync may be incomplete; nothing is corrected automatically.",
+    "history": "View history",
+    "latestOnly": "Latest only",
+    "addButton": "Add balance",
+    "loading": "Loading balance checks…",
+    "unavailable": "Balance checks are not available for this book.",
+    "empty": "No balance to compare yet. Sync the source or add a balance from a statement.",
+    "journalsStale": "Journals need processing before these balances can be compared.",
+    "asOf": "as of {{date}}",
+    "reported": "Reported",
+    "book": "Book",
+    "difference": "Difference",
+    "remove": "Remove",
+    "differsHint": "The source may be incomplete: import or sync the missing history, then process journals.",
+    "status": {
+      "matches": "Matches",
+      "differs": "Differs",
+      "unknown": "Not comparable"
+    },
+    "origin": {
+      "api": "Exchange API",
+      "file": "Imported file",
+      "chain": "Blockchain (last sync)",
+      "node": "Lightning node (last sync)",
+      "manual": "Entered by you"
+    },
+    "reason": {
+      "journals_stale": "Journals need processing before this balance can be compared.",
+      "no_history": "The book has no history for this wallet yet.",
+      "before_coverage": "This balance is dated before the wallet's first imported transaction.",
+      "undated_postings": "Some journal postings of this wallet have no date.",
+      "after_last_sync": "The book has transactions dated after the last sync’s coin snapshot; sync again to compare."
+    },
+    "scope": {
+      "spot_free_plus_locked": "Binance's figure is the spot wallet (free plus locked in open orders); Earn, Funding, margin and futures are left out. Spot trades are not imported from the API, so they show as a difference.",
+      "wallets_balance_after_latest_transaction": "Bitpanda's figure is each BTC wallet's balance after its latest BTC transaction; staking and Earn balances outside those wallets are left out.",
+      "spot_available_plus_in_order": "Bitvavo's figure is the spot balance (available plus in open orders); staking and other products are left out.",
+      "account_available_plus_reserved": "Bitstamp's figure is the account's BTC total (available plus reserved in open orders).",
+      "exchange_and_funding_wallets": "Bitfinex's figure is the BTC of the exchange and funding wallets, including BTC in open orders or lent out; the margin wallet is left out.",
+      "account_statement_balance_after_last_booking": "Bitcoin.de's figure is the account statement's balance after its last booking.",
+      "kraken_ledger_balance": "The figure is the balance after the export's last BTC row.",
+      "file_running_balance": "The figure is the balance after the file's last row.",
+      "chain_utxo_set": "The figure is the unspent coins the last sync saw.",
+      "cln_bookkeeper_accounts": "The figure is Core Lightning's on-chain wallet and channels at the last sync."
+    },
+    "add": {
+      "title": "Add a balance",
+      "body": "Record what this source held on a date, for example from a statement. It is only compared with the book; journals and tax results do not change.",
+      "amount": "Balance in BTC",
+      "date": "Date",
+      "dateHint": "Read as the end of that day (UTC).",
+      "note": "Note (optional)",
+      "cancel": "Cancel",
+      "save": "Save balance"
+    },
+    "indicator": "Balance differs from the book",
+    "incompleteUntilSync": "The book also holds transactions dated after this sync’s coin snapshot; the comparison is incomplete until the next sync."
   }
 }

@@ -409,7 +409,13 @@ date span, last sync and backend) and its monthly booked balance from
 `ui.reports.balance_history` (month-end market value when the app shows fiat;
 months the wallet held nothing in show as zero, and the line stays in bitcoin
 for a range with an unpriced month). When the on-chain inventory and the books
-disagree, a card compares the two. A notice appears only when the wallet has
+disagree, a card compares the two. Below it, the Balance checks card lists the
+latest balance each source reported (exchange API, chain, Lightning node, your
+own entry) against the booked balance at that time, with an Add balance
+action and the history ([balance checkpoints](balance-checkpoints.md)); the
+wallets list marks a wallet whose latest reported balance differs, and such
+a wallet is a Needs attention condition until a later read shows it
+matching. A notice appears only when the wallet has
 transactions in the review queue or without a price, counted by the
 wallet-scoped `ui.transactions.dashboard` read the Transactions page uses, and
 links into that page filtered to the wallet. Tabs carry the rest. Transactions is
@@ -807,6 +813,10 @@ in three sections:
   each source's label and last error by cause. Sources that do not reach the
   previous calendar year's end get one row that opens the coverage view
   ([coverage](#sources-live-sync-and-file-snapshots)); it is a local read.
+  Wallets whose latest reported balance differs from the book, or waits for
+  the next sync to compare ([balance checkpoints](balance-checkpoints.md)),
+  get one row that names them (never an amount) and opens that connection
+  (the connections list when several differ); it is a local read too.
   Conditions about saved unlock methods open Settings → Security. Each row
   says what is wrong and what it means and offers one action from a closed
   list. Conditions are rebuilt from those reads, so a row clears when a later

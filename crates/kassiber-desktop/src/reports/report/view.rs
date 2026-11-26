@@ -113,6 +113,7 @@ pub fn page(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         pending,
         blocking_source_count(app),
         &core_readiness(app),
+        &crate::wallets::checks::readiness_diffs(app),
     );
     // Sources that do not reach the period end make the figures provisional, as an unknown
     // coverage read does.

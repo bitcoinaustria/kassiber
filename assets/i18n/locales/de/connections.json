@@ -2295,5 +2295,65 @@
       "stale": "Die Quelle hat sich nach der Prüfung geändert. Kassiber hat sie erneut geprüft; antworte für das, was sie jetzt enthält.",
       "staleImport": "Die Datei hat sich nach der Prüfung geändert und wurde nicht importiert. Wähle sie auf der Seite der Verbindung erneut, um sie zu importieren."
     }
+  },
+  "balanceChecks": {
+    "title": "Saldenabgleich",
+    "description": "Guthaben, das eine Quelle gemeldet hat, verglichen mit dem Saldo im Buch zum selben Zeitpunkt. Eine Abweichung heißt, dass Import oder Synchronisierung unvollständig sein können; nichts wird automatisch korrigiert.",
+    "history": "Verlauf anzeigen",
+    "latestOnly": "Nur aktuelle",
+    "addButton": "Guthaben erfassen",
+    "loading": "Saldenabgleich wird geladen …",
+    "unavailable": "Der Saldenabgleich ist für dieses Buch nicht verfügbar.",
+    "empty": "Noch kein Guthaben zum Vergleichen. Synchronisiere die Quelle oder erfasse ein Guthaben aus einem Kontoauszug.",
+    "journalsStale": "Die Journale müssen verarbeitet werden, bevor diese Guthaben verglichen werden können.",
+    "asOf": "Stand {{date}}",
+    "reported": "Gemeldet",
+    "book": "Buch",
+    "difference": "Abweichung",
+    "remove": "Entfernen",
+    "differsHint": "Die Quelle ist möglicherweise unvollständig: Importiere oder synchronisiere die fehlende Historie und verarbeite dann die Journale.",
+    "status": {
+      "matches": "Stimmt überein",
+      "differs": "Weicht ab",
+      "unknown": "Nicht vergleichbar"
+    },
+    "origin": {
+      "api": "Börsen-API",
+      "file": "Importierte Datei",
+      "chain": "Blockchain (letzte Synchronisierung)",
+      "node": "Lightning-Node (letzte Synchronisierung)",
+      "manual": "Von dir erfasst"
+    },
+    "reason": {
+      "journals_stale": "Die Journale müssen verarbeitet werden, bevor dieses Guthaben verglichen werden kann.",
+      "no_history": "Das Buch hat für diese Wallet noch keine Historie.",
+      "before_coverage": "Dieses Guthaben liegt vor der ersten importierten Transaktion der Wallet.",
+      "undated_postings": "Einige Journalbuchungen dieser Wallet haben kein Datum.",
+      "after_last_sync": "Das Buch hat Transaktionen nach dem Coin-Stand der letzten Synchronisierung; synchronisiere erneut, um zu vergleichen."
+    },
+    "scope": {
+      "spot_free_plus_locked": "Binances Wert ist die Spot-Wallet (frei plus in offenen Orders gebunden); Earn, Funding, Margin und Futures sind nicht enthalten. Spot-Trades werden über die API nicht importiert und erscheinen daher als Differenz.",
+      "wallets_balance_after_latest_transaction": "Bitpandas Wert ist das Guthaben jeder BTC-Wallet nach ihrer letzten BTC-Transaktion; Staking- und Earn-Guthaben außerhalb dieser Wallets sind nicht enthalten.",
+      "spot_available_plus_in_order": "Bitvavos Wert ist das Spot-Guthaben (verfügbar plus in offenen Orders); Staking und andere Produkte sind nicht enthalten.",
+      "account_available_plus_reserved": "Bitstamps Wert ist das gesamte BTC-Guthaben des Kontos (verfügbar plus in offenen Orders reserviert).",
+      "exchange_and_funding_wallets": "Bitfinex' Wert sind die BTC der Exchange- und Funding-Wallets, inklusive BTC in offenen Orders oder verliehen; die Margin-Wallet ist nicht enthalten.",
+      "account_statement_balance_after_last_booking": "Der Wert von Bitcoin.de ist der Kontoauszugssaldo nach seiner letzten Buchung.",
+      "kraken_ledger_balance": "Der Wert ist das Guthaben nach der letzten BTC-Zeile des Exports.",
+      "file_running_balance": "Der Wert ist das Guthaben nach der letzten Zeile der Datei.",
+      "chain_utxo_set": "Der Wert sind die unverbrauchten Coins der letzten Synchronisierung.",
+      "cln_bookkeeper_accounts": "Der Wert sind On-Chain-Wallet und Kanäle von Core Lightning bei der letzten Synchronisierung."
+    },
+    "add": {
+      "title": "Guthaben erfassen",
+      "body": "Erfasse, was diese Quelle an einem Tag hielt, etwa laut Kontoauszug. Es wird nur mit dem Buch verglichen; Journale und Steuerergebnisse ändern sich nicht.",
+      "amount": "Guthaben in BTC",
+      "date": "Datum",
+      "dateHint": "Gilt als Ende dieses Tages (UTC).",
+      "note": "Notiz (optional)",
+      "cancel": "Abbrechen",
+      "save": "Guthaben speichern"
+    },
+    "indicator": "Guthaben weicht vom Buch ab",
+    "incompleteUntilSync": "Das Buch hat auch Transaktionen nach dem Coin-Stand dieser Synchronisierung; der Vergleich ist bis zur nächsten Synchronisierung unvollständig."
   }
 }

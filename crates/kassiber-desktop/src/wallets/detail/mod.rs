@@ -465,6 +465,7 @@ fn send_reads(app: &mut App, id: &str) {
         json!({"wallet": id}),
         "wallets.detail.imports",
     );
+    super::checks::read_card(app, id);
 }
 
 /// Starts every read the page makes on mount for `c` (all local).
@@ -519,6 +520,11 @@ pub fn reload(app: &mut App) {
     app.refresh_reads();
 }
 
+/// Whether the current route shows a wallet page (not a node page).
+pub fn shows_wallet(app: &App) -> bool {
+    current(app).is_some()
+}
+
 /// The connection the current route shows, when it is a wallet (not a node).
 fn current(app: &App) -> Option<Conn> {
     let id = super::route_id(app)?;
@@ -555,6 +561,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         changed |= crate::wallets::add::exchange::sync_poll(app, tx, &c);
     }
     changed |= super::sources::poll(app, &c);
+    changed |= super::checks::poll(app, &c);
     changed
 }
 
@@ -621,7 +628,7 @@ pub fn on_key(app: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if current(app).is_none() {
         return false;
     }
-    if super::sources::on_key(app, ev) {
+    if super::sources::on_key(app, ev) || super::checks::on_key(app, ev) {
         return true;
     }
     if matches!(ev.key, Key::Escape) && app.wallets.detail.cert.open {
@@ -689,6 +696,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
             sync_running(app) && !crate::wallets::add::exchange::sync_pending(app),
         ));
     }
+    page = page.child(super::checks::card(app, tk, c));
     for n in notices::all(app, tk, c) {
         page = page.child(n);
     }
@@ -700,6 +708,7 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Conn)
     };
     dialogs::mount(app, tk, layer, c);
     super::sources::mount(app, tk, layer);
+    super::checks::mount(app, tk, layer);
     page
 }
 
@@ -992,6 +1001,27 @@ pub const SCENES: &[crate::app::Scene] = &[
     ("wallets-detail-coverage-attest", |a| {
         open_by_label(a, SPENDING);
         super::sources::scene_sample(a, true);
+    }),
+    // SYNTHETIC balance checks (`checks::scene_sample`): a differing manual balance, a matching
+    // chain one; the history with Remove; the Add balance dialog; the Needs attention row.
+    ("wallets-detail-checks", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+    }),
+    ("wallets-detail-checks-history-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, true);
+    }),
+    ("wallets-detail-checks-add", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+        a.wallets.checks.card.add = Some(Default::default());
+    }),
+    ("wallets-detail-checks-attention", |a| {
+        open_by_label(a, SPENDING);
+        super::checks::scene_sample(a, false);
+        a.shell.popup = Some(crate::shell::Popup::Notifications);
     }),
     ("wallets-detail-notfound", |a| {
         super::scene_route(a, "/connections/does-not-exist")
