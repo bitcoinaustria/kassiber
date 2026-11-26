@@ -266,6 +266,10 @@ one). A mismatch usually means excluded transactions, rows added to the same
 wallet from another source, or history the API did not return; it is
 reported, not corrected.
 
+A known figure is also stored as an `api` [balance
+checkpoint](balance-checkpoints.md#exchange-syncs) of the wallet, which later
+reads compare with the journals; an `unavailable` one stores none.
+
 ## Setup
 
 1. In Bitpanda, open Account settings → API Keys → New API key

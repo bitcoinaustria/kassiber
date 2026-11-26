@@ -44,7 +44,8 @@ URL's own path, `/v2` and the query; re-signed on every retry):
    `protocol_error`. A repeated transaction must be identical.
 2. `/v2/balance?symbol=BTC`: the envelope's `reported_balance`, scope
    `spot_available_plus_in_order` (`available` + `inOrder`, each whole msat
-   by its own digits). Staking and other products are not in it.
+   by its own digits). Staking and other products are not in it. The sync
+   stores it as an `api` [balance checkpoint](balance-checkpoints.md#exchange-syncs).
 
 Amounts are read only from JSON strings (a number-typed amount is refused).
 A 401/403 fails `auth_error` with `details.http_status` and

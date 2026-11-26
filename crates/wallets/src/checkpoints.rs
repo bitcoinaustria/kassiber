@@ -563,10 +563,12 @@ pub fn compare(
 /// differ from the imported history. Exchange modules name their scope.
 pub fn scope_note(scope: &str) -> Option<&'static str> {
     Some(match scope {
-        "kraken_spot" => "Kraken's figure is the spot balance (XXBT/XBT); staked and Earn balances (XBT.F, XBT.B, XBT.S, XBT.M, XBT.P) and futures are excluded, but funds still in transit are included.",
-        "coinbase_btc_accounts" => "Coinbase's figure is the sum of every BTC account's balance, including vaults; a pending send or receive may already be included.",
-        "binance_spot_free_plus_locked" => "Binance's figure is the spot wallet (free plus locked in open orders); Earn, Funding, margin and futures wallets are excluded. Binance spot trades are not imported from the API, so they appear as a difference.",
-        "bitpanda_wallet_balance_after" => "Bitpanda's figure is each BTC wallet's balance after its latest BTC transaction; staking and Earn balances held outside those wallets are not included.",
+        "spot_free_plus_locked" => "Binance's figure is the spot wallet (free plus locked in open orders); Earn, Funding, margin and futures wallets are excluded. Binance spot trades are not imported from the API, so they appear as a difference.",
+        "wallets_balance_after_latest_transaction" => "Bitpanda's figure is each BTC wallet's balance after its latest BTC transaction; staking and Earn balances held outside those wallets are not included.",
+        "spot_available_plus_in_order" => "Bitvavo's figure is the spot balance (available plus in open orders); staking and other products are excluded.",
+        "account_available_plus_reserved" => "Bitstamp's figure is the account's BTC total (available plus reserved in open orders).",
+        "exchange_and_funding_wallets" => "Bitfinex's figure is the BTC of the exchange and funding wallets (BTC in open orders or lent out included); the margin wallet is excluded.",
+        "account_statement_balance_after_last_booking" => "Bitcoin.de's figure is the account statement's balance after its last booking.",
         "kraken_ledger_balance" => "Kraken's ledger export balance is the spot balance after the file's last BTC row.",
         "file_running_balance" => "The file's running balance is the balance after its last row.",
         "chain_utxo_set" => "The chain figure is the unspent outputs the last sync observed; a transaction seen after that sync is not included.",

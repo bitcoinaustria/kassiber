@@ -48,7 +48,8 @@ UUID v4 per attempt, retries included), `X-Auth-Timestamp` (ms),
    strictly rise fails closed.
 2. `/api/v2/account_balances/btc/`: the envelope's `reported_balance`, scope
    `account_available_plus_reserved` (`total`, which must equal `available`
-   + `reserved`, each whole msat by its own digits).
+   + `reserved`, each whole msat by its own digits). The sync stores it as an
+   `api` [balance checkpoint](balance-checkpoints.md#exchange-syncs).
 
 Responses are read from their exact JSON lexemes (integers as integers,
 other numbers as decimal text, never through `f64`). A 400/401/403 or a 200

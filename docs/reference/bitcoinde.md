@@ -64,7 +64,8 @@ method, 12/13 a retryable `upstream_error`, the key codes and plain 401/403
 `auth_error`, anything else `protocol_error`. The envelope reports
 `skipped.registration_rows`, `skipped.trades_not_yet_in_statement` (the
 statement lists bookings up to the previous day) and `reported_balance`
-(scope `account_statement_balance_after_last_booking`). The desktop key check
+(scope `account_statement_balance_after_last_booking`). The sync stores that figure as an
+`api` [balance checkpoint](balance-checkpoints.md#exchange-syncs). The desktop key check
 reads the permissions and one statement page and reports `read_only: true`.
 
 ## CSV export
