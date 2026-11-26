@@ -31,6 +31,8 @@ pub struct State {
     /// dialog takes the answer; these copies outlive a dialog closed or a card started over
     /// meanwhile, whose saved balance still has the screens read again.
     pub adds: Vec<Ticket>,
+    /// Remove requests in flight, kept like `adds`: the card that sent one keeps its ticket.
+    pub removes: Vec<Ticket>,
 }
 
 /// The card on one connection's page.
@@ -48,6 +50,8 @@ pub struct Card {
     pub add: Option<AddForm>,
     pub removing: bool,
     pub remove_error: Option<String>,
+    /// The Remove request this card sent (a card started over for another wallet has none).
+    pub remove_ticket: Option<Ticket>,
 }
 
 /// The Add balance dialog.
@@ -355,11 +359,13 @@ fn remove(a: &mut App, id: String) {
     }
     card.removing = true;
     card.remove_error = None;
-    a.send(
+    let ticket = a.send_ticket(
         "ui.wallets.checkpoints.remove",
         json!({"id": id}),
         "wallets.checks.remove",
     );
+    a.wallets.checks.removes.push(ticket.clone());
+    a.wallets.checks.card.remove_ticket = Some(ticket);
 }
 
 /// A write changed the book: the page and every screen read again (the web invalidates every
@@ -416,10 +422,28 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             }
         }
         "wallets.checks.remove" => {
-            app.wallets.checks.card.removing = false;
-            match &r.error {
-                Some(e) => app.wallets.checks.card.remove_error = Some(e.clone()),
-                None => after_write(app),
+            // Only the card that sent the request takes its answer: one started over for
+            // another connection meanwhile is not this request's (Codex 4710647956).
+            let Some(at) = app
+                .wallets
+                .checks
+                .removes
+                .iter()
+                .position(|m| m.answers(app))
+            else {
+                return;
+            };
+            let ticket = app.wallets.checks.removes.swap_remove(at);
+            let card = &mut app.wallets.checks.card;
+            if card.remove_ticket.as_ref() == Some(&ticket) {
+                card.removing = false;
+                card.remove_ticket = None;
+                if let Some(e) = &r.error {
+                    card.remove_error = Some(e.clone());
+                }
+            }
+            if r.error.is_none() {
+                after_write(app);
             }
         }
         _ => {}
@@ -1066,6 +1090,7 @@ mod tests {
     fn a_write_off_the_wallet_page_re_reads_the_book_wide_checks() {
         let mut app = crate::app::tests::quiet_app();
         app.wallets.checks.card.wallet = "node-1".into();
+        let removal = sent(&mut app, |a| remove(a, "c1".into()));
         let before: Vec<String> = app.sent_args.keys().cloned().collect();
         let reply = Reply {
             kind: "ui.wallets.checkpoints.remove".into(),
@@ -1074,7 +1099,7 @@ mod tests {
             error_detail: Value::Null,
             elapsed: Default::default(),
         };
-        on_reply(&mut app, "wallets.checks.remove", &reply);
+        app.deliver_as("wallets.checks.remove", &removal, reply);
         let reads: Vec<&Value> = app
             .sent_args
             .iter()
@@ -1158,6 +1183,33 @@ mod tests {
             "the old success does not close the new dialog"
         );
         assert!(app.wallets.checks.adds.is_empty());
+    }
+
+    /// Codex 4710647956: a removal answered after the page moved to another connection leaves
+    /// that card's pending removal and error alone; the book still reads again on success.
+    #[test]
+    fn a_removal_answers_only_the_card_that_sent_it() {
+        let mut app = crate::app::tests::quiet_app();
+        app.wallets.checks.card.wallet = "w1".into();
+        let first = sent(&mut app, |a| remove(a, "c1".into()));
+        read_card(&mut app, "w2");
+        let second = sent(&mut app, |a| remove(a, "c2".into()));
+        app.deliver_as("wallets.checks.remove", &first, add_reply(Some("refused")));
+        let card = &app.wallets.checks.card;
+        assert!(
+            card.removing && card.remove_error.is_none(),
+            "the old failure is not the new card's"
+        );
+        let before: Vec<String> = app.sent_args.keys().cloned().collect();
+        app.deliver_as("wallets.checks.remove", &second, add_reply(None));
+        assert!(!app.wallets.checks.card.removing, "its own answer ends it");
+        assert!(
+            app.sent_args
+                .iter()
+                .any(|(id, args)| !before.contains(id) && args["wallet"] == "w2"),
+            "a successful removal reads the card again"
+        );
+        assert!(app.wallets.checks.removes.is_empty());
     }
 
     /// Codex 4710534589: every scope `kassiber_wallets::checkpoints::scope_note` explains has
