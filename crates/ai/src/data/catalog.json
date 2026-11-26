@@ -5054,6 +5054,7 @@
        "capital_gains",
        "austrian_e1kv",
        "exit_tax",
+       "wealth",
        "audit_package"
       ]
      },
@@ -5073,6 +5074,31 @@
      },
      "wallet": {
       "type": "string"
+     },
+     "wallets": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 100
+     },
+     "as_of": {
+      "type": "string"
+     },
+     "include_regime": {
+      "type": "boolean"
+     },
+     "include_valuation": {
+      "type": "boolean"
+     },
+     "include_wallets": {
+      "type": "boolean"
+     },
+     "privacy_mode": {
+      "type": "boolean"
+     },
+     "draft": {
+      "type": "boolean"
      },
      "departure_date": {
       "type": "string"
@@ -8403,6 +8429,47 @@
    "kind_class": "mutating",
    "daemon_kind": "ui.sources.attest_coverage",
    "summary_template": "Record source coverage statement",
+   "egresses": false,
+   "reversible": false
+  },
+  {
+   "name": "ui.reports.wealth_preview",
+   "wire_name": "ui_reports_wealth_preview",
+   "description": "Read the deterministic point-in-time wealth statement (Stichtag Vermögensübersicht) as of a cutoff date (YYYY-MM-DD, defaulting to today in the book's calendar), with optional Altbestand/Neubestand split, book-value/lower-of-cost-or-market valuation, per-wallet breakdown, minimal-disclosure privacy mode, and explicit draft mode.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "as_of": {
+      "type": "string"
+     },
+     "wallets": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 100
+     },
+     "include_regime": {
+      "type": "boolean"
+     },
+     "include_valuation": {
+      "type": "boolean"
+     },
+     "include_wallets": {
+      "type": "boolean"
+     },
+     "privacy_mode": {
+      "type": "boolean"
+     },
+     "draft": {
+      "type": "boolean"
+     }
+    }
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.reports.wealth_preview",
+   "summary_template": "Preview point-in-time wealth statement",
    "egresses": false,
    "reversible": false
   }

@@ -31,7 +31,7 @@ fn export_button(
     name: String,
     disabled: bool,
     year: i32,
-    menu: Option<bool>,
+    menu: Option<(bool, Popup)>,
 ) -> El {
     let ui = &app.reports.report;
     let loading = ui.active.is_some_and(|f| fmts.contains(&f));
@@ -79,9 +79,9 @@ fn export_button(
         b = b.opacity(0.5);
     }
     match (menu, fmts) {
-        (Some(open), _) if enabled => {
-            crate::ui::popup::trigger(b, crate::ui::popup::Kind::Menu, open, |a: &mut App| {
-                toggle(a, Popup::TaxFormats)
+        (Some((open, popup)), _) if enabled => {
+            crate::ui::popup::trigger(b, crate::ui::popup::Kind::Menu, open, move |a: &mut App| {
+                toggle(a, popup.clone())
             })
         }
         (None, [f]) if enabled => {
@@ -118,6 +118,50 @@ fn tax_formats_menu(tk: &Tk, layer: &mut Vec<El>) {
         layer,
         "rep-fmt-tax-menu",
         "rep-fmt-tax",
+        Placement::BottomEnd,
+        4.0,
+        tk.r(15.0),
+        entries,
+        std::rc::Rc::new(|a: &mut App| a.reports.report.popup = None),
+    );
+}
+
+/// The wealth statement's formats menu under its Export button.
+fn wealth_formats_menu(tk: &Tk, layer: &mut Vec<El>) {
+    use crate::ui::kit_menu::{Entry, Item};
+    let item = |label: &str, desc: &str, glyph: &'static rune::Icon, f: Fmt| {
+        Entry::Item(Item::new(label).description(t(desc)).icon(glyph).on_select(
+            move |a: &mut App| {
+                a.reports.report.popup = None;
+                super::export(a, f);
+            },
+        ))
+    };
+    let entries = vec![
+        item(
+            "PDF",
+            "reports:files.formats.pdf",
+            &I::FILE_TEXT,
+            Fmt::WealthPdf,
+        ),
+        item(
+            "XLSX",
+            "reports:files.formats.xlsx",
+            &I::FILE_SPREADSHEET,
+            Fmt::WealthXlsx,
+        ),
+        item(
+            "CSV",
+            "reports:files.formats.csv",
+            &I::TABLE_2,
+            Fmt::WealthCsv,
+        ),
+    ];
+    crate::ui::kit_menu::mount(
+        tk,
+        layer,
+        "rep-fmt-wealth-menu",
+        "rep-fmt-wealth",
         Placement::BottomEnd,
         4.0,
         tk.r(15.0),
@@ -275,69 +319,213 @@ fn check_row(
     r
 }
 
-fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
-    let ui = &app.reports.report;
-    let cover = !ui.no_cover;
-    let label = t("reports:files.summary.coverToggle");
-    let label = label.as_str();
-    let mut body = col().w_full().gap(tk.r(0.75)).child(
-        row()
-            .w_full()
-            .gap(tk.r(0.75))
-            .center_y()
-            .justify_between()
-            .child(text(label).font(tk.txs(400.0)).color(tk.fg))
-            .child(
-                crate::ui::switch(tk, "rep-cover", cover, label)
-                    .on_press(|a: &mut App| a.reports.report.no_cover = !a.reports.report.no_cover),
-            ),
-    );
-    if picker {
-        let mut headr = row()
-            .w_full()
-            .gap(tk.r(0.75))
-            .center_y()
-            .justify_between()
-            .child(
-                text(t("reports:files.summary.wallets"))
-                    .font(tk.txs(400.0))
-                    .color(tk.muted_fg),
-            );
-        if !all_selected {
-            let select_all = t("reports:files.summary.selectAll");
-            headr = headr.child(
-                row()
-                    .key("rep-wallets-all")
-                    .role("button")
-                    .label(select_all.clone())
-                    .focusable(true)
-                    .on_press(|a: &mut App| {
-                        let all: Vec<String> = a
-                            .reports
-                            .report
-                            .wallets
-                            .iter()
-                            .flatten()
-                            .map(|w| w.id.clone())
-                            .collect();
-                        a.reports.report.summary_wallets = all;
-                    })
-                    .child(text(select_all).font(tk.txs(400.0)).color(tk.fg)),
-            );
+/// The options' select-style dropdown trigger (`SelectTrigger` at `h-8`, `text-xs`): a leading
+/// glyph, the value and a muted chevron, at one fixed width so the stacked fields line up.
+fn field_trigger(
+    tk: &Tk,
+    key: &str,
+    glyph: &'static rune::Icon,
+    value: String,
+    label: String,
+    open: bool,
+) -> El {
+    let (fill, hover) = if tk.dark {
+        (
+            tk.input.alpha(tk.input.a * 0.3),
+            tk.input.alpha(tk.input.a * 0.5),
+        )
+    } else {
+        (tk.background, tk.accent)
+    };
+    row()
+        .key(key.to_owned())
+        .w(tk.r(9.5))
+        .h(tk.r(2.0))
+        .pl(tk.r(0.625))
+        .pr(tk.r(0.5))
+        .gap(tk.r(0.5))
+        .center_y()
+        .radius(tk.r(0.375))
+        .border(1.0, if open { tk.ring } else { tk.input })
+        .border_layout()
+        .fill(fill)
+        .hover(hover)
+        .cursor(rune::Cursor::Pointer)
+        .role("button")
+        .label(label)
+        .a11y_value(value.clone())
+        .focusable(true)
+        .child(ic(glyph, tk.r(0.875), tk.muted_fg))
+        .child(
+            text(value)
+                .font(super::widgets::tnum(tk.txs(500.0)))
+                .color(tk.fg)
+                .single_line()
+                .truncate()
+                .grow(1.0)
+                .min_w(0.0),
+        )
+        .child(ic(
+            if open {
+                &I::CHEVRON_UP
+            } else {
+                &I::CHEVRON_DOWN
+            },
+            tk.r(0.875),
+            tk.muted_fg,
+        ))
+}
+
+/// A field line in the options: its name on the left, its dropdown on the right.
+fn field_row(tk: &Tk, label: String, control: El) -> El {
+    row()
+        .w_full()
+        .gap(tk.r(0.75))
+        .center_y()
+        .justify_between()
+        .child(
+            text(label)
+                .font(tk.txs(500.0))
+                .color(tk.fg)
+                .single_line()
+                .truncate()
+                .shrink()
+                .min_w(0.0),
+        )
+        .child(control)
+}
+
+/// A switch line: a short name over a muted detail line, the switch on the right.
+fn switch_row(
+    tk: &Tk,
+    key: &str,
+    label: String,
+    detail: String,
+    on: bool,
+    flip: impl Fn(&mut App) + 'static,
+) -> El {
+    row()
+        .w_full()
+        .gap(tk.r(0.75))
+        .center_y()
+        .child(
+            col()
+                .grow(1.0)
+                .w(0.0)
+                .min_w(0.0)
+                .gap(tk.r(0.0625))
+                .child(
+                    text(label.clone())
+                        .font(tk.txs(500.0))
+                        .color(tk.fg)
+                        .single_line()
+                        .truncate()
+                        .min_w(0.0),
+                )
+                .child(
+                    text(detail.clone())
+                        .font(tk.t2xs(400.0))
+                        .color(tk.muted_fg)
+                        .wrap()
+                        .w_full(),
+                ),
+        )
+        .child(
+            crate::ui::switch(tk, key, on, &label)
+                .description(detail)
+                .on_press(flip),
+        )
+}
+
+/// Which wallet selection a checklist edits.
+#[derive(Clone, Copy)]
+enum Pick {
+    Wealth,
+    Summary,
+}
+
+impl Pick {
+    fn get(self, a: &App) -> &Vec<String> {
+        match self {
+            Pick::Wealth => &a.reports.report.wealth.wallets,
+            Pick::Summary => &a.reports.report.summary_wallets,
         }
-        let mut list = col().w_full().gap(tk.r(0.125)).role("list");
-        for wc in ui.wallets.iter().flatten() {
-            let on = ui.summary_wallets.contains(&wc.id);
+    }
+    fn get_mut(self, a: &mut App) -> &mut Vec<String> {
+        match self {
+            Pick::Wealth => &mut a.reports.report.wealth.wallets,
+            Pick::Summary => &mut a.reports.report.summary_wallets,
+        }
+    }
+    fn popup(self) -> Popup {
+        match self {
+            Pick::Wealth => Popup::WealthWallets,
+            Pick::Summary => Popup::SummaryWallets,
+        }
+    }
+    fn key(self) -> &'static str {
+        match self {
+            Pick::Wealth => "rep-wealth-wallets",
+            Pick::Summary => "rep-wallets",
+        }
+    }
+}
+
+/// The wallet selection as one compact dropdown (`Alle (6) ▾`, `2 von 6 ▾`) whose menu is a
+/// checklist with "Select all" on top; the selection never goes empty.
+fn wallet_dropdown(app: &App, tk: &Tk, layer: &mut Vec<El>, pick: Pick, label: String) -> El {
+    use crate::ui::kit_menu::{Entry, Item};
+    let ui = &app.reports.report;
+    let wallets = ui.wallets.as_deref().unwrap_or(&[]);
+    let sel = pick.get(app);
+    let chosen = wallets.iter().filter(|w| sel.contains(&w.id)).count();
+    let total = wallets.len();
+    let value = if chosen >= total {
+        tr(
+            "reports:files.walletPicker.all",
+            &[("count", &format::count(total))],
+        )
+    } else {
+        tr(
+            "reports:files.walletPicker.some",
+            &[
+                ("selected", &format::count(chosen)),
+                ("total", &format::count(total)),
+            ],
+        )
+    };
+    let open = ui.popup == Some(pick.popup());
+    let key = pick.key();
+    let trigger = crate::ui::popup::trigger(
+        field_trigger(
+            tk,
+            key,
+            &I::WALLET,
+            value,
+            t("reports:files.walletPicker.choose"),
+            open,
+        ),
+        crate::ui::popup::Kind::Menu,
+        open,
+        move |a: &mut App| toggle(a, pick.popup()),
+    );
+    if open {
+        let all_ids: Vec<String> = wallets.iter().map(|w| w.id.clone()).collect();
+        let mut entries = vec![Entry::Item(
+            Item::new(t("reports:files.wealth.selectAll"))
+                .checked(chosen >= total)
+                .on_select(move |a: &mut App| *pick.get_mut(a) = all_ids.clone()),
+        )];
+        entries.push(Entry::Sep);
+        for wc in wallets {
+            let on = sel.contains(&wc.id);
             let id = wc.id.clone();
-            list = list.child(check_row(
-                tk,
-                format!("rep-wallet-{}", wc.id),
-                &wc.label,
-                Some(&wc.chain),
-                on,
-                move |a: &mut App| {
-                    // Never leaves the selection empty.
-                    let sel = &mut a.reports.report.summary_wallets;
+            let mut item = Item::new(wc.label.clone())
+                .checked(on)
+                // The last selected wallet stays: an empty selection exports nothing.
+                .disabled(on && chosen <= 1)
+                .on_select(move |a: &mut App| {
+                    let sel = pick.get_mut(a);
                     if let Some(i) = sel.iter().position(|x| *x == id) {
                         if sel.len() > 1 {
                             sel.remove(i);
@@ -345,10 +533,625 @@ fn summary_options(app: &App, tk: &Tk, picker: bool, all_selected: bool) -> El {
                     } else {
                         sel.push(id.clone());
                     }
-                },
-            ));
+                });
+            if !wc.chain.is_empty() {
+                item = item.badge(wc.chain.clone());
+            }
+            entries.push(Entry::Item(item));
         }
-        body = body.child(col().w_full().gap(tk.r(0.25)).child(headr).child(list));
+        crate::ui::kit_menu::mount(
+            tk,
+            layer,
+            &format!("{key}-menu"),
+            key,
+            Placement::BottomEnd,
+            4.0,
+            tk.r(20.0),
+            entries,
+            std::rc::Rc::new(|a: &mut App| a.reports.report.popup = None),
+        );
+    }
+    field_row(tk, label, trigger)
+}
+
+/// Open or close the cutoff calendar, starting on the selected date's month.
+fn toggle_calendar(a: &mut App, year: i32) {
+    let ui = &mut a.reports.report;
+    if ui.popup == Some(Popup::WealthDate) {
+        ui.popup = None;
+    } else {
+        let (y, m, _) =
+            crate::reports::ledger::exit_tax::parse_iso(&super::resolved_wealth_date(ui, year));
+        ui.wealth.month = (y, m);
+        ui.wealth.cal_view = super::CalView::Days;
+        ui.popup = Some(Popup::WealthDate);
+    }
+}
+
+/// A 12-year page `[start, end]` covering `viewed` without dipping below Bitcoin's 2009 genesis
+/// year unless the user stepped there explicitly.
+fn year_page(viewed: i32, anchor: i32) -> (i32, i32) {
+    let top = anchor.max(viewed);
+    let offset = (top - viewed).div_euclid(12) * 12;
+    let end = top - offset;
+    let start = (end - 11).max(2009);
+    (start, start + 11)
+}
+
+/// The cutoff calendar dropdown: scaling quick picks (`Heute` + `31. Dez. <shown year>`) on top,
+/// independent Month ▾ and Year ▾ triggers in the header, and a fixed-height body switching
+/// cleanly between days (6 weeks), 12 months, and 12 years at once.
+fn wealth_calendar(app: &App, tk: &Tk, year: i32) -> El {
+    use super::CalView;
+    use crate::i18n::lang;
+    use crate::reports::ledger::exit_tax::{
+        days_in_month, first_weekday, format_display, months, months_short, parse_iso, weekdays,
+    };
+    let ui = &app.reports.report;
+    let (vy, vm) = ui.wealth.month;
+    let view = ui.wealth.cal_view;
+    let resolved = super::resolved_wealth_date(ui, year);
+    let selected = parse_iso(&resolved);
+    let today = parse_iso("");
+    let (yr_start, yr_end) = year_page(vy, today.0.max(year));
+    let cell_w = tk.r(2.25);
+    let gap = tk.r(0.25);
+    let grid_w = cell_w * 7.0 + gap * 6.0;
+
+    // Quick picks: two universal actions that scale to any multi-year history — Today, plus
+    // 31 Dec of whichever year is currently viewed in the calendar.
+    let chip_w = (grid_w - gap) / 2.0;
+    let chip = |key: &str, label: String, iso: String| {
+        let active = resolved == iso;
+        let (fill, ink) = if active {
+            (tk.primary, tk.primary_fg)
+        } else {
+            (tk.muted.alpha(0.6), tk.fg)
+        };
+        let mut c = row()
+            .key(key.to_owned())
+            .w(chip_w)
+            .h(tk.r(1.75))
+            .center()
+            .radius(tk.r(0.375))
+            .fill(fill)
+            .cursor(rune::Cursor::Pointer)
+            .role("button")
+            .label(label.clone())
+            .checked(active)
+            .focusable(true)
+            .on_press(move |a: &mut App| {
+                a.reports.report.wealth.as_of = iso.clone();
+                a.reports.report.popup = None;
+            })
+            .child(
+                text(label)
+                    .font(super::widgets::tnum(tk.txs(500.0)))
+                    .color(ink)
+                    .single_line(),
+            );
+        if !active {
+            c = c.hover(tk.accent);
+        }
+        c
+    };
+    let today_iso = super::today_iso();
+    let viewed_ye = format!("{vy:04}-12-31");
+    let presets = row()
+        .w(grid_w)
+        .gap(gap)
+        .role("group")
+        .label(t("reports:files.wealth.calendar.quickPicks"))
+        .child(chip(
+            "rep-wealth-preset-today",
+            t("reports:files.wealth.today"),
+            today_iso,
+        ))
+        .child(chip(
+            "rep-wealth-preset-ye",
+            tr("reports:files.wealth.yearEnd", &[("year", &vy.to_string())]),
+            viewed_ye,
+        ));
+
+    // Header: ‹ [Month ▾] [Year ▾] › (or ‹ [2015–2026 ▾] › in the 12-year view).
+    let step = move |a: &mut App, delta: i32| {
+        let w = &mut a.reports.report.wealth;
+        let (y, m) = w.month;
+        match w.cal_view {
+            CalView::Days => {
+                let total = (y * 12 + m as i32 + delta).max(2009 * 12);
+                w.month = (total.div_euclid(12), total.rem_euclid(12) as u32);
+            }
+            CalView::Months => {
+                w.month = ((y + delta).max(2009), m);
+            }
+            CalView::Years => {
+                w.month = ((y + delta * 12).max(2009), m);
+            }
+        }
+    };
+    let nav = |key: &str, glyph: &'static rune::Icon, label: String, delta: i32| {
+        w::icon_button(
+            tk,
+            key.to_owned(),
+            Variant::Ghost,
+            tk.r(2.0),
+            glyph,
+            tk.r(1.0),
+            label,
+        )
+        .on_press(move |a: &mut App| step(a, delta))
+    };
+    let (prev_label, next_label) = match view {
+        CalView::Days => (
+            t("reports:files.wealth.calendar.previousMonth"),
+            t("reports:files.wealth.calendar.nextMonth"),
+        ),
+        CalView::Months => (
+            t("reports:files.wealth.calendar.previousYear"),
+            t("reports:files.wealth.calendar.nextYear"),
+        ),
+        CalView::Years => (
+            t("reports:files.wealth.calendar.previousYears"),
+            t("reports:files.wealth.calendar.nextYears"),
+        ),
+    };
+    let cap_pill =
+        |key: &str, text_val: String, aria_label: String, active: bool, on_click: fn(&mut App)| {
+            let mut p = row()
+                .key(key.to_owned())
+                .h(tk.r(2.0))
+                .px(tk.r(0.5))
+                .gap(tk.r(0.25))
+                .center()
+                .radius(tk.r(0.375))
+                .cursor(rune::Cursor::Pointer)
+                .role("button")
+                .label(aria_label)
+                .a11y_value(text_val.clone())
+                .expanded(active)
+                .focusable(true)
+                .on_press(on_click)
+                .child(
+                    text(text_val)
+                        .font(super::widgets::tnum(tk.tsm(600.0)))
+                        .color(tk.fg)
+                        .single_line(),
+                )
+                .child(ic(
+                    if active {
+                        &I::CHEVRON_UP
+                    } else {
+                        &I::CHEVRON_DOWN
+                    },
+                    tk.r(0.75),
+                    tk.muted_fg,
+                ));
+            p = if active {
+                p.fill(tk.accent)
+            } else {
+                p.hover(tk.accent)
+            };
+            p
+        };
+    let center_ctrl = match view {
+        CalView::Years => cap_pill(
+            "rep-wealth-cal-year-range",
+            format!("{yr_start}–{yr_end}"),
+            t("reports:files.wealth.calendar.backToDays"),
+            true,
+            |a: &mut App| a.reports.report.wealth.cal_view = CalView::Days,
+        ),
+        CalView::Days | CalView::Months => row()
+            .gap(tk.r(0.25))
+            .center_y()
+            .child(cap_pill(
+                "rep-wealth-cal-month",
+                months(lang())[vm as usize].to_owned(),
+                if view == CalView::Months {
+                    t("reports:files.wealth.calendar.backToDays")
+                } else {
+                    t("reports:files.wealth.calendar.chooseMonth")
+                },
+                view == CalView::Months,
+                |a: &mut App| {
+                    let w = &mut a.reports.report.wealth;
+                    w.cal_view = if w.cal_view == CalView::Months {
+                        CalView::Days
+                    } else {
+                        CalView::Months
+                    };
+                },
+            ))
+            .child(cap_pill(
+                "rep-wealth-cal-year",
+                vy.to_string(),
+                t("reports:files.wealth.calendar.chooseYear"),
+                false,
+                |a: &mut App| a.reports.report.wealth.cal_view = CalView::Years,
+            )),
+    };
+    let header = row()
+        .w(grid_w)
+        .center_y()
+        .justify_between()
+        .child(nav("rep-wealth-cal-prev", &I::CHEVRON_LEFT, prev_label, -1))
+        .child(center_ctrl)
+        .child(nav("rep-wealth-cal-next", &I::CHEVRON_RIGHT, next_label, 1));
+
+    // The weekday row plus six weeks: the month and 12-year grids fill the exact same box.
+    let weekday_h = tk.r(1.5);
+    let body_h = weekday_h + cell_w * 6.0 + gap * 5.0;
+    let body = match view {
+        CalView::Months => {
+            let mcell_w = (grid_w - gap * 2.0) / 3.0;
+            let mcell_h = (body_h - gap * 3.0) / 4.0;
+            let mut grid = col()
+                .w(grid_w)
+                .h(body_h)
+                .gap(gap)
+                .role("grid")
+                .label(vy.to_string())
+                .focus_group();
+            for r in 0..4u32 {
+                let mut line = row().gap(gap);
+                for c in 0..3u32 {
+                    let m = r * 3 + c;
+                    let is_sel = (vy, m) == (selected.0, selected.1);
+                    let is_now = (vy, m) == (today.0, today.1);
+                    let mut b = row()
+                        .key(format!("rep-wealth-month-{m}"))
+                        .size(mcell_w, mcell_h)
+                        .center()
+                        .radius(tk.r(0.375))
+                        .cursor(rune::Cursor::Pointer)
+                        .role("button")
+                        .label(format!("{} {vy}", months(lang())[m as usize]))
+                        .checked(is_sel)
+                        .focusable(true)
+                        .focus_selected(is_sel || (!is_sel && m == vm))
+                        .on_press(move |a: &mut App| {
+                            let w = &mut a.reports.report.wealth;
+                            w.month = (w.month.0, m);
+                            w.cal_view = CalView::Days;
+                        });
+                    b = if is_sel {
+                        b.fill(tk.primary)
+                    } else if is_now {
+                        b.hover(tk.accent).border(1.0, tk.ring).border_layout()
+                    } else {
+                        b.hover(tk.accent)
+                    };
+                    line = line.child(
+                        b.child(
+                            text(months_short(lang())[m as usize])
+                                .font(tk.tsm(if is_sel { 600.0 } else { 400.0 }))
+                                .color(if is_sel { tk.primary_fg } else { tk.fg }),
+                        ),
+                    );
+                }
+                grid = grid.child(line);
+            }
+            grid
+        }
+        CalView::Years => {
+            let ycell_w = (grid_w - gap * 2.0) / 3.0;
+            let ycell_h = (body_h - gap * 3.0) / 4.0;
+            let mut grid = col()
+                .w(grid_w)
+                .h(body_h)
+                .gap(gap)
+                .role("grid")
+                .label(format!("{yr_start}–{yr_end}"))
+                .focus_group();
+            for r in 0..4i32 {
+                let mut line = row().gap(gap);
+                for c in 0..3i32 {
+                    let y = yr_start + r * 3 + c;
+                    let is_sel = y == selected.0;
+                    let is_now = y == today.0;
+                    let mut b = row()
+                        .key(format!("rep-wealth-year-{y}"))
+                        .size(ycell_w, ycell_h)
+                        .center()
+                        .radius(tk.r(0.375))
+                        .cursor(rune::Cursor::Pointer)
+                        .role("button")
+                        .label(y.to_string())
+                        .checked(is_sel)
+                        .focusable(true)
+                        .focus_selected(is_sel || (!is_sel && y == vy))
+                        .on_press(move |a: &mut App| {
+                            let w = &mut a.reports.report.wealth;
+                            w.month = (y, w.month.1);
+                            w.cal_view = CalView::Days;
+                        });
+                    b = if is_sel {
+                        b.fill(tk.primary)
+                    } else if is_now {
+                        b.hover(tk.accent).border(1.0, tk.ring).border_layout()
+                    } else {
+                        b.hover(tk.accent)
+                    };
+                    line = line.child(
+                        b.child(
+                            text(y.to_string())
+                                .font(super::widgets::tnum(tk.tsm(if is_sel || is_now {
+                                    600.0
+                                } else {
+                                    400.0
+                                })))
+                                .color(if is_sel { tk.primary_fg } else { tk.fg }),
+                        ),
+                    );
+                }
+                grid = grid.child(line);
+            }
+            grid
+        }
+        CalView::Days => {
+            let weekday_row = row()
+                .w(grid_w)
+                .h(weekday_h)
+                .gap(gap)
+                .a11y_hidden()
+                .children(weekdays(lang()).map(|d| {
+                    row()
+                        .w(cell_w)
+                        .h(weekday_h)
+                        .center()
+                        .child(text(d).font(tk.txs(500.0)).color(tk.muted_fg))
+                }));
+            // Six full weeks: the neighbouring months' days fill the edges, muted but pickable.
+            let first = first_weekday(vy, vm) as i32;
+            let n = days_in_month(vy, vm) as i32;
+            let (py, pm) = if vm == 0 { (vy - 1, 11) } else { (vy, vm - 1) };
+            let (ny, nm) = if vm == 11 { (vy + 1, 0) } else { (vy, vm + 1) };
+            let pn = days_in_month(py, pm) as i32;
+            let mut weeks = col()
+                .gap(gap)
+                .role("grid")
+                .label(format!("{} {vy}", months(lang())[vm as usize]))
+                .focus_group();
+            for wk in 0..6 {
+                let mut week = row().gap(gap);
+                for wd in 0..7 {
+                    let off = wk * 7 + wd - first;
+                    let (y, m, d, inside) = if off < 0 {
+                        (py, pm, (pn + off + 1) as u32, false)
+                    } else if off >= n {
+                        (ny, nm, (off - n + 1) as u32, false)
+                    } else {
+                        (vy, vm, (off + 1) as u32, true)
+                    };
+                    let before_floor = y < 2009;
+                    let iso = format!("{y:04}-{:02}-{d:02}", m + 1);
+                    let is_sel = !before_floor && (y, m, d) == selected;
+                    let is_today = !before_floor && (y, m, d) == today;
+                    let ink = if is_sel {
+                        tk.primary_fg
+                    } else if inside {
+                        tk.fg
+                    } else if before_floor {
+                        tk.muted_fg.alpha(tk.muted_fg.a * 0.25)
+                    } else {
+                        tk.muted_fg.alpha(tk.muted_fg.a * 0.55)
+                    };
+                    let mut b = row()
+                        .key(if inside {
+                            format!("rep-wealth-day-{d}")
+                        } else {
+                            format!("rep-wealth-day-{iso}")
+                        })
+                        .size(cell_w, cell_w)
+                        .center()
+                        .radius(tk.r(0.375));
+                    if before_floor {
+                        b = b.a11y_hidden();
+                    } else {
+                        b = b
+                            .cursor(rune::Cursor::Pointer)
+                            .role("button")
+                            .label(format_display(&iso, lang()))
+                            .checked(is_sel)
+                            .focusable(true)
+                            .focus_selected(is_sel)
+                            .on_press(move |a: &mut App| {
+                                let ui = &mut a.reports.report;
+                                ui.wealth.as_of = iso.clone();
+                                ui.popup = None;
+                            });
+                        b = if is_sel {
+                            b.fill(tk.primary)
+                        } else if is_today {
+                            b.hover(tk.accent).border(1.0, tk.ring).border_layout()
+                        } else {
+                            b.hover(tk.accent)
+                        };
+                    }
+                    week = week.child(
+                        b.child(
+                            text(d.to_string())
+                                .font(super::widgets::tnum(tk.tsm(if is_sel || is_today {
+                                    600.0
+                                } else {
+                                    400.0
+                                })))
+                                .color(ink),
+                        ),
+                    );
+                }
+                weeks = weeks.child(week);
+            }
+            col().w(grid_w).h(body_h).child(weekday_row).child(weeks)
+        }
+    };
+    crate::shell::glass(
+        tk,
+        col()
+            .key("rep-wealth-cal")
+            .role("dialog")
+            .label(t("reports:files.wealth.pickDate"))
+            .padding(tk.r(0.75))
+            .gap(tk.r(0.5))
+            .child(presets)
+            .child(el().w(grid_w).h(1.0).fill(tk.border).a11y_hidden())
+            .child(header)
+            .child(body),
+    )
+}
+
+fn wealth_options(
+    app: &App,
+    tk: &Tk,
+    layer: &mut Vec<El>,
+    region: Region,
+    year: i32,
+    picker: bool,
+) -> El {
+    let ui = &app.reports.report;
+    let resolved = super::resolved_wealth_date(ui, year);
+    let shown_date =
+        crate::reports::ledger::exit_tax::format_display(&resolved, crate::i18n::lang());
+    let open = ui.popup == Some(Popup::WealthDate);
+    let date_btn = field_trigger(
+        tk,
+        "rep-wealth-date",
+        &I::CALENDAR_DAYS,
+        shown_date,
+        t("reports:files.wealth.pickDate"),
+        open,
+    )
+    .expanded(open)
+    .on_press(move |a: &mut App| toggle_calendar(a, year))
+    .on_key(
+        move |a: &mut App, ev: &rune::KeyEvent, _tx: &mut rune::Tx| {
+            if open || ev.mods.cmd || ev.mods.alt || ev.mods.ctrl {
+                return false;
+            }
+            if matches!(ev.key, rune::Key::Down) {
+                toggle_calendar(a, year);
+                return true;
+            }
+            false
+        },
+    );
+    if open {
+        layer.push(rune_kit::scrim("rep-wealth-date-scrim", |a: &mut App| {
+            a.reports.report.popup = None
+        }));
+        let surf = wealth_calendar(app, tk, year)
+            .modal(true, |a: &mut App| a.reports.report.popup = None)
+            .focus_return("rep-wealth-date");
+        layer.push(crate::shell::anchored(
+            tk,
+            surf,
+            "rep-wealth-date",
+            Placement::BottomEnd,
+            4.0,
+        ));
+    }
+    let mut fields = col().w_full().gap(tk.r(0.5)).child(field_row(
+        tk,
+        t("reports:files.wealth.asOf"),
+        date_btn,
+    ));
+    if picker {
+        fields = fields.child(wallet_dropdown(
+            app,
+            tk,
+            layer,
+            Pick::Wealth,
+            t("reports:files.wealth.wallets"),
+        ));
+    }
+    let mut switches = col().w_full().gap(tk.r(0.625));
+    if region == Region::At {
+        switches = switches.child(switch_row(
+            tk,
+            "rep-wealth-regime",
+            t("reports:files.wealth.includeRegime"),
+            t("reports:files.wealth.includeRegimeDetail"),
+            ui.wealth.include_regime,
+            |a: &mut App| {
+                a.reports.report.wealth.include_regime = !a.reports.report.wealth.include_regime
+            },
+        ));
+    }
+    switches = switches
+        .child(switch_row(
+            tk,
+            "rep-wealth-valuation",
+            t("reports:files.wealth.includeValuation"),
+            t("reports:files.wealth.includeValuationDetail"),
+            ui.wealth.include_valuation,
+            |a: &mut App| {
+                a.reports.report.wealth.include_valuation =
+                    !a.reports.report.wealth.include_valuation
+            },
+        ))
+        .child(switch_row(
+            tk,
+            "rep-wealth-breakdown",
+            t("reports:files.wealth.includeWallets"),
+            t(if ui.privacy_mode && ui.wealth.include_wallets {
+                "reports:files.wealth.includeWalletsPrivate"
+            } else {
+                "reports:files.wealth.includeWalletsDetail"
+            }),
+            ui.wealth.include_wallets,
+            |a: &mut App| {
+                a.reports.report.wealth.include_wallets = !a.reports.report.wealth.include_wallets
+            },
+        ));
+    let rule = || el().w_full().h(1.0).fill(tk.border).a11y_hidden();
+    col()
+        .w_full()
+        .gap(tk.r(0.75))
+        .child(fields)
+        .child(rule())
+        .child(switches)
+        .child(rule())
+        .child(
+            text(t("reports:files.wealth.neverBlockedNote"))
+                .font(tk.t2xs(400.0))
+                .color(tk.muted_fg)
+                .wrap()
+                .w_full(),
+        )
+}
+
+fn summary_options(app: &App, tk: &Tk, layer: &mut Vec<El>, picker: bool) -> El {
+    let ui = &app.reports.report;
+    let cover = !ui.no_cover;
+    let label = t("reports:files.summary.coverToggle");
+    let mut body = col().w_full().gap(tk.r(0.75)).child(
+        row()
+            .w_full()
+            .gap(tk.r(0.75))
+            .center_y()
+            .justify_between()
+            .child(
+                text(label.clone())
+                    .font(tk.txs(500.0))
+                    .color(tk.fg)
+                    .wrap()
+                    .grow(1.0)
+                    .min_w(0.0),
+            )
+            .child(
+                crate::ui::switch(tk, "rep-cover", cover, &label)
+                    .on_press(|a: &mut App| a.reports.report.no_cover = !a.reports.report.no_cover),
+            ),
+    );
+    if picker {
+        body = body.child(wallet_dropdown(
+            app,
+            tk,
+            layer,
+            Pick::Summary,
+            t("reports:files.summary.wallets"),
+        ));
     }
     body
 }
@@ -521,7 +1324,7 @@ fn short_txid(v: &str) -> String {
 }
 
 /// `QuarantineExportBlockNotice`.
-fn quarantine_notice(tk: &Tk, q: &super::Quarantine) -> El {
+fn quarantine_notice(tk: &Tk, q: &super::Quarantine, draft_fmt: Option<Fmt>) -> El {
     let amber = hexc(if tk.dark { "#fbbf24" } else { "#d97706" });
     let mut c = col()
         .w_full()
@@ -627,7 +1430,7 @@ fn quarantine_notice(tk: &Tk, q: &super::Quarantine) -> El {
             .color(tk.muted_fg),
         );
     }
-    c.child(
+    let mut actions = col().w_full().gap(tk.r(0.5)).child(
         row().child(
             w::button(
                 tk,
@@ -640,7 +1443,25 @@ fn quarantine_notice(tk: &Tk, q: &super::Quarantine) -> El {
             )
             .on_press(|a: &mut App| a.navigate("/review")),
         ),
-    )
+    );
+    if let Some(fmt) = draft_fmt {
+        actions = actions.child(
+            row().child(
+                w::button(
+                    tk,
+                    "rep-export-draft-quarantine",
+                    Variant::Outline,
+                    Size::Sm,
+                    Some(&I::DOWNLOAD),
+                    &t("reports:files.exportDraft"),
+                    true,
+                )
+                .help(t("reports:files.draftHint"))
+                .on_press(move |a: &mut App| super::export_draft(a, fmt)),
+            ),
+        );
+    }
+    c.child(actions)
 }
 
 /// `ExportStatus`: the outcome strip under the header.
@@ -688,6 +1509,23 @@ fn export_status(app: &App, tk: &Tk, s: &Status) -> El {
                 .w_full()
                 .mt(tk.r(0.25))
                 .help(p.clone()),
+        );
+    }
+    if let Some(fmt) = s.can_export_draft {
+        body = body.child(
+            row().mt(tk.r(0.5)).child(
+                w::button(
+                    tk,
+                    "rep-export-draft",
+                    Variant::Outline,
+                    Size::Sm,
+                    Some(&I::DOWNLOAD),
+                    &t("reports:files.exportDraft"),
+                    true,
+                )
+                .help(t("reports:files.draftHint"))
+                .on_press(move |a: &mut App| super::export_draft(a, fmt)),
+            ),
         );
     }
     // `toastopen`: Show in Finder (and Open for a saved copy) as quiet text actions under the
@@ -790,10 +1628,76 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
     let title = t("reports:files.title");
     let head = lc::card_head(tk, title.clone(), Some(t("reports:files.noSecrets")), None)
         .help(t("reports:files.exclusions"));
+    let privacy_label = t("reports:files.privacyMode");
+    let privacy_detail = t("reports:files.privacyModeDetail");
+    let on = ui.privacy_mode;
+    let privacy_bar = row()
+        .key("rep-privacy-bar")
+        .w_full()
+        .px(tk.r(EDGE))
+        .py(tk.r(0.625))
+        .gap(tk.r(0.75))
+        .center_y()
+        .border_sides([1.0, 0.0, 0.0, 0.0], tk.border)
+        .border_layout()
+        .fill(if on {
+            tk.accent.alpha(0.5)
+        } else {
+            tk.muted.alpha(0.25)
+        })
+        .help(t("reports:files.privacyModeHint"))
+        .child(
+            row()
+                .size(tk.r(1.75), tk.r(1.75))
+                .center()
+                .radius(tk.r(0.375))
+                .fill(if on {
+                    tk.primary.alpha(0.12)
+                } else {
+                    tk.muted.alpha(0.6)
+                })
+                .a11y_hidden()
+                .child(ic(
+                    &I::SHIELD_CHECK,
+                    tk.r(0.875),
+                    if on { tk.fg } else { tk.muted_fg },
+                )),
+        )
+        .child(
+            col()
+                .grow(1.0)
+                .w(0.0)
+                .min_w(0.0)
+                .gap(tk.r(0.0625))
+                .child(
+                    text(privacy_label.clone())
+                        .font(tk.txs(500.0))
+                        .color(if on { tk.fg } else { tk.muted_fg })
+                        .single_line()
+                        .truncate()
+                        .min_w(0.0),
+                )
+                .child(
+                    text(privacy_detail.clone())
+                        .font(tk.t2xs(400.0))
+                        .color(tk.muted_fg)
+                        .single_line()
+                        .truncate()
+                        .min_w(0.0),
+                ),
+        )
+        .child(
+            crate::ui::switch(tk, "rep-privacy-mode", on, &privacy_label)
+                .description(privacy_detail)
+                .on_press(|a: &mut App| {
+                    a.reports.report.privacy_mode = !a.reports.report.privacy_mode
+                }),
+        );
     let mut card = card(tk, "rep-files")
         .role("region")
         .label(title)
-        .child(head);
+        .child(head)
+        .child(privacy_bar);
     match &ui.status {
         Some(s) if s.year == year => {
             card = match &s.quarantine {
@@ -803,7 +1707,7 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
                         .padding(tk.r(0.75))
                         .border_sides([0.0, 0.0, 1.0, 0.0], tk.border)
                         .border_layout()
-                        .child(quarantine_notice(tk, q)),
+                        .child(quarantine_notice(tk, q, s.can_export_draft)),
                 ),
                 None => card.child(export_status(app, tk, s)),
             };
@@ -860,8 +1764,35 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
             ],
         )
     );
+    let wealth_date_iso = super::resolved_wealth_date(ui, year);
+    let wealth_date_disp =
+        crate::reports::ledger::exit_tax::format_display(&wealth_date_iso, crate::i18n::lang());
+    let mut wealth_parts = vec![wealth_date_disp.clone()];
+    if region == Region::At {
+        wealth_parts.push(t(if ui.wealth.include_regime {
+            "reports:files.wealth.regimeOn"
+        } else {
+            "reports:files.wealth.regimeOff"
+        }));
+    }
+    wealth_parts.push(t(if ui.wealth.include_valuation {
+        "reports:files.wealth.valuationOn"
+    } else {
+        "reports:files.wealth.valuationOff"
+    }));
+    wealth_parts.push(t(if ui.wealth.include_wallets {
+        "reports:files.wealth.walletsOn"
+    } else {
+        "reports:files.wealth.walletsOff"
+    }));
+    let wealth_label = wealth_parts.join(" · ");
+    let wealth_body = if fold == Some(Fold::Wealth) {
+        wealth_options(app, tk, layer, region, year, picker)
+    } else {
+        el()
+    };
     let summary_body = if fold == Some(Fold::Summary) {
-        summary_options(app, tk, picker, selected >= wallets.len())
+        summary_options(app, tk, layer, picker)
     } else {
         el()
     };
@@ -873,7 +1804,11 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
     if ui.popup == Some(Popup::TaxFormats) && ui.active.is_none() && !refused {
         tax_formats_menu(tk, layer);
     }
+    if ui.popup == Some(Popup::WealthFormats) && ui.active.is_none() {
+        wealth_formats_menu(tk, layer);
+    }
     let tax_open = ui.popup == Some(Popup::TaxFormats);
+    let wealth_open = ui.popup == Some(Popup::WealthFormats);
     let export_as = |file: &str, format: &str| {
         tr(
             "reports:files.exportFileAs",
@@ -901,7 +1836,7 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
                 ),
                 refused,
                 year,
-                Some(tax_open),
+                Some((tax_open, Popup::TaxFormats)),
             ),
             None,
             false,
@@ -922,6 +1857,35 @@ pub fn panel(app: &App, cx: &Cx<App>, tk: &Tk, layer: &mut Vec<El>, r: &Report, 
                 None,
             ),
             None,
+            false,
+        ))
+        .child(file_row(
+            tk,
+            "rep-file-wealth",
+            &t("reports:files.wealth.title"),
+            tr(
+                "reports:files.wealth.detail",
+                &[("date", &wealth_date_disp)],
+            ),
+            export_button(
+                app,
+                tk,
+                "rep-fmt-wealth",
+                &[Fmt::WealthPdf, Fmt::WealthXlsx, Fmt::WealthCsv],
+                tr(
+                    "reports:files.exportFile",
+                    &[("file", &t("reports:files.wealth.title"))],
+                ),
+                picker && ui.wealth.wallets.is_empty(),
+                year,
+                Some((wealth_open, Popup::WealthFormats)),
+            ),
+            Some((
+                wealth_label,
+                fold == Some(Fold::Wealth),
+                Fold::Wealth,
+                wealth_body,
+            )),
             false,
         ))
         .child(file_row(

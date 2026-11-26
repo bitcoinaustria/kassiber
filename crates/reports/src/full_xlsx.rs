@@ -13,9 +13,17 @@ fn project(
     let limit = artifact_csv::history_limit(value(&args, "history_limit"))?;
     replace(&mut args, "history_limit", limit);
     let (workspace, profile) = kassiber_setup::references::scope(conn, &args)?;
-    require_context(conn, &profile, false)?;
+    let draft = draft_mode(&args);
+    let privacy = privacy_mode(&args);
+    let reasons = require_context_admit(conn, &profile, false, draft)?;
     let model = full_pdf::model(conn, &workspace, &profile, &args, sources)?;
-    let design = report_design::full(&model);
+    let mut design = report_design::full(&model);
+    if privacy {
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(&profile, "id"))?);
+    }
+    if draft {
+        design.apply_draft(&reasons);
+    }
     let mut document = report_design::xlsx_document(&design);
     let wallet = if truthy(value(&args, "wallet")) {
         Some(kassiber_wallets::resolve(
@@ -27,7 +35,7 @@ fn project(
         None
     };
     let verify = get(&args, "verify").is_none_or(truthy);
-    if verify {
+    if verify && !privacy {
         verification_xlsx::append(
             &mut document,
             &profile,
@@ -38,9 +46,13 @@ fn project(
     }
     // Python's title names the report's scope; the workbook's own title is
     // the design's.
-    let scope = match &wallet {
-        Some(wallet) => wallet.label.clone(),
-        None => text(&profile, "label"),
+    let scope = if privacy && wallet.is_some() {
+        design.period.clone()
+    } else {
+        match &wallet {
+            Some(wallet) => wallet.label.clone(),
+            None => text(&profile, "label"),
+        }
     };
     let rows: usize = design
         .sections
@@ -81,7 +93,7 @@ fn project(
             ("verified", Value::Bool(verify)),
             ("rows", Value::Int(rows.into())),
         ]),
-        completion: Some(crate::export_completion::Completion {
+        completion: (!draft).then(|| crate::export_completion::Completion {
             kind: "full-report.xlsx".into(),
             year: None,
             end_year: None,

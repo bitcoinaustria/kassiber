@@ -18,6 +18,7 @@ pub const KINDS: &[&str] = &[
     "ui.reports.privacy_mirror",
     "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
+    "ui.reports.wealth_preview",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
@@ -28,6 +29,9 @@ pub const KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
+    "ui.reports.export_wealth_pdf",
+    "ui.reports.export_wealth_xlsx",
+    "ui.reports.export_wealth_csv",
     "ui.reports.export_year_handoff",
     "ui.reports.export_cross_check",
     "ui.reports.export_audit_package",
@@ -106,6 +110,10 @@ pub fn execute(book: &mut dyn Book, kind: &str, raw: Option<&Value>) -> Result<V
             | "ui.reports.export_exit_tax_pdf"
             | "ui.reports.export_exit_tax_xlsx"
             | "ui.reports.exit_tax_preview"
+            | "ui.reports.wealth_preview"
+            | "ui.reports.export_wealth_pdf"
+            | "ui.reports.export_wealth_xlsx"
+            | "ui.reports.export_wealth_csv"
             | "ui.reports.export_capital_gains_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
@@ -892,6 +900,10 @@ mod tests {
                 "ui.reports.export_audit_package",
                 "ui.reports.lightning_profitability",
                 "ui.reports.cross_check",
+                "ui.reports.wealth_preview",
+                "ui.reports.export_wealth_pdf",
+                "ui.reports.export_wealth_xlsx",
+                "ui.reports.export_wealth_csv",
             ]
         );
     }

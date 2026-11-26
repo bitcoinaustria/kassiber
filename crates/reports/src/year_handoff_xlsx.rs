@@ -83,7 +83,7 @@ pub(super) fn overview(report: &Value) -> Vec<Value> {
     add(
         "Status",
         "Quarantined transactions in or before the year",
-        Value::Int(0.into()),
+        Value::Int(int(report, "quarantined_count").into()),
     );
     for warning in list(value(report, "warnings")) {
         add("Status", "Warning", warning.clone());
@@ -117,9 +117,22 @@ pub(super) fn project(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<(Prepared, Document)> {
+    let draft = draft_mode(args);
     let report = year_handoff::build(conn, args, sources)?;
     let year = int(&report, "year");
-    let document = report_design::xlsx_document(&report_design::year_handoff(&report));
+    let mut design = report_design::year_handoff(&report);
+    if privacy_mode(args) {
+        let profile_id = text(value(&report, "profile"), "id");
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &profile_id)?);
+    }
+    if draft {
+        let reasons: Vec<String> = list(value(&report, "draft_reasons"))
+            .iter()
+            .map(py_str)
+            .collect();
+        design.apply_draft(&reasons);
+    }
+    let document = report_design::xlsx_document(&design);
     let metadata = dict([
         ("year", Value::Int(year.into())),
         ("calendar", value(&report, "calendar").clone()),
@@ -156,7 +169,7 @@ pub(super) fn project(
         Prepared {
             files: vec![],
             metadata,
-            completion: Some(export_completion::Completion {
+            completion: (!draft).then(|| export_completion::Completion {
                 kind: "year-handoff.xlsx".into(),
                 year: Some(Value::Int(year.into())),
                 end_year: None,

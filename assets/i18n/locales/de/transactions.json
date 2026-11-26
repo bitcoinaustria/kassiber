@@ -253,7 +253,7 @@
       "blocked": {
         "title_one": "{{count}} Transaktion in Quarantäne blockiert diesen Export",
         "title_other": "{{count}} Transaktionen in Quarantäne blockieren diesen Export",
-        "body": "Eine Transaktion in Quarantäne ist noch nicht gebucht. Löse sie auf oder schließe sie aus, verarbeite das Journal erneut und exportiere dann.",
+        "body": "Transaktionen in Quarantäne sind noch nicht gebucht. Löse sie auf oder schließe sie aus, verarbeite das Journal erneut und exportiere dann.",
         "more_one": "und {{count}} weitere",
         "more_other": "und {{count}} weitere",
         "review": "In Quarantäne prüfen"

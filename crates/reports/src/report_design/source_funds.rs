@@ -1404,6 +1404,8 @@ pub fn source_funds(model: &Value) -> Document {
         fiat: currency,
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

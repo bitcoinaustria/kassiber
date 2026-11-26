@@ -320,8 +320,21 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    let draft = draft_mode(args);
+    let reasons = if draft {
+        require_context_admit(conn, profile, false, true)?
+    } else {
+        Vec::new()
+    };
     let model = model(conn, workspace, profile, args, sources)?;
-    let (bytes, pages) = report_design::pdf(&report_design::full(&model))?;
+    let mut design = report_design::full(&model);
+    if privacy_mode(args) {
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(profile, "id"))?);
+    }
+    if draft {
+        design.apply_draft(&reasons);
+    }
+    let (bytes, pages) = report_design::pdf(&design)?;
     let title = text(&model, "title");
     let wallet = if truthy(value(args, "wallet")) {
         Some(kassiber_wallets::resolve(
@@ -351,7 +364,7 @@ pub(super) fn prepare(
                 },
             ),
         ]),
-        completion: Some(crate::export_completion::Completion {
+        completion: (!draft).then(|| crate::export_completion::Completion {
             kind: "full-report.pdf".into(),
             year: None,
             end_year: None,

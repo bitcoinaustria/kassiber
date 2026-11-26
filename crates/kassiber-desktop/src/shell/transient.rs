@@ -146,6 +146,7 @@ mod tests {
             path: None,
             open_path: None,
             quarantine: None,
+            can_export_draft: None,
             actions: vec![],
         }
     }

@@ -39,6 +39,14 @@ pub enum Popup {
     LnConnection,
     /// The tax report's formats menu (PDF, XLSX, CSV) under its Export button.
     TaxFormats,
+    /// The wealth statement's formats menu (PDF, XLSX, CSV) under its Export button.
+    WealthFormats,
+    /// The wealth statement's cutoff-date calendar popover.
+    WealthDate,
+    /// The wealth statement's wallet checklist menu.
+    WealthWallets,
+    /// The summary's wallet checklist menu.
+    SummaryWallets,
     /// An `InfoNote`, by its key.
     Note(String),
 }
@@ -46,6 +54,7 @@ pub enum Popup {
 /// The folded options under a file row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fold {
+    Wealth,
     Summary,
     Audit,
 }
@@ -57,8 +66,52 @@ pub enum Fmt {
     Xlsx,
     Csv,
     YearHandoff,
+    WealthPdf,
+    WealthXlsx,
+    WealthCsv,
     SummaryPdf,
     AuditPackage,
+}
+
+/// Which view the wealth cutoff calendar popover shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CalView {
+    #[default]
+    Days,
+    Months,
+    Years,
+}
+
+#[derive(Clone, Debug)]
+pub struct WealthOpts {
+    /// Selected cutoff day (`yyyy-mm-dd`); empty defaults to `31 Dec <selected year>`.
+    pub as_of: String,
+    /// Calendar month currently shown in the cutoff-date popover: (year, month 0–11).
+    pub month: (i32, u32),
+    /// Active view inside the cutoff-date calendar popover (days, months, or 12-year grid).
+    pub cal_view: CalView,
+    /// Include Altbestand / Neubestand regime classification (Austrian books).
+    pub include_regime: bool,
+    /// Include cost basis, cutoff market value, lower-of-cost-or-market, and unrealized P&L.
+    pub include_valuation: bool,
+    /// Include the per-wallet breakdown table.
+    pub include_wallets: bool,
+    /// Selected wallet IDs (when multiple wallets exist).
+    pub wallets: Vec<String>,
+}
+
+impl Default for WealthOpts {
+    fn default() -> Self {
+        WealthOpts {
+            as_of: String::new(),
+            month: (2025, 11),
+            cal_view: CalView::Days,
+            include_regime: true,
+            include_valuation: true,
+            include_wallets: true,
+            wallets: vec![],
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +165,9 @@ pub struct Status {
     pub path: Option<String>,
     pub open_path: Option<String>,
     pub quarantine: Option<Quarantine>,
+    /// When a report export is blocked by readiness/quarantine checks, the format that can be
+    /// re-run as a watermarked draft (`draft: true`).
+    pub can_export_draft: Option<Fmt>,
     /// `toastopen`: Show in Finder for the managed file (beside the strip's Open), or Open +
     /// Show in Finder for a saved copy; empty for errors and unknown paths.
     pub actions: Vec<crate::toastopen::ToastAction>,
@@ -156,9 +212,14 @@ pub struct Ui {
     pub popup: Option<Popup>,
     pub fold: Option<Fold>,
     pub no_cover: bool,
+    /// Minimal-disclosure export mode: replaces wallet names with "Self-custody" /
+    /// "Eigenverwahrung" and omits transaction IDs across report exports.
+    pub privacy_mode: bool,
     pub summary_wallets: Vec<String>,
+    pub wealth: WealthOpts,
     pub audit: Audit,
     pub active: Option<Fmt>,
+    pub export_is_draft: bool,
     /// The year the running export belongs to (fixed at its start).
     pub export_year: i32,
     /// The format that just finished, its year and the clock time its check goes away.
@@ -205,6 +266,7 @@ impl Ui {
         self.status = None;
         self.done = None;
         self.no_cover = false;
+        self.privacy_mode = false;
         self.audit = Audit::default();
         // `summaryWalletIds` starts empty and its effect selects every wallet.
         self.summary_wallets = self
@@ -212,6 +274,10 @@ impl Ui {
             .as_ref()
             .map(|w| w.iter().map(|c| c.id.clone()).collect())
             .unwrap_or_default();
+        self.wealth = WealthOpts {
+            wallets: self.summary_wallets.clone(),
+            ..WealthOpts::default()
+        };
         self.ln_selected = None;
         self.explain_open.clear();
         self.route_seen.clear();
@@ -497,11 +563,21 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             let ui = &mut app.reports.report;
             let all: Vec<String> = choices.iter().map(|w| w.id.clone()).collect();
             ui.summary_wallets = if all.len() <= 1 {
-                all
+                all.clone()
             } else {
                 let kept: Vec<String> = all
                     .iter()
                     .filter(|id| ui.summary_wallets.contains(id))
+                    .cloned()
+                    .collect();
+                if kept.is_empty() { all.clone() } else { kept }
+            };
+            ui.wealth.wallets = if all.len() <= 1 {
+                all
+            } else {
+                let kept: Vec<String> = all
+                    .iter()
+                    .filter(|id| ui.wealth.wallets.contains(id))
                     .cloned()
                     .collect();
                 if kept.is_empty() { all } else { kept }
@@ -626,8 +702,38 @@ pub fn effective_year(app: &App) -> Option<i32> {
     })
 }
 
+/// Navigate to `/reports` with the point-in-time wealth statement options expanded.
+pub fn open_wealth(app: &mut App) {
+    app.navigate("/reports");
+    app.reports.report.fold = Some(Fold::Wealth);
+}
+
+/// The wealth statement's cutoff date (`yyyy-mm-dd`): the user's pick, else Dec 31 of `year`.
+pub fn resolved_wealth_date(ui: &Ui, year: i32) -> String {
+    if ui.wealth.as_of.is_empty() {
+        format!("{year:04}-12-31")
+    } else {
+        ui.wealth.as_of.clone()
+    }
+}
+
+/// Today's UTC civil date (`yyyy-mm-dd`).
+pub fn today_iso() -> String {
+    let (y, m, d) = crate::reports::ledger::exit_tax::parse_iso("");
+    format!("{y:04}-{:02}-{d:02}", m + 1)
+}
+
 /// `handleExport`: the daemon writes the file into the book's exports folder.
 pub fn export(app: &mut App, fmt: Fmt) {
+    export_with_draft(app, fmt, false);
+}
+
+/// Re-run a blocked report export explicitly as a watermarked draft (`draft: true`).
+pub fn export_draft(app: &mut App, fmt: Fmt) {
+    export_with_draft(app, fmt, true);
+}
+
+fn export_with_draft(app: &mut App, fmt: Fmt, draft: bool) {
     if app.reports.report.active.is_some() {
         return;
     }
@@ -642,23 +748,44 @@ pub fn export(app: &mut App, fmt: Fmt) {
         .is_some_and(|d| {
             model::region(d["jurisdictionCode"].as_str().unwrap_or("")) == model::Region::At
         });
-    let (kind, args) = request(&app.reports.report, fmt, year, austrian);
+    let (kind, args) = request(&app.reports.report, fmt, year, austrian, draft);
     let ui = &mut app.reports.report;
     ui.status = None;
     ui.done = None;
     ui.active = Some(fmt);
+    ui.export_is_draft = draft;
     ui.export_year = year;
     ui.export_visit = ui.visit;
     if app.send(kind, args, "reports.report.export").is_none() {
         app.reports.report.active = None;
+        app.reports.report.export_is_draft = false;
     }
 }
 
 /// The export request for `fmt` over the page's `year`. Year-based exports send the year
 /// itself; the core cuts it with the book's tax calendar, as the page's own report does.
-fn request(ui: &Ui, fmt: Fmt, year: i32, austrian: bool) -> (&'static str, Value) {
+fn request(ui: &Ui, fmt: Fmt, year: i32, austrian: bool, draft: bool) -> (&'static str, Value) {
     let picker = ui.wallets.as_ref().is_some_and(|w| w.len() > 1);
-    match fmt {
+    let (kind, mut args) = match fmt {
+        Fmt::WealthPdf | Fmt::WealthXlsx | Fmt::WealthCsv => {
+            let mut a = json!({
+                "as_of": resolved_wealth_date(ui, year),
+                "include_regime": austrian && ui.wealth.include_regime,
+                "include_valuation": ui.wealth.include_valuation,
+                "include_wallets": ui.wealth.include_wallets,
+            });
+            let total = ui.wallets.as_ref().map(Vec::len).unwrap_or(0);
+            if picker && !ui.wealth.wallets.is_empty() && ui.wealth.wallets.len() < total {
+                a["wallets"] = json!(ui.wealth.wallets);
+            }
+            let kind = match fmt {
+                Fmt::WealthPdf => "ui.reports.export_wealth_pdf",
+                Fmt::WealthXlsx => "ui.reports.export_wealth_xlsx",
+                Fmt::WealthCsv => "ui.reports.export_wealth_csv",
+                _ => unreachable!(),
+            };
+            (kind, a)
+        }
         Fmt::SummaryPdf => {
             let mut a = json!({
                 "year": year,
@@ -693,7 +820,14 @@ fn request(ui: &Ui, fmt: Fmt, year: i32, austrian: bool) -> (&'static str, Value
         Fmt::Csv => ("ui.reports.export_csv", json!({})),
         Fmt::Xlsx => ("ui.reports.export_xlsx", json!({})),
         Fmt::Pdf => ("ui.reports.export_pdf", json!({})),
+    };
+    if draft && fmt != Fmt::AuditPackage {
+        args["draft"] = json!(true);
     }
+    if ui.privacy_mode && fmt != Fmt::AuditPackage {
+        args["privacy_mode"] = json!(true);
+    }
+    (kind, args)
 }
 
 fn basename(path: &str) -> String {
@@ -762,8 +896,23 @@ fn on_export(app: &mut App, r: &Reply) {
         } else {
             message.clone()
         };
+        let lower = message.to_ascii_lowercase();
+        let can_export_draft = (!app.reports.report.export_is_draft
+            && fmt != Fmt::AuditPackage
+            && !matches!(fmt, Fmt::WealthPdf | Fmt::WealthXlsx | Fmt::WealthCsv)
+            && (matches!(
+                code,
+                "report_freshness_blocked"
+                    | "year_handoff_quarantined"
+                    | "transaction_export_quarantined"
+                    | "custody_quantity_unresolved"
+                    | "custody_component_incomplete"
+            ) || lower.contains("fresh journals")
+                || lower.contains("quarantined")))
+        .then_some(fmt);
         let ui = &mut app.reports.report;
         ui.active = None;
+        ui.export_is_draft = false;
         if ui.same_visit() {
             ui.status = Some(Status {
                 year,
@@ -773,6 +922,7 @@ fn on_export(app: &mut App, r: &Reply) {
                 path: None,
                 open_path: None,
                 quarantine,
+                can_export_draft,
                 actions: vec![],
             });
         }
@@ -968,6 +1118,7 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
         Err(message) => {
             let ui = &mut app.reports.report;
             ui.active = None;
+            ui.export_is_draft = false;
             if ui.same_visit() {
                 ui.status = Some(Status {
                     year: w.year,
@@ -977,6 +1128,7 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
                     path: Some(w.path.clone()),
                     open_path: Some(w.path.clone()),
                     quarantine: None,
+                    can_export_draft: None,
                     actions: vec![],
                 });
             }
@@ -989,7 +1141,7 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
             return;
         }
     };
-    let warnings: Vec<String> = p["warnings"]
+    let mut warnings: Vec<String> = p["warnings"]
         .as_array()
         .map(|a| {
             a.iter()
@@ -997,10 +1149,21 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
                 .collect()
         })
         .unwrap_or_default();
-    let flagged = p["reconciled"].as_bool() == Some(false) || !warnings.is_empty();
+    if let Some(reasons) = p["draft_reasons"].as_array() {
+        for r in reasons {
+            if let Some(s) = r.as_str()
+                && !warnings.iter().any(|w| w == s)
+            {
+                warnings.push(s.to_owned());
+            }
+        }
+    }
+    let is_draft = p["is_draft"].as_bool() == Some(true) || p["draft"].as_bool() == Some(true);
+    let flagged = p["reconciled"].as_bool() == Some(false) || is_draft || !warnings.is_empty();
     let kept = saved == w.path;
     let ui = &mut app.reports.report;
     ui.active = None;
+    ui.export_is_draft = false;
     let shown = ui.same_visit();
     if shown && (kept || flagged) {
         ui.status = Some(Status {
@@ -1022,6 +1185,7 @@ pub fn finish(app: &mut App, w: Written, answer: Result<Option<String>, String>)
             path: Some(saved.clone()).filter(|s| !s.is_empty()),
             open_path: kept.then(|| w.path.clone()).filter(|s| !s.is_empty()),
             quarantine: None,
+            can_export_draft: None,
             actions: if kept {
                 crate::toastopen::for_path(&w.path, true)
                     .into_iter()
@@ -1198,6 +1362,58 @@ pub const SCENES: &[super::Scene] = &[
         open(a, "/reports");
         a.reports.report.fold = Some(Fold::Summary);
     }),
+    ("reports-wealth-options", |a| {
+        open(a, "/reports");
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.wealth.as_of = "2025-12-31".into();
+    }),
+    // SYNTHETIC: Austrian book in German with the point-in-time wealth statement open
+    // and minimal-disclosure mode enabled.
+    ("reports-wealth-at-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        a.reports.report.privacy_mode = true;
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.wealth.as_of = "2025-12-31".into();
+    }),
+    // SYNTHETIC: the same with the cutoff-date calendar dropdown open on December 2025.
+    ("reports-wealth-cal-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        a.reports.report.privacy_mode = true;
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.wealth.as_of = "2025-12-31".into();
+        a.reports.report.wealth.month = (2025, 11);
+        a.reports.report.popup = Some(Popup::WealthDate);
+    }),
+    // SYNTHETIC: the calendar's month grid.
+    ("reports-wealth-cal-months-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.wealth.as_of = "2025-12-31".into();
+        a.reports.report.wealth.month = (2025, 11);
+        a.reports.report.wealth.cal_view = CalView::Months;
+        a.reports.report.popup = Some(Popup::WealthDate);
+    }),
+    // SYNTHETIC: the calendar's 12-year grid (scales across 10+ years in one click).
+    ("reports-wealth-cal-years-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        a.reports.report.privacy_mode = true;
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.wealth.as_of = "2025-12-31".into();
+        a.reports.report.wealth.month = (2025, 11);
+        a.reports.report.wealth.cal_view = CalView::Years;
+        a.reports.report.popup = Some(Popup::WealthDate);
+    }),
+    // SYNTHETIC: the wealth statement's wallet checklist open.
+    ("reports-wealth-wallets-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        a.reports.report.fold = Some(Fold::Wealth);
+        a.reports.report.popup = Some(Popup::WealthWallets);
+    }),
     ("reports-reports-audit", |a| {
         open(a, "/reports");
         a.reports.report.fold = Some(Fold::Audit);
@@ -1224,6 +1440,30 @@ pub const SCENES: &[super::Scene] = &[
             path: None,
             open_path: None,
             actions: vec![],
+            can_export_draft: Some(Fmt::YearHandoff),
+            quarantine: Some(Quarantine {
+                count: 2,
+                rows: vec![
+                    json!({"transaction_id": "5f0db9cd8a1b2c3d4e5f60718293a4b5c6d7e8f9", "wallet": "Regtest Spending Wallet", "occurred_at": "2025-03-02T10:00:00Z", "reason": "missing_price"}),
+                    json!({"transaction_id": "ef6b457e9a8b7c6d5e4f30211203f4e5d6c7b8a9", "wallet": "Regtest Treasury", "occurred_at": "2025-04-11T08:15:00Z", "reason": "unpaired_transfer"}),
+                ],
+            }),
+        });
+    }),
+    // SYNTHETIC: Austrian book in German with a blocked export and "Als Entwurf exportieren".
+    ("reports-draft-blocked-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_austrian(a);
+        let year = effective_year(a).unwrap_or(2025);
+        a.reports.report.status = Some(Status {
+            year,
+            tone: StatusTone::Error,
+            message: "Year handoff blocked: 2 transactions are quarantined.".into(),
+            notes: vec![],
+            path: None,
+            open_path: None,
+            actions: vec![],
+            can_export_draft: Some(Fmt::YearHandoff),
             quarantine: Some(Quarantine {
                 count: 2,
                 rows: vec![
@@ -1423,6 +1663,7 @@ mod transient_tests {
             path: None,
             open_path: None,
             quarantine: None,
+            can_export_draft: None,
             actions: vec![],
         });
         ui.done = Some((Fmt::YearHandoff, 2025, 5.0));
@@ -1449,7 +1690,7 @@ mod transient_tests {
     #[test]
     fn the_summary_export_sends_the_pages_tax_year_not_utc_bounds() {
         let mut ui = Ui::default();
-        let (kind, args) = request(&ui, Fmt::SummaryPdf, 2024, false);
+        let (kind, args) = request(&ui, Fmt::SummaryPdf, 2024, false, false);
         assert_eq!(kind, "ui.reports.export_summary_pdf");
         assert_eq!(args, json!({"year": 2024, "include_snapshot": true}));
         // A wallet pick and the cover choice ride along; still no hand-built range.
@@ -1467,11 +1708,42 @@ mod transient_tests {
         ]);
         ui.summary_wallets = vec!["b".into()];
         ui.no_cover = true;
-        let (_, args) = request(&ui, Fmt::SummaryPdf, 2025, true);
+        let (_, args) = request(&ui, Fmt::SummaryPdf, 2025, true, false);
         assert_eq!(
             args,
             json!({"year": 2025, "include_snapshot": false, "wallets": ["b"]})
         );
+        // Draft retry forwards `draft: true`.
+        let (kind, args) = request(&ui, Fmt::YearHandoff, 2025, true, true);
+        assert_eq!(kind, "ui.reports.export_year_handoff");
+        assert_eq!(args, json!({"year": 2025, "draft": true}));
+        // Wealth statement forwards as_of, include_regime, include_valuation and wallet subset.
+        ui.wealth.as_of = "2025-12-31".into();
+        ui.wealth.wallets = vec!["b".into()];
+        let (kind, args) = request(&ui, Fmt::WealthPdf, 2025, true, false);
+        assert_eq!(kind, "ui.reports.export_wealth_pdf");
+        assert_eq!(
+            args,
+            json!({
+                "as_of": "2025-12-31",
+                "include_regime": true,
+                "include_valuation": true,
+                "include_wallets": true,
+                "wallets": ["b"]
+            })
+        );
+        // Minimal-disclosure toggle forwards `privacy_mode: true` to report exports (not audit package).
+        ui.privacy_mode = true;
+        let (kind, args) = request(&ui, Fmt::Pdf, 2025, true, false);
+        assert_eq!(kind, "ui.reports.export_austrian_e1kv_pdf");
+        assert_eq!(args, json!({"year": 2025, "privacy_mode": true}));
+        let (kind, args) = request(&ui, Fmt::YearHandoff, 2025, true, false);
+        assert_eq!(kind, "ui.reports.export_year_handoff");
+        assert_eq!(args, json!({"year": 2025, "privacy_mode": true}));
+        let (_, args) = request(&ui, Fmt::WealthPdf, 2025, true, false);
+        assert_eq!(args["privacy_mode"], json!(true));
+        let (_, args) = request(&ui, Fmt::AuditPackage, 2025, true, false);
+        assert!(args.get("privacy_mode").is_none());
     }
 }
 

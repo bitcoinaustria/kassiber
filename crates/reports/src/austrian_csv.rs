@@ -10,9 +10,21 @@ pub(super) fn prepare(
     args: &Value,
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Prepared> {
+    let draft = draft_mode(args);
+    let reasons = if draft {
+        require_context_admit(conn, profile, true, true)?
+    } else {
+        Vec::new()
+    };
     let model = austrian_pdf::model(conn, workspace, profile, args, sources)?;
     let report = value(&model, "report");
-    let design = report_design::austrian(&model);
+    let mut design = report_design::austrian(&model);
+    if privacy_mode(args) {
+        design.apply_privacy_mode_for(&wealth::wallet_custody_map(conn, &text(profile, "id"))?);
+    }
+    if draft {
+        design.apply_draft(&reasons);
+    }
     let rows: Vec<(&str, usize)> = design
         .sections
         .iter()
@@ -54,7 +66,7 @@ pub(super) fn prepare(
             ),
         ]),
         files,
-        completion: Some(crate::export_completion::Completion {
+        completion: (!draft).then(|| crate::export_completion::Completion {
             kind: "austrian-e1kv.csv-bundle".into(),
             year: Some(value(report, "tax_year").clone()),
             end_year: None,

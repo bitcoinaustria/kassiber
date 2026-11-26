@@ -299,6 +299,7 @@ pub fn prepare(
             | "reports.export-austrian-e1kv-xlsx"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
+            | "reports.export-wealth-xlsx"
             | "reports.export-year-handoff"
     ) {
         return Err(AppError::new(
@@ -315,6 +316,9 @@ pub fn prepare(
         }
         if command == "reports.export-exit-tax-xlsx" {
             return exit_xlsx::prepare(conn, args, sources);
+        }
+        if command == "reports.export-wealth-xlsx" {
+            return wealth::prepare_xlsx(conn, args, sources);
         }
         if command == "reports.export-year-handoff" {
             return year_handoff_xlsx::prepare(conn, args, sources);

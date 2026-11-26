@@ -320,6 +320,8 @@ pub fn cross_check(report: &Value, created: &str, lang: Lang) -> Document {
         fiat,
         country: String::new(),
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

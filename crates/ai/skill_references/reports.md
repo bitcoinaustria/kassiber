@@ -308,6 +308,45 @@ ordinary realized-report snapshot. PDF/XLSX stamp `departureTimezone`, `journalI
 quotes for manual freshness comparison, without automatic amendment tracking.
 See `docs/plan/11-exit-tax-deemed-disposal.md`.
 
+## Wealth statement (Stichtag / point-in-time holdings)
+
+```bash
+kassiber --machine reports wealth --as-of 2025-12-31
+kassiber reports export-wealth-pdf --as-of 2025-12-31 --file wealth-2025.pdf
+kassiber reports export-wealth-xlsx --as-of 2025-12-31 --file wealth-2025.xlsx --privacy-mode
+kassiber reports export-wealth-csv --as-of 2025-12-31 --file wealth-2025.csv --no-include-valuation
+```
+
+Point-in-time holdings statement as of `--as-of` (`YYYY-MM-DD` or RFC3339 with
+offset; defaults to today in the book's calendar, Europe/Vienna for Austrian
+books, UTC otherwise). Optional flags:
+
+- `--wallet` (repeatable) restricts scope to selected wallets.
+- `--include-regime` / `--no-include-regime` toggles the Altbestand / Neubestand
+  split (default on for Austrian books).
+- `--include-valuation` / `--no-include-valuation` toggles book value, cutoff
+  spot rate, market value, and lower-of-cost-or-market (default on).
+- `--include-wallets` / `--no-include-wallets` toggles the per-wallet breakdown
+  table (default on).
+- `--privacy-mode` (also `privacy_mode` on the desktop and assistant report
+  exports; the CLI has it only on the wealth commands) replaces self-custody
+  wallet names with `Eigenverwahrung` / `Self-custody`, exchange wallet names
+  with custody categories, and omits transaction IDs.
+- `--draft` (also `draft` on the desktop and assistant report exports; the CLI
+  has it only on the wealth commands) explicitly marks the export
+  as a draft with a diagonal PDF watermark and skips saving a `report_snapshots`
+  entry; when readiness blockers exist, wealth statements fall back to draft
+  automatically instead of hard-blocking. Only exports and the wealth statement
+  honor `draft`; other report reads stay blocked until their inputs are ready.
+
+Each row carries `quantity` and `quantityUnit` in the asset's own unit;
+`quantityBtc` / `quantityMsat` are set only for Bitcoin (BTC, Liquid BTC).
+Quantity totals count Bitcoin only and `totals.excludedQuantityAssets` names
+the assets left out; fiat totals cover every asset.
+
+Daemon kinds: `ui.reports.wealth_preview`, `ui.reports.export_wealth_pdf`,
+`ui.reports.export_wealth_xlsx`, `ui.reports.export_wealth_csv`.
+
 ## Journal entries
 
 ```bash

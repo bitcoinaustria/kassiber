@@ -892,6 +892,8 @@ pub fn full(model: &Value) -> Document {
         fiat: currency,
         country,
         lang,
+        watermark: None,
+        privacy_mode: false,
         sections,
     }
 }

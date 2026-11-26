@@ -237,7 +237,8 @@
     },
     "transactions_one": "{{count}} transaction",
     "transactions_other": "{{count}} transactions",
-    "trendChange": "{{change}} over 12 months"
+    "trendChange": "{{change}} over 12 months",
+    "exportWealth": "Export wealth statement…"
   },
   "recentTx": {
     "title": "Recent Transactions",

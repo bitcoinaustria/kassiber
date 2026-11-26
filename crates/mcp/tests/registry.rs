@@ -35,9 +35,10 @@ fn list(value: &Value) -> &[Value] {
 /// Rust-only tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots):
 /// Python's registry lacks them, so they are compared to their own
 /// classification here and left out of the Python comparison.
-const RUST_ONLY: [(&str, &str); 2] = [
+const RUST_ONLY: [(&str, &str); 3] = [
     ("ui.sources.coverage", "read"),
     ("ui.sources.attest_coverage", "accounting_decisions"),
+    ("ui.reports.wealth_preview", "operator"),
 ];
 
 /// The reproducibility check, also Rust only (`docs/reference/rust-shell.md#rust-only-commands`),
@@ -120,6 +121,45 @@ fn listings_and_definitions_follow_the_grant() {
         .filter(|definition| match get(definition, "name") {
             Some(Value::Str(name)) => !skipped.iter().any(|n| Some(n.as_str()) == name.as_str()),
             _ => true,
+        })
+        .map(|mut definition| {
+            // `reports_export` gained Rust-only wealth/draft/privacy options after Python froze its schema.
+            if get(&definition, "name") == Some(&s("reports_export")) {
+                if let Value::Dict(ref mut top) = definition {
+                    if let Some((_, Value::Dict(schema))) =
+                        top.iter_mut().find(|(k, _)| *k == Key::from("inputSchema"))
+                    {
+                        if let Some((_, Value::Dict(props))) = schema
+                            .iter_mut()
+                            .find(|(k, _)| *k == Key::from("properties"))
+                        {
+                            props.retain(|(k, _)| {
+                                ![
+                                    "wallets",
+                                    "as_of",
+                                    "include_regime",
+                                    "include_valuation",
+                                    "include_wallets",
+                                    "privacy_mode",
+                                    "draft",
+                                ]
+                                .iter()
+                                .any(|name| *k == Key::from(*name))
+                            });
+                            if let Some((_, Value::Dict(report))) =
+                                props.iter_mut().find(|(k, _)| *k == Key::from("report"))
+                            {
+                                if let Some((_, Value::List(variants))) =
+                                    report.iter_mut().find(|(k, _)| *k == Key::from("enum"))
+                                {
+                                    variants.retain(|v| *v != s("wealth"));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            definition
         })
         .collect();
     assert_eq!(definitions, list(field(&vectors, "definitions")));

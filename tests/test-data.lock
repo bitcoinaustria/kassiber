@@ -2,7 +2,7 @@
 # scripts/fetch-test-data.sh; never edit by hand (see
 # docs/reference/testing.md#generated-test-data). <git blob id> <path>
 branch t3code/test-data
-commit 511f7da12b12a6a3e99357bd5353643248694e4a
+commit a69e11dc785201f41f5541ef06f38ae20342bfe6
 ab2bfbb90cc8996dcee6933efaf1a0fd9ea88f89 crates/ai/tests/data/vectors.json
 b02df587ab3b14801a923c1049f1ce4062b1188e crates/chain/fixtures/python_btcpay.json
 76906734c1ea7bd4f09690ad90894cfcadf9f333 crates/chain/fixtures/python_cln.json
@@ -361,17 +361,17 @@ e34cee35d2bd3f0a19750dd2a9c5018283b708d8 docs/reference/tax-country-ie-vectors.j
 31880f97f7dae43ec53841f1eb55a75125d7152a docs/reference/tax-country-jp-vectors.json
 9d61c8df144465ff8bfd95193370d5cc4e828a9e docs/reference/tax-country-us-vectors.json
 925f522a471bdddc300b4dbf9c7c4233731ac009 tax-engine/core/tests/data/us_fixtures.json
-6c4fd2c71c09c0a18e32efbe7d8cad549ec2b41c tests/data/sessions/blobs-00.tar.gz
-c8a8185d72e9c74d459d851bf501252ba91b7148 tests/data/sessions/blobs-01.tar.gz
+2edfd16724a2190c04f1f140634d240796209062 tests/data/sessions/blobs-00.tar.gz
+5306e87c324719c7bb4bd7e91855b3a30edb7a83 tests/data/sessions/blobs-01.tar.gz
 a06c9e2e0fa86adda64ad206983755304509bf95 tests/data/sessions/blobs-02.tar.gz
 70c25ddbe691350c6b5cf28d49bfc40c867029b4 tests/data/sessions/blobs-03.tar.gz
 11a7562e5c3ca4232c394a366c55fc551484a70b tests/data/sessions/blobs-04.tar.gz
-aeaa78886bc368d7f1ea9b5679a7a97a8430508a tests/data/sessions/blobs-05.tar.gz
-0d4f69cc80e4bfcf40da73c894b68b7dffbda62e tests/data/sessions/blobs-06.tar.gz
-cd6470a6f9c9eed738216baa9b07532e5b07c28d tests/data/sessions/blobs-07.tar.gz
-4af601db3193d0c7dcc9febdb8aca40523fcf2f0 tests/data/sessions/blobs-08.tar.gz
+2d0e100fffecdf724360db4005c263dae9bdb5a9 tests/data/sessions/blobs-05.tar.gz
+d9769461cf6ee91b42838c5ee89083b780d8ad0d tests/data/sessions/blobs-06.tar.gz
+d63af55e869a1c76078ecd3ab2e8b72cc744dadd tests/data/sessions/blobs-07.tar.gz
+4d64e7f09e7e1e1f9cbb11d2650e615e77de97d5 tests/data/sessions/blobs-08.tar.gz
 f40fe9eb01288db1730d52e97276034eef693704 tests/data/sessions/dropped.tsv
-f093baf81d056efd3b76f3da6fb00c107e971360 tests/data/sessions/sessions.tar.gz
+4b45f5302ec8cc79b98fd6ab1938b22d07d96c27 tests/data/sessions/sessions.tar.gz
 c11fcc0f65d3774dba1b50d9073e021445108cfa tests/fixtures/btcpay_bark/0.13.0/invoice.4kA2cCQDoB29RhTSKEMMK1.payment-methods.accounted.json
 42cc6ab29f70c797cd2a005d7f4012e8e9ed6fc6 tests/fixtures/btcpay_bark/0.13.0/invoice.6zTrmwy5tNVt5gzCBmCXvy.payment-methods.accounted.json
 58e6a62b68c6ed0b56157f6775cbba73850e29ed tests/fixtures/btcpay_bark/0.13.0/invoice.E5mxtedvENirbwt55k2V1m.payment-methods.accounted.json

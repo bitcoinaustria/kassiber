@@ -5,7 +5,7 @@ use super::*;
 use artifact_csv::{File, Prepared};
 
 /// The capital-gains rows with their exact stored amounts.
-const SQL: &str = "SELECT je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,je.proceeds_exact,COALESCE(je.cost_basis,0) AS cost_basis,je.cost_basis_exact,COALESCE(je.gain_loss,0) AS gain_loss,je.gain_loss_exact,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC";
+const SQL: &str = "SELECT je.occurred_at,w.label AS wallet,w.kind AS wallet_kind,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,je.proceeds_exact,COALESCE(je.cost_basis,0) AS cost_basis,je.cost_basis_exact,COALESCE(je.gain_loss,0) AS gain_loss,je.gain_loss_exact,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC";
 
 /// The exact amount: the stored exact text, else the stored number.
 fn amount(row: &Value, key: &str) -> Result<String> {
@@ -64,20 +64,36 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
             });
         }
     }
-    let mut header = vec![
-        "occurred_at",
-        "wallet",
-        "transaction_id",
-        "entry_type",
-        "asset",
-        "quantity_btc",
-        "quantity_msat",
-        "proceeds",
-        "cost_basis",
-        "gain_loss",
-        "fiat_currency",
-        "description",
-    ];
+    let privacy = privacy_mode(args);
+    let mut header = if privacy {
+        vec![
+            "occurred_at",
+            "custody",
+            "entry_type",
+            "asset",
+            "quantity_btc",
+            "quantity_msat",
+            "proceeds",
+            "cost_basis",
+            "gain_loss",
+            "fiat_currency",
+        ]
+    } else {
+        vec![
+            "occurred_at",
+            "wallet",
+            "transaction_id",
+            "entry_type",
+            "asset",
+            "quantity_btc",
+            "quantity_msat",
+            "proceeds",
+            "cost_basis",
+            "gain_loss",
+            "fiat_currency",
+            "description",
+        ]
+    };
     if austria {
         header.extend(["at_category", "at_kennzahl"]);
     }
@@ -86,10 +102,20 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
         .iter()
         .map(|row| {
             let quantity = int(row, "quantity");
-            let mut cells = vec![
-                text(row, "occurred_at"),
-                text(row, "wallet"),
-                artifact_csv::cell(value(row, "transaction_id")),
+            let mut cells = vec![text(row, "occurred_at")];
+            if privacy {
+                cells.push(
+                    if wealth::custody_class(&text(row, "wallet_kind")) == "platform" {
+                        "platform".into()
+                    } else {
+                        "self_custody".into()
+                    },
+                );
+            } else {
+                cells.push(text(row, "wallet"));
+                cells.push(artifact_csv::cell(value(row, "transaction_id")));
+            }
+            cells.extend([
                 text(row, "entry_type"),
                 text(row, "asset"),
                 report_design::btc_text(&btc(quantity)?),
@@ -98,8 +124,10 @@ pub(super) fn prepare(conn: &Connection, profile: &Value, args: &Value) -> Resul
                 amount(row, "cost_basis")?,
                 amount(row, "gain_loss")?,
                 fiat.clone(),
-                text(row, "description"),
-            ];
+            ]);
+            if !privacy {
+                cells.push(text(row, "description"));
+            }
             if austria {
                 cells.push(artifact_csv::cell(value(row, "at_category")));
                 cells.push(artifact_csv::cell(value(row, "at_kennzahl")));

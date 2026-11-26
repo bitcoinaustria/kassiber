@@ -305,6 +305,7 @@
 #let report(data) = {
   let m = data.meta
   let notice = m.at("notice", default: none)
+  let watermark = m.at("watermark", default: none)
   set document(title: m.title, author: "Kassiber", keywords: m.keywords,
     date: datetime(year: m.date.at(0), month: m.date.at(1), day: m.date.at(2),
       hour: m.date.at(3), minute: m.date.at(4), second: m.date.at(5)))
@@ -313,6 +314,16 @@
   set page(
     paper: "a4",
     margin: (x: 18mm, top: 22mm, bottom: 20mm),
+    background: if watermark != none {
+      place(center + horizon, rotate(-35deg, text(
+        font: sans,
+        size: 68pt,
+        weight: 500,
+        tracking: 8pt,
+        fill: rgb("#1f2328").transparentize(91%),
+        watermark,
+      )))
+    },
     header: context {
       if counter(page).get().first() > 1 {
         set text(size: 7pt, fill: muted)

@@ -86,13 +86,14 @@ const RUST_ONLY_TOOLS: &[&str] = &[
     "ui.journals.verify",
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
+    "ui.reports.wealth_preview",
 ];
 
-/// The source coverage tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots)
-/// and their capabilities, checked here since Python's vectors lack them.
-const RUST_ONLY: [(&str, &[&str]); 2] = [
+/// Rust-only tools and their capabilities, checked here since Python's vectors lack them.
+const RUST_ONLY: [(&str, &[&str]); 3] = [
     ("ui.sources.coverage", &["operations", "wallets"]),
     ("ui.sources.attest_coverage", &["operations", "wallets"]),
+    ("ui.reports.wealth_preview", &["reports"]),
 ];
 
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {
@@ -167,7 +168,28 @@ fn selection_matches_python() {
 fn catalog_validation_matches_python() {
     for case in section("validation") {
         let tool = get_tool(text(field(case, "tool"))).unwrap();
-        let have = outcome(validate_arguments(tool, field(case, "arguments")));
+        let mut have = outcome(validate_arguments(tool, field(case, "arguments")));
+        // `wealth` is a Rust-only report kind added after the frozen Python vector.
+        if tool.name == "ui.reports.export" {
+            if let Value::Dict(ref mut top) = have {
+                if let Some((_, Value::Dict(err))) = top
+                    .iter_mut()
+                    .find(|(k, _)| *k == kassiber_pyjson::Key::from("error"))
+                {
+                    if let Some((_, Value::Dict(details))) = err
+                        .iter_mut()
+                        .find(|(k, _)| *k == kassiber_pyjson::Key::from("details"))
+                    {
+                        if let Some((_, Value::List(allowed))) = details
+                            .iter_mut()
+                            .find(|(k, _)| *k == kassiber_pyjson::Key::from("allowed"))
+                        {
+                            allowed.retain(|v| *v != s("wealth"));
+                        }
+                    }
+                }
+            }
+        }
         assert_eq!(&have, field(case, "result"), "{case:?}");
     }
 }

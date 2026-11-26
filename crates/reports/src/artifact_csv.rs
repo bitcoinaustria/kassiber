@@ -75,10 +75,26 @@ pub fn prepare(
         if command == "reports.export-exit-tax-pdf" {
             return exit_pdf::prepare(conn, &args, sources);
         }
+        if command == "reports.export-wealth-pdf" {
+            return wealth::prepare_pdf(conn, &args, sources);
+        }
+        if command == "reports.export-wealth-csv" {
+            return wealth::prepare_csv(conn, &args, sources);
+        }
         if command == "reports.export-summary-pdf" {
             return report_design::prepare_summary(conn, &args, sources);
         }
-        require_context(conn, &profile, false)?;
+        if command == "reports.export-capital-gains-csv" && draft_mode(&args) {
+            return Err(AppError::new(
+                "validation",
+                "Capital-gains CSV does not support draft exports; resolve blockers or export a draft PDF/XLSX/wealth statement instead.",
+            ));
+        }
+        if draft_mode(&args) {
+            require_context_admit(conn, &profile, false, true)?;
+        } else {
+            require_context(conn, &profile, false)?;
+        }
         match command {
             "reports.export-capital-gains-csv" => capital_csv::prepare(conn, &profile, &args),
             "reports.export-csv" => full_csv::prepare(conn, &workspace, &profile, &args, sources),

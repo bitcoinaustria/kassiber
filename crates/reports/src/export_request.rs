@@ -14,6 +14,9 @@ pub fn handles(command: &str) -> bool {
             | "reports.export-exit-tax-pdf"
             | "reports.export-xlsx"
             | "reports.export-exit-tax-xlsx"
+            | "reports.export-wealth-pdf"
+            | "reports.export-wealth-xlsx"
+            | "reports.export-wealth-csv"
             | "reports.export-commercial-subledger-csv"
             | "reports.export-austrian-e1kv-csv"
             | "reports.export-austrian-e1kv-xlsx"
@@ -31,6 +34,9 @@ pub fn handles(command: &str) -> bool {
             | "reports.export-year-handoff"
             | "ui.reports.export_year_handoff"
             | "ui.reports.export_exit_tax_xlsx"
+            | "ui.reports.export_wealth_pdf"
+            | "ui.reports.export_wealth_xlsx"
+            | "ui.reports.export_wealth_csv"
             | "ui.reports.export_csv"
             | "ui.reports.export_austrian_e1kv_csv"
             | "ui.reports.export_austrian_e1kv_xlsx"
@@ -157,9 +163,17 @@ fn summary_args(raw: &Value) -> Result<()> {
             .iter()
             .filter_map(|(k, _)| match k {
                 kassiber_pyjson::Key::Str(k)
-                    if !["start", "end", "year", "wallets", "include_snapshot"]
-                        .iter()
-                        .any(|a| k.as_str() == Some(a)) =>
+                    if ![
+                        "start",
+                        "end",
+                        "year",
+                        "wallets",
+                        "include_snapshot",
+                        "draft",
+                        "privacy_mode",
+                    ]
+                    .iter()
+                    .any(|a| k.as_str() == Some(a)) =>
                 {
                     Some(k.clone())
                 }
@@ -221,7 +235,7 @@ fn summary_args(raw: &Value) -> Result<()> {
 /// The full report's CSV bundle is a ZIP: a requested path without the
 /// `.zip` suffix gets it, as Python's source-of-funds bundle does.
 fn csv_bundle_path(command: &str, path: PathBuf) -> PathBuf {
-    if command == "reports.export-csv"
+    if matches!(command, "reports.export-csv" | "reports.export-wealth-csv")
         && !path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
@@ -267,32 +281,35 @@ fn execute_admitted(
     } else {
         command
     };
+    let draft = draft_mode(raw);
     let desktop = command.starts_with("ui.");
     let xlsx = command == "ui.reports.export_xlsx"
         || command == "ui.reports.export_austrian_e1kv_xlsx"
         || command == "ui.reports.export_exit_tax_xlsx"
+        || command == "ui.reports.export_wealth_xlsx"
         || command == "ui.transactions.export_xlsx"
         || (command == "transactions.export" && text(raw, "export_format") == "xlsx")
         || command == "ui.reports.export_year_handoff";
     if !desktop && command != "transactions.export" {
         // The CLI admits final accounting exports against source freshness
-        // before it reads anything else. Python admitted only its PDFs and
-        // the year handoff; every report the desktop admits is admitted here
-        // too, so a pending scan or failed source blocks both alike.
-        if matches!(
-            command,
-            "reports.export-year-handoff"
-                | "reports.export-pdf"
-                | "reports.export-summary-pdf"
-                | "reports.export-exit-tax-pdf"
-                | "reports.export-austrian-e1kv-pdf"
-                | "reports.export-xlsx"
-                | "reports.export-csv"
-                | "reports.export-capital-gains-csv"
-                | "reports.export-austrian-e1kv-csv"
-                | "reports.export-austrian-e1kv-xlsx"
-                | "reports.export-exit-tax-xlsx"
-        ) {
+        // before it reads anything else. Draft exports and wealth statements
+        // carry their own draft disclosure instead of hard-blocking.
+        if !draft
+            && matches!(
+                command,
+                "reports.export-year-handoff"
+                    | "reports.export-pdf"
+                    | "reports.export-summary-pdf"
+                    | "reports.export-exit-tax-pdf"
+                    | "reports.export-austrian-e1kv-pdf"
+                    | "reports.export-xlsx"
+                    | "reports.export-csv"
+                    | "reports.export-capital-gains-csv"
+                    | "reports.export-austrian-e1kv-csv"
+                    | "reports.export-austrian-e1kv-xlsx"
+                    | "reports.export-exit-tax-xlsx"
+            )
+        {
             let (_, profile) = kassiber_setup::references::scope(conn, raw)?;
             freshness(conn, &profile)?;
         }
@@ -328,12 +345,16 @@ fn execute_admitted(
     };
     let mut range_label = None;
     if desktop
+        && !draft
         && !matches!(
             command,
             "ui.transactions.export_csv"
                 | "ui.transactions.export_xlsx"
                 | "ui.transactions.export_platform_csv"
                 | "ui.source_funds.export_pdf"
+                | "ui.reports.export_wealth_pdf"
+                | "ui.reports.export_wealth_xlsx"
+                | "ui.reports.export_wealth_csv"
         )
     {
         freshness(conn, &profile)?;
@@ -395,7 +416,9 @@ fn execute_admitted(
                 let mut unknown: Vec<_> = fields
                     .iter()
                     .filter_map(|(k, _)| match k {
-                        kassiber_pyjson::Key::Str(k) if k.as_str() != Some("year") => {
+                        kassiber_pyjson::Key::Str(k)
+                            if !matches!(k.as_str(), Some("year" | "draft" | "privacy_mode")) =>
+                        {
                             Some(k.clone())
                         }
                         _ => None,
@@ -424,9 +447,33 @@ fn execute_admitted(
                 "year_handoff",
             )
         }
+        "ui.reports.export_wealth_pdf"
+        | "ui.reports.export_wealth_xlsx"
+        | "ui.reports.export_wealth_csv" => {
+            let preview = execute_with_sources(conn, "reports.wealth", &args, sources)?;
+            let as_of = value(&preview, "asOfDate").clone();
+            if truthy(value(&preview, "isDraft")) {
+                replace(&mut args, "draft", Value::Bool(true));
+            }
+            replace(&mut args, "as_of", as_of.clone());
+            let (native, suffix) = match command {
+                "ui.reports.export_wealth_pdf" => ("reports.export-wealth-pdf", ".pdf"),
+                "ui.reports.export_wealth_xlsx" => ("reports.export-wealth-xlsx", ".xlsx"),
+                _ => ("reports.export-wealth-csv", ".zip"),
+            };
+            let stem = format!("kassiber-wealth-{}", py_str(&as_of));
+            (native, stem, suffix, "wealth")
+        }
         "ui.reports.export_exit_tax_xlsx" | "ui.reports.export_exit_tax_pdf" => {
-            let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
-            let departure = value(&report, "departureDate").clone();
+            // A draft export resolves its departure date through the writer's
+            // draft-aware model; the strict read would refuse a blocked book.
+            let departure = if draft_mode(&args) {
+                let model = crate::exit_pdf::model(conn, &args, sources)?;
+                value(value(&model, "report"), "departureDate").clone()
+            } else {
+                let report = execute_with_sources(conn, "reports.exit-tax", &args, sources)?;
+                value(&report, "departureDate").clone()
+            };
             replace(&mut args, "departure_date", departure.clone());
             let pdf = command == "ui.reports.export_exit_tax_pdf";
             (
@@ -472,6 +519,11 @@ fn execute_admitted(
             "austrian_e1kv",
         ),
         "ui.reports.export_capital_gains_csv" => {
+            if draft {
+                return Err(validation(
+                    "Capital-gains CSV does not support draft exports; resolve blockers or export a draft PDF/XLSX/wealth statement instead.",
+                ));
+            }
             let year = value(raw, "year");
             let stem = if matches!(year, Value::Null) {
                 "kassiber-capital-gains".into()
@@ -618,6 +670,17 @@ fn execute_admitted(
                 format!("{command} is not implemented in the Rust backend yet"),
             ))
         }
+    };
+    let privacy = privacy_mode(raw);
+    let stem = if privacy && !stem.ends_with("-minimal") {
+        format!("{stem}-minimal")
+    } else {
+        stem
+    };
+    let stem = if (draft || draft_mode(&args)) && !stem.ends_with("-draft") {
+        format!("{stem}-draft")
+    } else {
+        stem
     };
     let target = if desktop {
         managed(exports_root, &stem, suffix, &now(conn, sources)?.0)?

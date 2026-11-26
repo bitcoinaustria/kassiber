@@ -15,7 +15,7 @@
 //! the book's exports folder. Tags start with `"reports.ledger."`.
 
 pub(crate) mod common;
-mod exit_tax;
+pub(crate) mod exit_tax;
 mod journals;
 mod reportable;
 mod verify;

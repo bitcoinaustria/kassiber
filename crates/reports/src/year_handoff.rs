@@ -406,8 +406,14 @@ pub(super) fn build(
     sources: &dyn kassiber_setup::Sources,
 ) -> Result<Value> {
     let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
-    require_context(conn, &profile, false)?;
-    export_request::freshness(conn, &profile)?;
+    let draft = draft_mode(args);
+    let mut draft_reasons = if draft {
+        require_context_admit(conn, &profile, false, true)?
+    } else {
+        require_context(conn, &profile, false)?;
+        export_request::freshness(conn, &profile)?;
+        Vec::new()
+    };
     if matches!(value(args, "year"), Value::Null) {
         return Err(AppError::new(
             "validation",
@@ -419,7 +425,24 @@ pub(super) fn build(
         &profile,
         austrian::normalize_tax_year(value(args, "year"))?,
     )?;
-    quarantine(conn, &profile, &period)?;
+    let quarantined_count: i64 = if draft {
+        match quarantine(conn, &profile, &period) {
+            Ok(()) => 0,
+            Err(error) => {
+                let count = error
+                    .details
+                    .as_ref()
+                    .map(|d| int(d, "count"))
+                    .filter(|c| *c > 0)
+                    .unwrap_or(1);
+                draft_reasons.push(error.message);
+                count
+            }
+        }
+    } else {
+        quarantine(conn, &profile, &period)?;
+        0
+    };
     let id = text(&profile, "id");
     let observed = rows(conn,"SELECT t.*,w.label AS wallet,COALESCE(t.external_id,'') AS external_id FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.profile_id=? AND t.excluded=0 ORDER BY t.occurred_at,t.created_at,t.id",[&id])?;
     let observed_map: BTreeMap<_, _> = observed.iter().map(|r| (text(r, "id"), r)).collect();
@@ -1172,6 +1195,18 @@ pub(super) fn build(
     ]);
     if let Some(tax_year) = tax_year {
         replace(&mut handoff, "tax_year", tax_year);
+    }
+    if draft {
+        replace(
+            &mut handoff,
+            "quarantined_count",
+            Value::Int(quarantined_count.into()),
+        );
+        replace(
+            &mut handoff,
+            "draft_reasons",
+            Value::List(draft_reasons.into_iter().map(s).collect()),
+        );
     }
     Ok(handoff)
 }
