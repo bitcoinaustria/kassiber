@@ -205,4 +205,28 @@ mod tests {
             .collect();
         assert!(missing.is_empty(), "{missing:?}");
     }
+
+    /// Each `wallets checkpoints` leaf reaches the broker under its own path
+    /// and capability, not the bare group (which has none).
+    #[test]
+    fn wallets_checkpoints_leaves_classify_under_their_own_capability() {
+        for (leaf, extra, expected) in [
+            ("list", &[][..], Capability::Read),
+            (
+                "add",
+                &["--wallet", "w", "--btc", "1", "--date", "2025-01-01"][..],
+                Capability::Operator,
+            ),
+            ("remove", &["--id", "c"][..], Capability::Operator),
+            ("import", &["--file", "c.csv"][..], Capability::Operator),
+            ("export", &[][..], Capability::Operator),
+        ] {
+            let mut items = vec!["--machine", "wallets", "checkpoints", leaf];
+            items.extend_from_slice(extra);
+            let parsed =
+                classify(&argv(&items)).unwrap_or_else(|error| panic!("{leaf}: {error:?}"));
+            assert_eq!(parsed.command_path, format!("wallets.checkpoints.{leaf}"));
+            assert_eq!(parsed.capability, expected, "{leaf}");
+        }
+    }
 }

@@ -41,7 +41,7 @@ const CLI_READ_PATHS: &str = "
     backends.list backends.kinds backends.get context.show context.current
     workspaces.list profiles.list profiles.get profiles.settings accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
-    wallets.analyze-file wallets.coverage
+    wallets.analyze-file wallets.coverage wallets.checkpoints.list
     transactions.list transactions.verify transfers.dismissals.list attachments.list attachments.verify metadata.tags.list
     metadata.bip329.preview metadata.bip329.list metadata.records.list
     metadata.records.get metadata.records.history.list
@@ -94,6 +94,8 @@ const CLI_OPERATOR_PATHS: &str = "
     wallets.ledger-template wallets.import-document wallets.import-samourai
     wallets.sync-btcpay wallets.attach-btcpay wallets.attach-bullbitcoin-wallet
     wallets.sync wallets.derive transactions.export attachments.add
+    wallets.checkpoints.add wallets.checkpoints.remove wallets.checkpoints.import
+    wallets.checkpoints.export
     attachments.rename attachments.remove attachments.gc metadata.notes.set
     metadata.notes.clear metadata.tags.create metadata.tags.add
     metadata.tags.remove metadata.bip329.import metadata.bip329.export
@@ -166,6 +168,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.transactions.search ui.transactions.ledger_template
     ui.transactions.history ui.activity.history ui.activity.stale
     ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos ui.sources.coverage
+    ui.wallets.checkpoints.list
     ui.privacy_hygiene.snapshot ui.wallets.identify ui.loans.list
     ui.backends.list ui.backends.options ui.backends.public_defaults
     ui.backends.settings.list
@@ -217,6 +220,8 @@ const DAEMON_OPERATOR_KINDS: &str = "
     ui.report.blockers
     ui.rates.latest ui.attachments.add ui.attachments.copy
     ui.attachments.rename ui.attachments.remove ui.wallets.identify_onchain
+    ui.wallets.checkpoints.add ui.wallets.checkpoints.remove
+    ui.wallets.checkpoints.import ui.wallets.checkpoints.export
     ui.wallets.identify_onchain.cancel
     ui.backends.create ui.backends.update ui.backends.set_default
     ui.backends.bitcoinrpc.test ui.backends.btcpay.test

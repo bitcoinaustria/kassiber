@@ -813,7 +813,15 @@ pub fn snapshot(conn: &Connection, health: Value, rates_coverage: Value) -> Resu
             ));
         }
     }
-    let warnings = val(&custody_quantity, "warnings");
+    let mut warnings = val(&custody_quantity, "warnings");
+    if profile != Value::Null {
+        let profile_id = py_str(&val(&profile, "id"));
+        if let Some(item) = balance_checkpoint_warning(conn, &profile_id)? {
+            if let Value::List(items) = &mut warnings {
+                items.push(item);
+            }
+        }
+    }
     Ok(dict([
         ("ready", Value::Bool(blockers.is_empty())),
         ("blockers", Value::List(blockers)),
@@ -824,6 +832,42 @@ pub fn snapshot(conn: &Connection, health: Value, rates_coverage: Value) -> Resu
     ]))
 }
 
+/// A source whose latest reported balance differs from the book
+/// (docs/reference/balance-checkpoints.md): a warning that the source may be
+/// incomplete, never a blocker and never a correction. Reads stored data only.
+fn balance_checkpoint_warning(conn: &Connection, profile_id: &str) -> Result<Option<Value>> {
+    // A book the open has not brought to the current schema (a frozen test
+    // book, an admission-only read) has no checkpoints to warn about.
+    let present = rows(
+        conn,
+        "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='balance_checkpoints'",
+        [],
+    )?;
+    if present.is_empty() {
+        return Ok(None);
+    }
+    let mismatches = kassiber_workspace::balance_checks::mismatches(conn, profile_id)?;
+    if mismatches.is_empty() {
+        return Ok(None);
+    }
+    let wallets: BTreeSet<String> = mismatches
+        .iter()
+        .map(|m| py_str(&val(m, "wallet_id")))
+        .collect();
+    Ok(Some(dict([
+        ("code", s("balance_checkpoint_mismatch")),
+        ("severity", s("warning")),
+        (
+            "message",
+            s(format!(
+                "{} source(s) report a balance that differs from the book; the source may be incomplete.",
+                wallets.len()
+            )),
+        ),
+        ("action_kind", s("ui.wallets.checkpoints.list")),
+        ("checkpoints", Value::List(mismatches)),
+    ])))
+}
 /// `_sync_failure_blocker` + `_apply_sync_failure_blocker`: an automatic
 /// report-read refresh that failed makes the snapshot not ready.
 pub fn apply_sync_failure(mut payload: Value, sync: Option<&Value>) -> Value {
@@ -1029,6 +1073,97 @@ mod tests {
         assert_eq!(
             missing(&rates_coverage(conn, &limit).unwrap()),
             baseline + BigInt::from(1)
+        );
+        drop(book);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A differing balance checkpoint is a readiness warning that names the
+    /// wallet and its signed difference; it never becomes a blocker.
+    #[test]
+    fn a_differing_balance_checkpoint_warns_without_blocking() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "kassiber-checkpoint-warning-{}-{nanos}",
+            std::process::id()
+        ));
+        let book = kassiber_store::Book::create(&dir, None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(include_str!("../../transactions/tests/data/desktop.sql"))
+            .unwrap();
+        conn.execute_batch(
+            "UPDATE profiles SET last_processed_at='2025',
+              last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0),
+              last_processed_input_version=journal_input_version WHERE id='p';",
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE profiles SET journal_semantics_version=? WHERE id='p'",
+            [kassiber_store::semantics::JOURNAL_CALCULATION_SEMANTICS_VERSION],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO journal_quantity_postings(posting_id,workspace_id,profile_id,transaction_id,occurred_at,asset,location_kind,location_id,amount_msat,state,created_at)
+              VALUES('pb','w','p','b','2025-02-01T00:00:00Z','BTC','wallet','ln',100001,'booked','2025');",
+        )
+        .unwrap();
+        let (context, active) = kassiber_workspace::readiness::scope(conn, None).unwrap();
+        let read = |conn: &Connection| {
+            let health =
+                kassiber_workspace::readiness::health(conn, &context, active.as_ref()).unwrap();
+            let coverage =
+                kassiber_rates::coverage(conn, &dict([("limit", Value::Int(10.into()))])).unwrap();
+            snapshot(conn, health, coverage).unwrap()
+        };
+        let codes = |payload: &Value| -> Vec<String> {
+            match get(payload, "warnings") {
+                Some(Value::List(items)) => items.iter().map(|w| py_str(&val(w, "code"))).collect(),
+                _ => vec![],
+            }
+        };
+        let before = read(conn);
+        assert!(!codes(&before).contains(&"balance_checkpoint_mismatch".to_owned()));
+        kassiber_wallets::checkpoints::add_manual(
+            conn,
+            "p",
+            &kassiber_wallets::checkpoints::Manual {
+                wallet: "ln",
+                btc: "0.00000100002",
+                as_of: "2025-02-28",
+                asset: None,
+                note: None,
+                attachment: None,
+            },
+        )
+        .unwrap();
+        let after = read(conn);
+        assert!(
+            codes(&after).contains(&"balance_checkpoint_mismatch".to_owned()),
+            "{after:?}"
+        );
+        assert_eq!(
+            ids(&after),
+            ids(&before),
+            "a checkpoint never adds a blocker"
+        );
+        let Some(Value::List(warnings)) = get(&after, "warnings") else {
+            panic!()
+        };
+        let warning = warnings
+            .iter()
+            .find(|w| py_str(&val(w, "code")) == "balance_checkpoint_mismatch")
+            .unwrap();
+        let Value::List(checkpoints) = val(warning, "checkpoints") else {
+            panic!()
+        };
+        assert_eq!(checkpoints.len(), 1);
+        assert_eq!(py_str(&val(&checkpoints[0], "wallet_id")), "ln");
+        assert_eq!(
+            int(&val(&checkpoints[0], "difference_msat")).unwrap(),
+            1.into()
         );
         drop(book);
         let _ = std::fs::remove_dir_all(&dir);

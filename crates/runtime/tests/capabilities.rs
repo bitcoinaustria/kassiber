@@ -87,6 +87,13 @@ fn tables_match_python() {
         ("reports.export-wealth-pdf", "reports.export-exit-tax-pdf"),
         ("reports.export-wealth-xlsx", "reports.export-exit-tax-xlsx"),
         ("reports.export-wealth-csv", "reports.export-csv"),
+        // Balance checkpoints (docs/reference/balance-checkpoints.md): listing is a
+        // read beside the wallets list; the writes and the export are operator.
+        ("wallets.checkpoints.list", "wallets.list"),
+        ("wallets.checkpoints.add", "attachments.add"),
+        ("wallets.checkpoints.remove", "attachments.remove"),
+        ("wallets.checkpoints.import", "attachments.add"),
+        ("wallets.checkpoints.export", "transactions.export"),
     ];
     for (leaf, sibling) in rust_only {
         assert_eq!(cli_capability(leaf), cli_capability(sibling), "{leaf}");
@@ -167,6 +174,14 @@ fn tables_match_python() {
             "ui.reports.export_exit_tax_xlsx",
         ),
         ("ui.reports.export_wealth_csv", "ui.reports.export_csv"),
+        ("ui.wallets.checkpoints.list", "ui.wallets.list"),
+        ("ui.wallets.checkpoints.add", "ui.attachments.add"),
+        ("ui.wallets.checkpoints.remove", "ui.attachments.remove"),
+        ("ui.wallets.checkpoints.import", "ui.attachments.add"),
+        (
+            "ui.wallets.checkpoints.export",
+            "ui.transactions.export_csv",
+        ),
     ];
     for (kind, sibling) in rust_only_kinds {
         assert!(daemon_capability(kind).is_some(), "{kind}");

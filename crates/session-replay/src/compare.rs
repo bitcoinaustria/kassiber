@@ -742,6 +742,11 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.reports.export_wealth_pdf",
     "ui.reports.export_wealth_xlsx",
     "ui.reports.export_wealth_csv",
+    "ui.wallets.checkpoints.list",
+    "ui.wallets.checkpoints.add",
+    "ui.wallets.checkpoints.remove",
+    "ui.wallets.checkpoints.import",
+    "ui.wallets.checkpoints.export",
 ];
 
 /// Replayed daemon output without the Rust-only kinds in its `daemon.ready`

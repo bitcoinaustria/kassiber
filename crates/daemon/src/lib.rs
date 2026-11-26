@@ -23,6 +23,7 @@ mod backup;
 mod bank_statements;
 mod chain_analysis_reads;
 mod chat_uploads;
+mod checkpoints;
 pub mod control;
 mod diagnostics;
 mod documents;
@@ -132,6 +133,11 @@ pub const RUST_ONLY_KINDS: &[&str] = &[
     "ui.reports.export_wealth_pdf",
     "ui.reports.export_wealth_xlsx",
     "ui.reports.export_wealth_csv",
+    "ui.wallets.checkpoints.list",
+    "ui.wallets.checkpoints.add",
+    "ui.wallets.checkpoints.remove",
+    "ui.wallets.checkpoints.import",
+    "ui.wallets.checkpoints.export",
 ];
 
 /// Every kind `daemon.ready` advertises.
@@ -305,6 +311,8 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(chain_analysis_reads::KINDS);
     kinds.extend(chain_analysis_ops::KINDS);
     kinds.extend(chain_analysis_ops::DATASET_KINDS);
+    // Rust only: advertised after every kind Python had.
+    kinds.extend(checkpoints::KINDS);
     // Advertise in Python's order; test-only kinds Python lacks stay last.
     kinds.sort_by_key(|kind| {
         kind_order::PYTHON
@@ -1227,6 +1235,27 @@ impl Daemon {
                 return Ok((Some(locked), false));
             }
             let payload = loans::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if checkpoints::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let empty = dict::<&str>([]);
+            let args = match args.as_ref() {
+                None | Some(Value::Null) => &empty,
+                Some(value @ Value::Dict(_)) => value,
+                Some(value) => {
+                    return Err(Failure::App(
+                        AppError::new("validation", "daemon args must be an object")
+                            .with_details(dict([("type", s(kassiber_envelope::type_name(value)))])),
+                    ))
+                }
+            };
+            let payload = self.book_mut()?.as_mut().service(&kind_text, args)?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

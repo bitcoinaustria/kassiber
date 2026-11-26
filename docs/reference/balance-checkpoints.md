@@ -9,7 +9,8 @@ for the same moment, history is missing.
 Checkpoints are diagnostics, like
 `kassiber_custody::quantity::balances::compare_wallet_balances`. They never
 change custody, journals, cost basis, tax results or report blockers. A
-differing checkpoint is a review item, never an automatic correction.
+differing checkpoint is a review item and a readiness warning ("the source
+may be incomplete"), never an automatic correction.
 
 The model lives in `crates/wallets/src/checkpoints.rs`; the derived chain
 checkpoints and the request adapter in `crates/workspace/src/balance_checks.rs`.
@@ -22,7 +23,7 @@ checkpoints and the request adapter in `crates/workspace/src/balance_checks.rs`.
 | `file` | the running balance after the last row of an imported file | reserved | not produced yet (see [limits](#limits)) |
 | `chain` | the unspent outputs the wallet's last sync stored (`wallet_utxos` under the same source filter as the overview's chain balance), as of that refresh's `last_seen_at` | no, derived on every read | nothing: reading it opens no connection |
 | `node` | the Core Lightning bookkeeper balances (`balance_snapshot` records, on-chain wallet plus channels) of the wallet's last successful node sync, as of its completion | no, derived on every read | nothing: reading it opens no connection |
-| `manual` | the user's own entry, e.g. from a statement, or a CSV import | yes | the user's explicit entry |
+| `manual` | the user's own entry, e.g. from a statement, or a CSV import | yes | `wallets checkpoints add\|import`, `ui.wallets.checkpoints.add\|import` |
 
 Stored checkpoints come only from an explicit action: a user-triggered sync
 or import, or a manual entry. Reading and comparing checkpoints uses stored
@@ -101,6 +102,54 @@ or before `as_of`, in exact msat. The result is:
 Times typed by the user are a date (`2024-12-31`: the whole UTC day) or a
 date-time with an explicit offset; a date-time without an offset is refused.
 BTC amounts are plain decimals with at most 11 fractional digits.
+
+## Reading
+
+`report(profile, wallet?, history)` lists every wallet with checkpoints: for
+each wallet and each origin and asset the latest checkpoint (`latest: true`),
+the wallet's worst state (`differs` > `unknown` > `matches`), and counts over
+the latest checkpoints. With `history` every checkpoint is listed.
+
+## Surfaces
+
+| Surface | Read | Write |
+| --- | --- | --- |
+| CLI | `wallets checkpoints list [--wallet W] [--history]` | `wallets checkpoints add --wallet W --btc N --date D [--asset BTC\|LBTC] [--note T] [--attachment ID]`, `remove --id ID`, `import --file F`, `export [--wallet W] [--file F]` |
+| Daemon | `ui.wallets.checkpoints.list {wallet?, history?}` (read) | `.add {wallet, btc, date, asset?, note?, attachment?, expected_input_version?}`, `.remove {id, expected_input_version?}`, `.import {csv, source?}`, `.export {wallet?}` (operator) |
+| Report readiness | `ui.report.blockers` adds a `balance_checkpoint_mismatch` warning listing the differing checkpoints; `ready` and the blockers are unchanged | |
+
+All five kinds and leaves are Rust only (`spec::RUST_ONLY_NEW_COMMANDS`,
+`RUST_ONLY_KINDS`). The operator broker classifies each leaf by its own path
+(`checkpoints_command` extends the command path and the envelope kind). The
+daemon never receives a path: a client sends CSV text it read itself, and
+`export` returns the CSV text. The CLI `export --file` writes a new file and
+refuses an existing one.
+
+## CSV
+
+Columns `date,wallet_id,wallet,btc_amount,asset,origin,note,checkpoint_id`;
+`wallet_id`, `asset`, `origin`, `note` and `checkpoint_id` are optional on import, and one of `wallet_id`
+and `wallet` is required. A row names its wallet by `wallet_id` when that id
+is in this book, else by `wallet` (id or label; a label export prefixed
+with `'` is also found without it); an ambiguous label is refused. Every row
+is checked before any is stored; one bad row refuses the file (the message
+names the row), and so does a row with more or fewer fields than the header
+(an unquoted decimal comma such as `0,5` splits into two). Imported rows
+are `manual` checkpoints with `origin_ref` `csv:<file>`: a balance read
+from a file is the user's statement, not an API or chain fact, so an
+`origin` column other than `manual` is kept only as a note prefix
+(`imported api checkpoint: ...`). Export writes stored
+checkpoints oldest first; a wallet label or note starting with `=`, `+`, `-`
+or `@` is prefixed with `'` so a spreadsheet does not run it. A row this book exported
+names its checkpoint (`checkpoint_id`); when that stored row still has the
+same wallet, asset, time, amount, origin and note (a `'`-escaped note counts
+as its stored text), the import leaves it alone, so exporting and
+re-importing adds nothing. A row that keeps the id but changes the note is
+new evidence and becomes a manual checkpoint. Every other row is the user's own
+statement and becomes a manual checkpoint, even when an API or chain
+checkpoint has the same time and amount; only an identical manual row (same
+note included) is not repeated. A file never gains another origin's
+authority.
 
 ## Limits
 
