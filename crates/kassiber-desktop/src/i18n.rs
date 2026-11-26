@@ -244,27 +244,4 @@ pub fn has(key: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bundles_load_and_plurals_interpolate() {
-        set_lang(Lang::En);
-        assert!(table(Lang::En).len() > 7000, "{}", table(Lang::En).len());
-        assert!(table(Lang::De).len() > 7000);
-        assert_eq!(
-            interpolate("{{a}} and {{b}} {{c}}", &[("a", "1"), ("b", "2")]),
-            "1 and 2 {{c}}"
-        );
-        assert_eq!(t("nav:book.overview"), "Overview");
-        assert_eq!(tc("nav:badge.review", 3, &[]), "3 left to review");
-        assert_eq!(t("no:such.key"), "no:such.key");
-        set_lang(Lang::De);
-        assert_eq!(
-            t("nav:book.transactions"),
-            table(Lang::De)["nav:book.transactions"]
-        );
-        assert_ne!(t("nav:book.transactions"), "Transactions");
-        set_lang(Lang::En);
-    }
-}
+mod tests;

@@ -1,7 +1,7 @@
 //! NEW STRINGS — not in the web i18n bundles.
 //!
 //! The zoom, crosshair, measure and percent-scale features have no counterpart in the Tauri
-//! app, so `ui-tauri/src/i18n/locales/*/overview.json` has no keys for them. Their English and
+//! app, so `assets/i18n/locales/*/overview.json` has no keys for them. Their English and
 //! German copy lives here until the bundles gain keys; everything else in the chart goes
 //! through `t("ns:key")`.
 

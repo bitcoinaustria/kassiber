@@ -23,9 +23,8 @@ dependency changes. Regenerate lockfiles instead of copying them.
 
 Kassiber is a Rust workspace plus the desktop app in `crates/kassiber-desktop`
 (a Rune app with its own Cargo workspace and lockfile; the root workspace
-excludes it) and the earlier Tauri desktop in `ui-tauri/`. Both desktops read
-their translations and integration logos from `assets/` at the repository
-root. Use the Rust release [rust-toolchain.toml](rust-toolchain.toml) pins, with rustfmt and
+excludes it). The app reads its translations and integration logos from
+`assets/` at the repository root. Use the Rust release [rust-toolchain.toml](rust-toolchain.toml) pins, with rustfmt and
 clippy. rustup selects it inside the checkout once it is installed:
 
 ```sh
@@ -39,17 +38,10 @@ macOS, OpenSSL are compiled from source by the build, so no system SQLCipher
 or crypto library is needed; a C compiler, `make`, and `perl` are.
 
 `./scripts/bootstrap-dev-env.sh` does this in one step: it installs the pinned
-Rust release through rustup, checks the C toolchain, installs the frontend's
-locked pnpm dependencies, and reports whether `python3` 3.11 or newer is
-available for the regtest harness (standard library only). It sets up no
-Python environment.
-
-For frontend development, use the pnpm version pinned in
-[ui-tauri/package.json](ui-tauri/package.json):
-
-```sh
-pnpm --dir ui-tauri install --frozen-lockfile
-```
+Rust release through rustup, checks the C toolchain and, on Linux, the desktop
+app's build libraries, and reports whether
+`python3` 3.11 or newer is available for the regtest harness (standard library
+only). It sets up no Python environment.
 
 Run the CLI from the checkout with `cargo run -p kassiber -- <command>`, or
 build it once and use `target/debug/kassiber`. The daemon-backed preview and
@@ -82,22 +74,6 @@ packaging/ci/rune-checks.sh --scenes-only --kassiber-bin ../../target/debug/kass
 The last runs every scene headless against a disposable book and fails on
 accessibility-tree problems and missing translations (offline, temporary `HOME`).
 
-Focused frontend checks for the Tauri UI, from `ui-tauri/`:
-
-```sh
-pnpm typecheck
-pnpm test --run
-pnpm lint
-```
-
-Frontend tests render statically on Node by default, so effects never run. A
-test that has to observe an effect (a fetch on mount, a guard that re-arms)
-opts into a DOM per file: name it `*.dom.test.tsx` and start it with
-`// @vitest-environment happy-dom`, then mount with Testing Library's
-`renderHook`/`render` and drive it inside `act`. Keep the default for
-everything else; the DOM costs startup time and hides nothing a static render
-would show.
-
 Before push or PR, run the full gate:
 
 ```sh
@@ -110,8 +86,8 @@ catalog check (`cargo run -p kassiber-mutation-check -- check`), the
 ledger-feature check, the egress observer and `kassiber` test-harness tests,
 the check that a product build carries no test hooks, the desktop app's
 format, clippy and unit-test checks (`crates/kassiber-desktop/packaging/ci/rune-checks.sh
---skip-scenes`), the recorded-session replay (`scripts/replay-sessions.sh`), and
-TypeScript, ESLint, and Vitest for the Tauri UI. The CI lanes, including the regtest integration lanes, are
+--skip-scenes`), and the recorded-session replay (`scripts/replay-sessions.sh`).
+The CI lanes, including the regtest integration lanes, are
 explained in [Testing](docs/reference/testing.md#pull-request-ci). The full
 gate is required before calling work push-ready.
 

@@ -22,17 +22,24 @@ output="$ROOT/dist/linux-x64"
 channel="dev"
 glibc_floor="2.35"
 allow_partial=0
+appimage_runtime="${APPIMAGE_RUNTIME:-}"
 
 usage() {
   cat >&2 <<'EOF'
 Usage: scripts/build-linux-x64-rust-artifacts.sh [--output DIR] [--channel dev|prerelease|release]
                                                  [--glibc-floor VERSION] [--allow-partial]
+                                                 [--appimage-runtime PATH]
 
   --output DIR        Where the artifacts go (default dist/linux-x64; must not exist).
   --glibc-floor V     Accept a binary up to glibc V. Anything above 2.35 is a
                       local functional build, not a release artifact.
   --allow-partial     Skip artifacts whose packaging tool is missing instead of
-                      stopping (dpkg-deb, rpmbuild, Tauri's cached linuxdeploy).
+                      stopping (dpkg-deb, rpmbuild, appimagetool).
+  --appimage-runtime PATH
+                      The AppImage type-2 runtime for appimagetool (default
+                      $APPIMAGE_RUNTIME). Use the release the prerelease workflow
+                      pins (APPIMAGE_RUNTIME_URL/_SHA256); this script never
+                      downloads one, and neither may appimagetool.
 EOF
 }
 
@@ -42,6 +49,7 @@ while [ "$#" -gt 0 ]; do
     --channel) channel="${2:-}"; shift 2 ;;
     --glibc-floor) glibc_floor="${2:-}"; shift 2 ;;
     --allow-partial) allow_partial=1; shift ;;
+    --appimage-runtime) appimage_runtime="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
@@ -61,7 +69,7 @@ run() {
 
 # Preflight: name every missing tool before the long build.
 missing_required=()
-for command in cargo pnpm jq cc readelf objdump tar gzip sha256sum; do
+for command in cargo jq cc readelf objdump tar gzip sha256sum pkg-config; do
   command -v "$command" >/dev/null 2>&1 || missing_required+=("$command")
 done
 if [ "${#missing_required[@]}" -gt 0 ]; then
@@ -74,7 +82,7 @@ want_appimage=1
 missing_optional=()
 if ! command -v dpkg-deb >/dev/null 2>&1; then
   want_deb=0
-  missing_optional+=("dpkg-deb (CLI .deb; the desktop .rpm is built from the desktop .deb)")
+  missing_optional+=("dpkg-deb (CLI and desktop .deb and the desktop AppImage; the desktop .rpm is built from the desktop .deb)")
 fi
 for command in rpmbuild rpm2cpio cpio; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -82,15 +90,16 @@ for command in rpmbuild rpm2cpio cpio; do
     missing_optional+=("$command (CLI and desktop .rpm)")
   fi
 done
-# Tauri downloads linuxdeploy and its plugins into ~/.cache/tauri on first
-# use. That download is a network fetch this script never triggers itself.
-tauri_cache="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
-for tool in linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage.AppImage linuxdeploy-plugin-gtk.sh; do
-  if [ ! -x "$tauri_cache/$tool" ]; then
-    want_appimage=0
-    missing_optional+=("$tauri_cache/$tool (AppImage; Tauri would download it)")
-  fi
-done
+# The AppImage needs appimagetool on PATH and a runtime file: both are
+# downloads this script never makes itself (see --appimage-runtime).
+if ! command -v appimagetool >/dev/null 2>&1; then
+  want_appimage=0
+  missing_optional+=("appimagetool (AppImage)")
+fi
+if [ ! -f "$appimage_runtime" ]; then
+  want_appimage=0
+  missing_optional+=("an AppImage runtime file, --appimage-runtime PATH (AppImage)")
+fi
 if [ "${#missing_optional[@]}" -gt 0 ]; then
   printf 'Missing packaging tools:\n' >&2
   printf '  %s\n' "${missing_optional[@]}" >&2
@@ -131,8 +140,6 @@ run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 
-run pnpm --dir ui-tauri install --frozen-lockfile
-
 smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-linux-smoke.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$smoke_root/cli" \
@@ -152,52 +159,37 @@ if [ "$want_rpm" -eq 1 ]; then
     --version "$version" --architecture x86_64 --output "$release/$name.rpm"
 fi
 
-# Desktop: the same binary as the flat sidecar, with the build record beside
-# it, then the Tauri bundles.
-binaries="$ROOT/ui-tauri/src-tauri/binaries"
-find "$binaries" -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name .gitkeep -exec rm -rf -- {} +
-cp "$binary" "$binaries/kassiber-cli-$TRIPLE"
-chmod 755 "$binaries/kassiber-cli-$TRIPLE"
-cp "$work/BUILD_INFO.json" "$binaries/BUILD_INFO.json"
+# Desktop: the Rune app (crates/kassiber-desktop, without agent tooling)
+# packaged around this exact binary as its sidecar, as CI does.
+if [ "$want_deb" -eq 1 ]; then
+  run bash -c 'cd crates/kassiber-desktop && cargo build --release --locked --no-default-features'
+  rune_bin="${CARGO_TARGET_DIR:-$ROOT/crates/kassiber-desktop/target}/release/kassiber-desktop"
+  appimage_args=(--no-appimage)
+  if [ "$want_appimage" -eq 1 ]; then
+    appimage_args=(--appimage-runtime "$appimage_runtime")
+  fi
+  desktop_out="$work/desktop"
+  run "$ROOT/crates/kassiber-desktop/packaging/linux/build-packages.sh" \
+    --rune-bin "$rune_bin" --kassiber-bin "$binary" --build-info "$work/BUILD_INFO.json" \
+    --version "$version" --arch amd64 --glibc-floor "$glibc_floor" \
+    --output "$desktop_out" "${appimage_args[@]}"
+  cp "$desktop_out/kassiber-$TARGET.deb" "$release/kassiber-$TARGET.deb"
 
-bundles="deb"
-if [ "$want_appimage" -eq 1 ]; then
-  bundles="deb,appimage"
-fi
-tauri_config="$work/tauri-build.json"
-printf '{ "version": "%s" }\n' "$version" > "$tauri_config"
-run env KASSIBER_BUILD_VERSION="$channel" KASSIBER_BUILD_COMMIT="$short_commit" \
-  pnpm --dir ui-tauri tauri build --bundles "$bundles" --ci --config "$tauri_config"
+  # The sidecar in the deb is byte-for-byte the CLI built above.
+  payload="$work/desktop-deb"
+  mkdir -p "$payload"
+  dpkg-deb -x "$release/kassiber-$TARGET.deb" "$payload"
+  cmp "$payload/usr/lib/Kassiber/binaries/kassiber-cli-$TRIPLE" "$binary"
+  test -x "$payload/usr/bin/kassiber"
 
-bundle_dir="$ROOT/ui-tauri/src-tauri/target/release/bundle"
-desktop_deb="$(find "$bundle_dir/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
-test -n "$desktop_deb"
-cp "$desktop_deb" "$release/kassiber-$TARGET.deb"
-
-# The deb payload: shell and sidecar on the floor, and the sidecar is
-# byte-for-byte the CLI built above.
-payload="$work/desktop-deb"
-mkdir -p "$payload"
-(cd "$payload" && ar x "$desktop_deb" && tar -xf data.tar.* && rm -f data.tar.* control.tar.* debian-binary)
-"$ROOT/scripts/check-linux-glibc-floor.sh" --any-libraries "$payload/usr/bin/kassiber-ui" "$glibc_floor"
-sidecar="$payload/usr/lib/Kassiber/binaries/kassiber-cli-$TRIPLE"
-"$ROOT/scripts/check-linux-glibc-floor.sh" "$sidecar" "$glibc_floor"
-cmp "$sidecar" "$binary"
-test -x "$payload/usr/bin/kassiber"
-
-if [ "$want_appimage" -eq 1 ]; then
-  appdir="$(find "$bundle_dir/appimage" -maxdepth 1 -type d -name '*.AppDir' -print -quit)"
-  appimage="$(find "$bundle_dir/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
-  # Same reseal as CI: drop the bundled Wayland client so the host's is used.
-  rm "$appdir/usr/lib/libwayland-client.so.0"
-  APPIMAGE_EXTRACT_AND_RUN=1 LDAI_OUTPUT="$appimage" ARCH=x86_64 \
-    "$tauri_cache/linuxdeploy-plugin-appimage.AppImage" --appimage-extract-and-run --appdir="$appdir"
-  cp "$appimage" "$release/kassiber-$TARGET.AppImage"
-  chmod 755 "$release/kassiber-$TARGET.AppImage"
-  APPIMAGE_EXTRACT_AND_RUN=1 "$release/kassiber-$TARGET.AppImage" --cli --version | grep "$short_commit"
+  if [ "$want_appimage" -eq 1 ]; then
+    cp "$desktop_out/kassiber-$TARGET.AppImage" "$release/kassiber-$TARGET.AppImage"
+    chmod 755 "$release/kassiber-$TARGET.AppImage"
+    APPIMAGE_EXTRACT_AND_RUN=1 "$release/kassiber-$TARGET.AppImage" --cli --version | grep "$short_commit"
+  fi
 fi
 
-if [ "$want_rpm" -eq 1 ]; then
+if [ "$want_rpm" -eq 1 ] && [ "$want_deb" -eq 1 ]; then
   run "$ROOT/scripts/package-desktop-rpm.sh" --deb "$release/kassiber-$TARGET.deb" \
     --version "$version" --architecture x86_64 --output "$release/kassiber-$TARGET.rpm"
 fi

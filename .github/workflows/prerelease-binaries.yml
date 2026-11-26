@@ -1,7 +1,10 @@
 name: prerelease-binaries
 
 on:
+  # Pull requests run only on request: adding the `ci` label (see the note in
+  # ci.yml and docs/reference/testing.md#pull-request-ci).
   pull_request:
+    types: [labeled]
     paths:
       - ".github/workflows/prerelease-binaries.yml"
       - ".github/workflows/finalize-signed-release.yml"
@@ -27,19 +30,8 @@ on:
       - ".github/actions/release-tool/**"
       - "packaging/linux/**"
       - "packaging/release/**"
-      - "ui-tauri/package.json"
-      - "ui-tauri/pnpm-lock.yaml"
-      - "ui-tauri/src-tauri/build.rs"
-      - "ui-tauri/src-tauri/Cargo.lock"
-      - "ui-tauri/src-tauri/Cargo.toml"
-      - "ui-tauri/src-tauri/Info.plist"
-      - "ui-tauri/src-tauri/bin/**"
-      - "ui-tauri/src-tauri/icons/**"
-      - "ui-tauri/src-tauri/src/lib.rs"
-      - "ui-tauri/src-tauri/src/main.rs"
-      - "ui-tauri/src-tauri/src/supervisor.rs"
-      - "ui-tauri/src-tauri/tauri.conf.json"
-      - "ui-tauri/src-tauri/windows/**"
+      # The desktop app (crates/kassiber-desktop) is covered by "crates/**";
+      # its packaging lives in crates/kassiber-desktop/packaging/.
   workflow_dispatch:
     inputs:
       publish_release:
@@ -80,7 +72,8 @@ env:
   HOMEBREW_FORMULA_PATH: Formula/kassiber-cli.rb
 
 concurrency:
-  group: prerelease-binaries-${{ github.ref }}
+  # Another label's run does nothing; it must not displace a requested run.
+  group: prerelease-binaries-${{ (github.event_name == 'pull_request' && github.event.label.name != 'ci' && format('other-label-{0}', github.run_id)) || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -88,7 +81,7 @@ jobs:
     name: Build ${{ matrix.label }} CLI
     # Stacked pull requests (based on another pull request's branch) skip the
     # package builds; they run once the layer targets main (ci.yml lane note).
-    if: github.event_name != 'pull_request' || github.base_ref == 'main'
+    if: github.event_name != 'pull_request' || (github.event.label.name == 'ci' && github.base_ref == 'main')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     # The CLI and the desktop sidecar are the Rust `kassiber` binary (plan 21,
@@ -145,23 +138,11 @@ jobs:
           DISPATCH_PUBLISH_RELEASE: ${{ inputs.publish_release }}
         run: |
           set -euo pipefail
-          # The backend crate carries the product version. Every other copy
-          # must agree.
+          # The backend crate carries the product version; the desktop
+          # packaging scripts stamp it into the app bundles and installers.
           version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
-          table_version() {
-            sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$1" | head -n 1
-          }
-          wrong=""
-          for copy in \
-              "ui-tauri/src-tauri/Cargo.toml=$(table_version ui-tauri/src-tauri/Cargo.toml)" \
-              "ui-tauri/package.json=$(jq -r .version ui-tauri/package.json)" \
-              "ui-tauri/src-tauri/tauri.conf.json=$(jq -r .version ui-tauri/src-tauri/tauri.conf.json)"; do
-            if [ "${copy#*=}" != "$version" ]; then
-              wrong="$wrong ${copy}"
-            fi
-          done
-          if [ -z "$version" ] || [ -n "$wrong" ]; then
-            echo "crates/kassiber is '$version', but these disagree:$wrong" >&2
+          if [ -z "$version" ]; then
+            echo "crates/kassiber/Cargo.toml has no package version" >&2
             exit 1
           fi
           release_tag=""
@@ -281,8 +262,8 @@ jobs:
       # The sidecar is the same executable under its target-triple name, with
       # the build record beside it. macOS keeps the `kassiber-cli/` directory the
       # Touch ID helper's identity check and the bundle launcher expect; the
-      # others stage flat. Both layouts are what `bundled_sidecar` in
-      # ui-tauri/src-tauri/src/supervisor.rs looks for.
+      # others stage flat. The desktop packaging scripts place the binary
+      # where `bundled_sidecar` in crates/kassiber-desktop/src/daemon.rs looks.
       - name: Stage desktop sidecar
         shell: bash
         run: |
@@ -310,12 +291,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The desktop is the Rune app (crates/kassiber-desktop, its own Cargo
+  # workspace), packaged around the sidecar the build-cli job built and smoked.
+  # The packaging scripts under crates/kassiber-desktop/packaging/ assemble the
+  # same layouts and artifact names the earlier desktop bundles had, so the
+  # signing, notarization, Homebrew and Linux channel steps take them unchanged.
   build-desktop:
     name: Build ${{ matrix.label }} desktop preview
     needs:
       - build-cli
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -323,24 +309,29 @@ jobs:
           - label: macOS arm64
             os: macos-latest
             target: macos-arm64
-            bundles: app,dmg
-            tauri_args: --target aarch64-apple-darwin
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-aarch64-apple-darwin
-            sidecar_expected: 1
+            triple: aarch64-apple-darwin
+            exe_ext: ""
+          # Ubuntu 22.04 is the glibc 2.35 floor the deb, rpm and AppImage
+          # declare; build-packages.sh checks both binaries against it.
           - label: Linux
             os: ubuntu-22.04
             target: linux-x64
-            bundles: deb,appimage
-            tauri_args: ""
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-unknown-linux-gnu
-            sidecar_expected: 1
+            triple: x86_64-unknown-linux-gnu
+            exe_ext: ""
+          # windows-2025 (windows-latest) has WiX v3 but no NSIS; the 2022
+          # image has both.
           - label: Windows
-            os: windows-latest
+            os: windows-2022
             target: windows-x64
-            bundles: msi,nsis
-            tauri_args: ""
-            sidecar_artifact_pattern: kassiber-desktop-sidecar-x86_64-pc-windows-msvc
-            sidecar_expected: 1
+            triple: x86_64-pc-windows-msvc
+            exe_ext: ".exe"
+    env:
+      # appimagetool would otherwise download the latest AppImage runtime at
+      # build time; both are pinned by digest (GitHub's release asset digests).
+      APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+      APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+      APPIMAGE_RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+      APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -348,58 +339,69 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: "20"
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 10.33.0
-
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Install Linux Tauri dependencies
+      # Rune's Linux build links fontconfig and compiles wayland-backend's C
+      # shim (as in ci.yml's desktop job); rpm and cpio repack the deb.
+      - name: Install Linux build and packaging tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
+          sudo apt-get install -y --no-install-recommends \
             cpio \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            libfuse2 \
-            libgtk-3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            patchelf \
-            rpm \
-            wget
+            libfontconfig1-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            pkg-config \
+            rpm
 
-      - name: Install frontend dependencies
-        working-directory: ui-tauri
-        run: pnpm install --frozen-lockfile
+      - name: Install the pinned AppImage tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/appimage"
+          mkdir -p "$tools/bin"
+          curl -fsSL --retry 3 -o "$tools/bin/appimagetool" "$APPIMAGETOOL_URL"
+          curl -fsSL --retry 3 -o "$tools/runtime-x86_64" "$APPIMAGE_RUNTIME_URL"
+          printf '%s  %s\n' \
+            "$APPIMAGETOOL_SHA256" "$tools/bin/appimagetool" \
+            "$APPIMAGE_RUNTIME_SHA256" "$tools/runtime-x86_64" | sha256sum -c -
+          chmod 755 "$tools/bin/appimagetool"
+          echo "$tools/bin" >> "$GITHUB_PATH"
+          # Hosted runners have no FUSE for the tool's own AppImage.
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+          echo "APPIMAGE_RUNTIME=$tools/runtime-x86_64" >> "$GITHUB_ENV"
+
+      - name: Put WiX and NSIS on PATH
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${WIX:-}"
+          wix_bin="$(cygpath -u "$WIX")/bin"
+          nsis="/c/Program Files (x86)/NSIS"
+          test -x "$wix_bin/candle.exe"
+          test -x "$wix_bin/light.exe"
+          test -x "$nsis/makensis.exe"
+          cygpath -w "$wix_bin" >> "$GITHUB_PATH"
+          cygpath -w "$nsis" >> "$GITHUB_PATH"
 
       - name: Download desktop CLI sidecar
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: ${{ matrix.sidecar_artifact_pattern }}
-          path: ui-tauri/src-tauri/binaries
+          pattern: kassiber-desktop-sidecar-${{ matrix.triple }}
+          path: sidecar
           merge-multiple: true
 
-      # upload-artifact does not preserve the executable bit, so restore it
-      # before Tauri copies the sidecar into the bundle. macOS looks one level
-      # deeper: its sidecar lands under `binaries/kassiber-cli/`.
+      # upload-artifact does not preserve the executable bit. macOS looks one
+      # level deeper: its sidecar lands under `sidecar/kassiber-cli/`.
       - name: Verify desktop CLI sidecar inputs
         shell: bash
         run: |
           set -euo pipefail
-          root=ui-tauri/src-tauri/binaries
+          root=sidecar
           if [ "$RUNNER_OS" = "macOS" ]; then
             root=$root/kassiber-cli
           fi
@@ -407,166 +409,110 @@ jobs:
           test ! -e "$root/_internal"
           test -s "$root/BUILD_INFO.json"
           count="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' | wc -l | tr -d ' ')"
-          test "$count" = "${{ matrix.sidecar_expected }}"
-          find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
-          find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -print
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            sidecar="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*.exe' -print -quit)"
-            test -n "$sidecar"
-            # The PATH entry runs this copy directly.
-            cp "$sidecar" ui-tauri/src-tauri/bin/kassiber.exe
-          fi
+          test "$count" = 1
+          sidecar="$root/kassiber-cli-${{ matrix.triple }}${{ matrix.exe_ext }}"
+          test -f "$sidecar"
+          chmod 755 "$sidecar"
+          "$sidecar" --version | grep "$(git rev-parse --short=12 HEAD)"
+          version="$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' crates/kassiber/Cargo.toml | head -n 1)"
+          test -n "$version"
+          {
+            echo "SIDECAR=$PWD/$sidecar"
+            echo "SIDECAR_BUILD_INFO=$PWD/$root/BUILD_INFO.json"
+            echo "PACKAGE_VERSION=$version"
+            echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)"
+          } >> "$GITHUB_ENV"
 
-      - name: Build unsigned desktop preview
-        working-directory: ui-tauri
-        # `tsc -b` needs about 2.5 GB of heap, above Node's default limit on
-        # the macOS runner, where it intermittently ran out of memory.
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: pnpm tauri build ${{ matrix.tauri_args }} --bundles ${{ matrix.bundles }} --ci
+      # Without Rune's agent tooling: the shipped app refuses every headless
+      # argument (each packaging script checks).
+      - name: Build the desktop app
+        shell: bash
+        working-directory: crates/kassiber-desktop
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --no-default-features
+          echo "RUNE_BIN=$PWD/target/release/kassiber-desktop${{ matrix.exe_ext }}" >> "$GITHUB_ENV"
 
-      - name: Use the host Wayland client in the AppImage
+      - name: Package the macOS app and DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/desktop"
+          crates/kassiber-desktop/packaging/macos/build-app.sh \
+            --kassiber-bin "$SIDECAR" \
+            --rune-bin "$RUNE_BIN" \
+            --identity release \
+            --version "$PACKAGE_VERSION" \
+            --build-info "$SIDECAR_BUILD_INFO" \
+            --output "$out" \
+            --zip
+          expected_commit="$(git rev-parse --short=12 HEAD)"
+          launcher="$out/Kassiber.app/Contents/Resources/bin/kassiber"
+          "$launcher" --version | grep "$expected_commit"
+          "$launcher" --help >/dev/null
+          test ! -e "$out/Kassiber.app/Contents/Resources/binaries/kassiber-cli/_internal"
+          mkdir -p release
+          cp "$out/kassiber-macos-arm64.app.zip" release/
+          dmg_stage="$(mktemp -d)"
+          ditto "$out/Kassiber.app" "$dmg_stage/Kassiber.app"
+          ln -s /Applications "$dmg_stage/Applications"
+          hdiutil create -quiet -volname Kassiber -srcfolder "$dmg_stage" -ov -format UDZO \
+            release/kassiber-macos-arm64.dmg
+
+      - name: Package the Linux deb, AppImage and rpm
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' -t appdirs < <(
-            find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppDir' -type d -print0
-          )
-          mapfile -d '' -t appimages < <(
-            find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppImage' -type f -print0
-          )
-          test "${#appdirs[@]}" -eq 1
-          test "${#appimages[@]}" -eq 1
-
-          appdir="$(realpath "${appdirs[0]}")"
-          appimage="$(realpath "${appimages[0]}")"
-          wayland_client="$appdir/usr/lib/libwayland-client.so.0"
-          plugin="$HOME/.cache/tauri/linuxdeploy-plugin-appimage.AppImage"
-          test -f "$wayland_client"
-          test -x "$plugin"
-
-          rm "$wayland_client"
-          APPIMAGE_EXTRACT_AND_RUN=1 LDAI_OUTPUT="$appimage" ARCH=x86_64 \
-            "$plugin" --appimage-extract-and-run --appdir="$appdir"
-
-          inspection="$(mktemp -d)"
-          trap 'rm -rf "$inspection"' EXIT
-          (
-            cd "$inspection"
-            "$appimage" --appimage-extract 'usr/lib/libwayland-client.so*' >/dev/null
-          )
-          test -z "$(find "$inspection" -name 'libwayland-client.so*' -print -quit)"
-          mapfile -d '' -t sealed_appimages < <(
-            find "$(dirname "$appimage")" -maxdepth 1 -type f -name '*.AppImage' -print0
-          )
-          test "${#sealed_appimages[@]}" -eq 1
-
-      - name: Smoke desktop terminal forwarding
-        shell: bash
-        run: |
-          set -euo pipefail
+          # Checks both binaries against the glibc floor before packaging.
+          crates/kassiber-desktop/packaging/linux/build-packages.sh \
+            --rune-bin "$RUNE_BIN" \
+            --kassiber-bin "$SIDECAR" \
+            --build-info "$SIDECAR_BUILD_INFO" \
+            --version "$PACKAGE_VERSION" \
+            --arch amd64 \
+            --appimage-runtime "$APPIMAGE_RUNTIME" \
+            --output release
           expected_commit="$(git rev-parse --short=12 HEAD)"
-          case "$RUNNER_OS" in
-            macOS)
-              launcher="$(find ui-tauri/src-tauri/target -path '*/release/bundle/macos/*.app/Contents/Resources/bin/kassiber' -print -quit)"
-              test -n "$launcher"
-              "$launcher" --version | grep "$expected_commit"
-              "$launcher" --help >/dev/null
-              resources="$(dirname "$(dirname "$launcher")")"
-              test ! -e "$resources/binaries/kassiber-cli/_internal"
-              ;;
-            Linux)
-              appimage="$(find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppImage' -print -quit)"
-              test -n "$appimage"
-              chmod 755 "$appimage"
-              APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --cli --version \
-                | grep "$expected_commit"
-              # The shell and the sidecar inside both installers must load on
-              # the glibc floor.
-              deb="$(find ui-tauri/src-tauri/target -path '*/release/bundle/deb/*.deb' -print -quit)"
-              test -n "$deb"
-              payload="$(mktemp -d)"
-              dpkg-deb -x "$deb" "$payload"
-              scripts/check-linux-glibc-floor.sh --any-libraries "$payload/usr/bin/kassiber-ui"
-              scripts/check-linux-glibc-floor.sh \
-                "$payload/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
-              inspection="$(mktemp -d)"
-              (
-                cd "$inspection"
-                "$OLDPWD/$appimage" --appimage-extract 'usr/lib/Kassiber/binaries/*' >/dev/null
-              )
-              scripts/check-linux-glibc-floor.sh \
-                "$inspection/squashfs-root/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu"
-              ;;
-            Windows)
-              # The PATH entry exposes a native executable so arguments are
-              # never reparsed by cmd.exe.
-              ./ui-tauri/src-tauri/bin/kassiber.exe --version \
-                | grep "$expected_commit"
-              ;;
-          esac
+          appimage=release/kassiber-linux-x64.AppImage
+          chmod 755 "$appimage"
+          "$appimage" --cli --version | grep "$expected_commit"
+          payload="$(mktemp -d)"
+          dpkg-deb -x release/kassiber-linux-x64.deb "$payload"
+          "$payload/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu" --version \
+            | grep "$expected_commit"
+          scripts/package-desktop-rpm.sh \
+            --deb release/kassiber-linux-x64.deb \
+            --version "$PACKAGE_VERSION" \
+            --architecture x86_64 \
+            --output release/kassiber-linux-x64.rpm
+          rpm_root="$(mktemp -d)"
+          rpm_path="$PWD/release/kassiber-linux-x64.rpm"
+          (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
+          test -x "$rpm_root/usr/bin/kassiber-ui"
+          "$rpm_root/usr/lib/Kassiber/binaries/kassiber-cli-x86_64-unknown-linux-gnu" --version \
+            | grep "$expected_commit"
+          # Installed, both terminal entry points reach the sidecar: /usr/bin/kassiber
+          # forwards through `kassiber-ui --cli`, which must not find the forwarder.
+          sudo apt-get install -y --no-install-recommends ./release/kassiber-linux-x64.deb
+          timeout 60 kassiber --version | grep "$expected_commit"
+          timeout 60 kassiber-ui --cli --version | grep "$expected_commit"
+          sudo apt-get remove -y kassiber
 
-      - name: Package desktop artifacts
+      - name: Package the Windows MSI and setup
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-
-          mkdir -p release
-          while IFS= read -r -d '' artifact; do
-              name="$(basename "$artifact")"
-              case "$artifact" in
-                *.app)
-                  zip_name="kassiber-${{ matrix.target }}.app.zip"
-                  ditto -c -k --keepParent "$artifact" "release/${zip_name}"
-                  ;;
-                *.AppImage)
-                  artifact_name="kassiber-${{ matrix.target }}.AppImage"
-                  cp "$artifact" "release/${artifact_name}"
-                  ;;
-                *.dmg)
-                  artifact_name="kassiber-${{ matrix.target }}.dmg"
-                  cp "$artifact" "release/${artifact_name}"
-                  ;;
-                *.deb)
-                  artifact_name="kassiber-${{ matrix.target }}.deb"
-                  cp "$artifact" "release/${artifact_name}"
-                  ;;
-                *.exe)
-                  artifact_name="kassiber-${{ matrix.target }}.exe"
-                  cp "$artifact" "release/${artifact_name}"
-                  ;;
-                *.msi)
-                  artifact_name="kassiber-${{ matrix.target }}.msi"
-                  cp "$artifact" "release/${artifact_name}"
-                  ;;
-              esac
-          done < <(
-          find ui-tauri/src-tauri/target \
-              -path "*/release/bundle/*" \
-              \( -name "*.AppImage" -o -name "*.app" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) -print0
-          )
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            desktop_deb="$(find release -maxdepth 1 -type f -name '*.deb' -print -quit)"
-            test -n "$desktop_deb"
-            package_version="$(jq -r .version ui-tauri/src-tauri/tauri.conf.json)"
-            export SOURCE_DATE_EPOCH
-            SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
-            scripts/package-desktop-rpm.sh \
-              --deb "$desktop_deb" \
-              --version "$package_version" \
-              --architecture x86_64 \
-              --output "release/kassiber-${{ matrix.target }}.rpm"
-            rpm_path="$PWD/release/kassiber-${{ matrix.target }}.rpm"
-            rpm_root="$(mktemp -d)"
-            (cd "$rpm_root" && rpm2cpio "$rpm_path" | cpio --quiet -id)
-            rpm_sidecar="$(find "$rpm_root/usr/lib/Kassiber" \
-              -type f -name 'kassiber-cli*' -print -quit)"
-            test -x "$rpm_sidecar"
-            "$rpm_sidecar" --version \
-              | grep "$(git rev-parse --short=12 HEAD)"
-          fi
-          test -n "$(find release -type f -print -quit)"
+          crates/kassiber-desktop/packaging/windows/build-installers.sh \
+            --rune-bin "$RUNE_BIN" \
+            --kassiber-bin "$SIDECAR" \
+            --build-info "$SIDECAR_BUILD_INFO" \
+            --version "$PACKAGE_VERSION" \
+            --output release
+          test -s release/kassiber-windows-x64.msi
+          test -s release/kassiber-windows-x64.exe
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

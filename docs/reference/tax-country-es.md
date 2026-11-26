@@ -239,7 +239,8 @@ What Kassiber does today, and where (2026-11-07).
   *Integración del ahorro* (`es_integracion_ahorro`, `es_perdidas_pendientes`)
   and *Puntos para revisar* (`es_revision`).
 - Desktop: Spain appears in onboarding and the Books picker with the
-  **Preview** badge from the registry (`ui-tauri/src/lib/taxCountries.generated.ts`).
+  **Preview** badge from the registry (the desktop's `COUNTRIES` copy, checked
+  against it).
 
 ### Not implemented (fail closed or documented)
 

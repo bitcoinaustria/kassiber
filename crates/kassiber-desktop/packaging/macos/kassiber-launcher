@@ -76,11 +76,10 @@ if [ -z "$sidecar" ]; then
   exit 127
 fi
 
-# The Tauri launcher exported KASSIBER_NATIVE_AUTH_HELPER=$app_executable here: the signed
-# desktop executable doubled as the CLI's Touch ID helper (`kassiber-ui --operator-native-auth`,
-# docs/reference/operator-broker.md). The Rune app does not implement that helper yet, so the
-# launcher leaves it unset and Touch ID CLI commands report it unavailable instead of running
-# a GUI binary that would not understand the request. Restore the export with the helper.
+# Touch ID commands still need the signed desktop executable as their native
+# authentication helper (`kassiber-ui --operator-native-auth`, src/secrets/operator.rs;
+# docs/reference/operator-broker.md) even though ordinary CLI commands bypass AppKit.
+export KASSIBER_NATIVE_AUTH_HELPER=$app_executable
 
 # Match the Rust forwarder's writable working-directory guarantee for frozen
 # dependencies that may otherwise try to write relative startup files.

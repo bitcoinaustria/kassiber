@@ -1,7 +1,7 @@
 name: Set up the pinned Rust toolchain
 description: >-
   Installs the channel rust-toolchain.toml pins, with rustfmt and clippy, and
-  makes it the default, so every cargo, maturin, and Tauri build in the job
+  makes it the default, so every cargo build in the job
   uses exactly that toolchain. Optionally restores a shared Cargo cache. Run
   it after checkout.
 inputs:

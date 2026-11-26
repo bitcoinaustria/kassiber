@@ -294,7 +294,6 @@ the proxy refuses it, and a new one is refused with
   and the family table. Entries named `cli-proxy-*` in
   `crates/ai/scripts/mutations.json` pin each rule to the tests that kill
   it.
-- `ui-tauri/src/components/kb/aiProviderFormModel.test.ts` and
-  `AiProviderForm.dom.test.tsx` cover the wizard flow, and
-  `ui-tauri/src/components/ai/ModelListRow.dom.test.tsx` the prefixed models
-  in the picker.
+- The desktop's unit tests in `crates/kassiber-desktop/src/settings/aiform.rs`
+  and `src/assistant/picker/data.rs` cover the provider form's answer
+  handling and the picker's model rows.

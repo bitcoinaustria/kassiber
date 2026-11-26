@@ -46,7 +46,7 @@ case "$tool" in
         if [ -n "${MOCK_TAG_FAILURE:-}" ]; then exit 1; fi
         if [ -n "${MOCK_TAG:-}" ]; then echo 'existing tag'; fi
         ;;
-      show) echo '{"version": "1.2.3"}' ;;
+      show) printf '[package]\nname = "kassiber"\nversion = "1.2.3"\n' ;;
       rev-parse) echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;;
       merge-base) if [ -n "${MOCK_FOREIGN:-}" ]; then exit 1; fi ;;
       *) echo "unexpected git $*" >&2; exit 99 ;;

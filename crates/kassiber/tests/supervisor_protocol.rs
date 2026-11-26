@@ -1,7 +1,7 @@
 //! The Rust daemon under the desktop supervisor's protocol rules.
 //!
-//! `Supervisor` below applies the rules of
-//! `ui-tauri/src-tauri/src/supervisor.rs` to the real binary over pipes:
+//! `Supervisor` below applies the rules of the desktop app's supervisor
+//! (`crates/kassiber-desktop/src/daemon.rs`) to the real binary over pipes:
 //! the first record must be `daemon.ready` without a `request_id`; a
 //! record is routed by its string `request_id`; a request resolves on a
 //! record of its own kind, `error`, or `auth_required`; other records go to

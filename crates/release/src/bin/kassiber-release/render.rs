@@ -121,7 +121,7 @@ pub fn aur_desktop(root: &Path, version: &str, sha256: &str, output: &Path) -> R
         false,
     )?;
     copy(
-        &root.join("ui-tauri/src-tauri/icons/128x128.png"),
+        &root.join("crates/kassiber-desktop/packaging/icons/128x128.png"),
         &output.join("kassiber.png"),
     )?;
     copy(&root.join("LICENSE"), &output.join("LICENSE"))?;
@@ -156,7 +156,7 @@ pkgdesc='Local-first Bitcoin accounting desktop application'
 arch=('x86_64')
 url='https://github.com/bitcoinaustria/kassiber'
 license=('MIT')
-depends=('glibc' 'gcc-libs' 'gtk3' 'webkit2gtk-4.1')
+depends=('glibc' 'gcc-libs' 'fontconfig' 'libxkbcommon' 'libxkbcommon-x11' 'wayland' 'libx11' 'libxcursor' 'libxrandr' 'libxi' 'vulkan-icd-loader' 'vulkan-driver')
 provides=('kassiber' 'kassiber-command')
 conflicts=('kassiber' 'kassiber-cli' 'kassiber-cli-bin')
 options=('!strip')
@@ -200,8 +200,16 @@ package() {{
 \tlicense = MIT
 \tdepends = glibc
 \tdepends = gcc-libs
-\tdepends = gtk3
-\tdepends = webkit2gtk-4.1
+\tdepends = fontconfig
+\tdepends = libxkbcommon
+\tdepends = libxkbcommon-x11
+\tdepends = wayland
+\tdepends = libx11
+\tdepends = libxcursor
+\tdepends = libxrandr
+\tdepends = libxi
+\tdepends = vulkan-icd-loader
+\tdepends = vulkan-driver
 \tprovides = kassiber
 \tprovides = kassiber-command
 \tconflicts = kassiber

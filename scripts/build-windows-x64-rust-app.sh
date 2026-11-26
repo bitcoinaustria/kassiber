@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the Windows x86_64 release artifacts with the Rust backend, the way the
 # Windows legs of .github/workflows/prerelease-binaries.yml do, on a Windows
-# machine (Git Bash, with the MSVC build tools, rustup, Node 22, pnpm 10.33.0,
-# Python 3.11 and 7-Zip on PATH):
+# machine (Git Bash, with the MSVC build tools, rustup, 7-Zip, jq, WiX Toolset v3
+# `candle`/`light` and NSIS `makensis` on PATH):
 #
 #   dist/windows-x64/kassiber-cli-windows-x64.zip
 #   dist/windows-x64/kassiber-windows-x64.msi
@@ -35,7 +35,7 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) ;;
   *) echo "This script builds the Windows artifacts and must run in Git Bash on Windows." >&2; exit 2 ;;
 esac
-for command in cargo rustup pnpm 7z jq; do
+for command in cargo rustup 7z jq candle light makensis; do
   command -v "$command" >/dev/null 2>&1 || { echo "Missing required tool: $command" >&2; exit 2; }
 done
 [ ! -e "$output" ] || { echo "Output directory already exists: $output" >&2; exit 2; }
@@ -76,8 +76,6 @@ run "$release_tool" build-info --output "$work/BUILD_INFO.json" \
   --version "$version" --commit "$commit" --ref "$(git rev-parse --abbrev-ref HEAD)" \
   --run-id local --channel "$channel"
 
-run pnpm --dir ui-tauri install --frozen-lockfile
-
 run "$ROOT/scripts/smoke-packaged-cli.sh" --cli "$binary" --scratch "$work/smoke" \
   --expect-commit "$short_commit" --operator-unlock
 
@@ -85,26 +83,16 @@ run "$ROOT/scripts/package-cli-archive.sh" --binary "$binary" \
   --build-info "$work/BUILD_INFO.json" --name "kassiber-cli-$TARGET" --format zip \
   --output-dir "$output"
 
-# Flat sidecar with the build record beside it, plus the copy the installers
-# put on PATH (bin/kassiber.exe).
-binaries="$ROOT/ui-tauri/src-tauri/binaries"
-find "$binaries" -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name .gitkeep -exec rm -rf -- {} +
-cp "$binary" "$binaries/kassiber-cli-$TRIPLE.exe"
-cp "$work/BUILD_INFO.json" "$binaries/BUILD_INFO.json"
-cp "$binary" "$ROOT/ui-tauri/src-tauri/bin/kassiber.exe"
-
-tauri_config="$work/tauri-build.json"
-printf '{ "version": "%s" }\n' "$version" > "$tauri_config"
-run env KASSIBER_BUILD_VERSION="$channel" KASSIBER_BUILD_COMMIT="$short_commit" \
-  pnpm --dir ui-tauri tauri build --bundles msi,nsis --ci --config "$tauri_config"
-
-"$ROOT/ui-tauri/src-tauri/bin/kassiber.exe" --version | grep "$short_commit"
-bundle_dir="$ROOT/ui-tauri/src-tauri/target/release/bundle"
-msi="$(find "$bundle_dir/msi" -maxdepth 1 -type f -name '*.msi' -print -quit)"
-nsis="$(find "$bundle_dir/nsis" -maxdepth 1 -type f -name '*.exe' -print -quit)"
-test -n "$msi" && test -n "$nsis"
-cp "$msi" "$output/kassiber-$TARGET.msi"
-cp "$nsis" "$output/kassiber-$TARGET.exe"
+# The Rune desktop (without agent tooling) around this exact binary: the
+# installers stage it as the sidecar and as the PATH copy (bin/kassiber.exe).
+run bash -c 'cd crates/kassiber-desktop && cargo build --release --locked --no-default-features'
+run "$ROOT/crates/kassiber-desktop/packaging/windows/build-installers.sh" \
+  --rune-bin "${CARGO_TARGET_DIR:-$ROOT/crates/kassiber-desktop/target}/release/kassiber-desktop.exe" \
+  --kassiber-bin "$binary" --build-info "$work/BUILD_INFO.json" \
+  --version "$version" --output "$output"
+"$binary" --version | grep "$short_commit"
+test -s "$output/kassiber-$TARGET.msi"
+test -s "$output/kassiber-$TARGET.exe"
 
 echo
 echo "Windows x86_64 artifacts ($channel, commit $short_commit):"

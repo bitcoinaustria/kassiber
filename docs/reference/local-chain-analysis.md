@@ -113,8 +113,8 @@ bounded solver summaries. It has no separate graph, detector or grade. Deep
 links preserve the physical subject and observer/domain; PSBT and dataset tools
 stay in this workbench.
 
-Graph interaction lives in `ui-tauri/src/components/evidence-graph/` and is shared
-with Source Funds. Route adapters provide labels, visual edge styles and exact
+Graph interaction lives in `crates/kassiber-desktop/src/provenance/chain/graph.rs`;
+Source Funds draws its report graph the same way (`provenance/sof/graph.rs`). Route adapters provide labels, visual edge styles and exact
 local identities; the renderer does not fetch data or interpret ownership,
 heuristics or provenance. Chain Analysis keeps its existing observation adapter;
 Source Funds supplies reviewed report edges independently.

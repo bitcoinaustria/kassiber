@@ -6,8 +6,8 @@ Kassiber's desktop app is a native Rust UI built with
 the Rust `kassiber` binary as a long-lived sidecar daemon over JSONL, like the
 CLI's other front ends, so the desktop and the CLI share one accounting core.
 The crate is its own Cargo workspace (the root workspace excludes it) and
-shares its translation bundles and integration logos with the Tauri app
-through `assets/` at the repository root.
+reads its translation bundles and integration logos from `assets/` at the
+repository root.
 
 ```bash
 cargo build --release -p kassiber                       # the daemon, from the root
@@ -19,13 +19,10 @@ crates/kassiber-desktop/packaging/macos/build-app.sh --kassiber-bin target/relea
 The crate's [README](../../crates/kassiber-desktop/README.md) covers headless
 snapshots, scenes, fixtures, the parity harness and packaging.
 
-The earlier Tauri 2 + React + TypeScript shell (`ui-tauri/`) is still in the
-tree and is the reference the Rune app is held to; most of this document
-describes behaviour both share, in the terms of the React code where that is
-where it was first written. See
-[../plan/01-stack-decision.md](../plan/01-stack-decision.md) for the original
-stack decision and [../plan/04-desktop-ui.md](../plan/04-desktop-ui.md) for
-the implementation plan.
+The Tauri 2 + React shell it replaced was removed; commit
+`1c8065d4b676675076a8ca593963e2d4a121b43b` is the last that contains it. The
+[original stack decision](../plan/01-stack-decision.md) and
+[desktop plan](../plan/04-desktop-ui.md) are kept as history.
 
 The desktop shell is a pre-alpha preview. It already uses real daemon-backed
 paths for the main setup, review, report, export, assistant, and diagnostics
@@ -34,11 +31,12 @@ surface. See [../quickstart.md](../quickstart.md) for the end-to-end
 workflows and [machine-output.md](machine-output.md) for the JSON envelope
 contract the shell consumes through the daemon.
 
-The desktop UI is bilingual — English and Austrian German (informal `du`) — via
-i18next. The active language lives in the UI store's `lang` (the single source
-of truth) and is switchable from Settings → Appearance or the header overflow
-menu; first run defaults to English. The CLI and daemon stay English and
-machine-deterministic (the UI translates their stable codes). For how
+The desktop UI is bilingual — English and Austrian German (informal `du`) —
+through `src/i18n.rs`, a subset of i18next over the shared bundles. The active
+language is the app preference `lang` (the single source of truth, kept in the
+desktop preferences file) and is switchable from Settings → Appearance or the
+setup screen's language select; first run defaults to English. The CLI and
+daemon stay English and machine-deterministic (the UI translates their stable codes). For how
 translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
 English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
@@ -100,44 +98,32 @@ The picker carries the model, its reasoning level, the speed toggle and the
 chat's permission mode in one popover (see
 [AI](ai.md#in-app-surface)).
 
-Current development modes:
+The app talks only to its daemon. It resolves the binary from `--kassiber-bin`
+or `KASSIBER_BIN` when set, then the bundled sidecar, then, only in builds with
+the `tooling` feature (every debug build and `scripts/run.sh`), the checkout's
+`target/release/kassiber`, then `target/debug/kassiber` (`KASSIBER_REPO_ROOT`
+can name another checkout). It only looks for those files; it never runs a
+probe. Without an explicit data root it runs the CLI's default-root migration
+first and starts no daemon if that fails (`src/daemon.rs`).
 
-- `pnpm dev` in `ui-tauri/` runs the browser dashboard against the
-  loopback-only Vite daemon bridge by default. `pnpm dev:bridge` is the
-  explicit form of the same mode. Use `pnpm dev:browser` for the regtest demo
-  browser preview. In bridge mode, the
-  Welcome screen can open existing local books through a dev-only loopback
-  folder picker; the Vite bridge validates the selected Kassiber data root and
-  restarts its daemon with `--data-root` before the normal unlock/profile
-  picker flow continues in the browser. Leaving an imported folder restarts the
-  daemon on the book the preview started with: `KASSIBER_DEV_DATA_ROOT` when
-  set, otherwise the default root. The bridge starts the Rust binary named by
-  `KASSIBER_BIN`, else the checkout's `target/release/kassiber`, else
-  `target/debug/kassiber`. It only looks for those files; it never runs a
-  probe, and with no binary the preview shows an error naming the
-  `cargo build -p kassiber --bin kassiber` step.
-- `pnpm tauri:dev` runs the Tauri shell, starts `kassiber daemon`,
-  and calls the Rust `daemon_invoke` boundary. The command allowlists the
-  current UI data, export, and action kinds. Report exports write under the
-  managed `exports/reports/` state directory, and the desktop shell exposes a
-  narrow `open_exported_file` command that opens completed PDF/XLSX/CSV report
-  files with the system default app. Transaction explorer links use a separate
-  `open_external_url` command that only accepts absolute HTTP/HTTPS URLs with a
-  host and no embedded credentials before handing them to the system default
-  browser.
-  The Welcome screen can also open existing local books: the native
-  folder picker opens near the effective platform app-data root, accepts either
-  a project folder or its `data/` folder, restarts the sidecar daemon with that
-  `--data-root`, and then
-  lists local books grouped by books set. SQLCipher databases must be unlocked
-  before book names can be read because the internal workspace/profile rows live
-  inside the encrypted database. macOS uses the system folder picker, Windows
-  uses the system folder dialog through PowerShell/.NET, and Linux desktops use
-  `zenity`, `kdialog`, or `yad` when one of those pickers is installed.
-  Without a bundled sidecar, the debug shell starts the checkout's
-  `target/release/kassiber`, then `target/debug/kassiber`, unless
-  `KASSIBER_BIN` is set. `KASSIBER_REPO_ROOT` can point a dev shell at a
-  different checkout.
+Report exports open with the system's default app only when the exporting flow
+itself just wrote the file, and only for document types Kassiber exports; the
+same confirmation can reveal the file in the file manager (`src/toastopen/`).
+Attachment and source-of-funds links open in the system browser only as
+absolute HTTP or HTTPS URLs with a host and no embedded credentials
+(`external_url` in `src/txdetail/actions.rs`); explorer links are built from
+the configured explorer and are HTTP(S) only. Headless runs open no files or
+links.
+
+The Welcome screen can open existing local books: the native folder picker
+(Rune's file dialogs) opens near the default state root, accepts either a
+project folder or its `data/` folder, records the approved data root, restarts
+the daemon with that `--data-root`, and then lists local books grouped by
+books set (`src/onboarding/projects.rs`). Only an approved data root is opened
+again. SQLCipher databases must be unlocked before book names can be read
+because the internal workspace/profile rows live inside the encrypted
+database. Closing an opened folder returns the daemon to the launch's own
+root.
 
 Release desktop packages bundle the Rust `kassiber` binary as a
 `kassiber-cli-<target triple>` sidecar, with the AI provider broker beside it
@@ -150,22 +136,21 @@ extraction and no per-launch dylib re-validation.
 
 At runtime the supervisor prefers `KASSIBER_BIN` when it is explicitly set,
 then the bundled sidecar from the app resources (one-dir candidate first), then,
-in debug builds only, the checkout build above. A missing binary is a
+in `tooling` builds only, the checkout build above. A missing binary is a
 `daemon_binary_missing` error. The same `KASSIBER_BIN`
 override applies to installed-app CLI forwarding.
 
-On macOS the window uses an overlay title bar, and the shell draws the row the
-traffic lights sit in: one 40px title bar carrying the nav toggle, history
-buttons, book breadcrumb, alpha chip, and shell actions, over a flush side nav
-and an inset page panel. Empty stretches of that row move the window through
-Tauri's `data-tauri-drag-region="deep"`, which skips buttons and links. A modal
-dialog makes the page inert, so `WindowFrame` also turns a press on the still
-visible title bar into a window drag instead of letting it dismiss the dialog.
-Portalled full-window surfaces (dialogs, sheets, the expanded chart, the lock
-screen) start below `--kb-window-top-inset` so the title bar stays reachable. In
-full screen the traffic lights are hidden and both insets drop to zero.
-Windows and Linux keep their native decorated frame; the same row is an
-in-app toolbar there with no inset and no drag region. Screens outside the shell
+The shell draws one 40pt title bar carrying the nav toggle, history buttons,
+book breadcrumb, alpha chip, and shell actions, over a flush side nav and an
+inset page panel (`src/shell/titlebar.rs`). On macOS the window uses an overlay
+title bar with the traffic lights in that row; only the bar's empty stretches
+move the window and take the double-click zoom, so its buttons keep their own
+presses. Full-window surfaces (dialogs, sheets, the lock screen) start below
+the bar so it stays reachable. In full screen the traffic lights are gone and
+the bar's controls move to the window's edge. On Windows the window has no
+native title bar: the same row moves the window and Rune draws the caption
+buttons at its trailing edge. Linux keeps its native decorated frame, and the
+row is an in-app toolbar. Screens outside the shell
 (setup, loading, the error boundary) and the lock and import-restore screens use
 the same outline: the title bar row on the chrome and an inset page panel.
 Inside it the lock screen centres the wordmark over the welcome screen's type
@@ -181,7 +166,7 @@ three-dimensional blocks rasterized onto a coarse pixel grid, in the wordmark's
 monochrome and Bitcoin orange. Transactions flicker into the next block, a full
 block is found (its stepped outline flashes orange), and the chain moves back
 in discrete steps; small pixel cubes above it are the mempool. The artwork is
-an SVG generated locally: it shows no chain data and stays out of the
+drawn locally (`src/art/`): it shows no chain data and stays out of the
 accessibility tree and tab order. Reduced motion holds it still, and hidden
 windows pause both the animation and its timer. A language select beside the
 wordmark sets the UI language, the same setting as Settings → Appearance,
@@ -215,8 +200,7 @@ itself while the window is narrower than 1100px (plus the docked right
 panel's width, so the page keeps that room beside it) without changing that choice;
 the profile stays on the rail either way. Back and forward also run from
 Cmd/Ctrl+[ and ] or Alt+Left/Right. History stays put while typing, with a
-dialog open, or while locked; on Windows and Linux the shell swallows Alt+arrows
-then, because WebView2 would otherwise navigate by itself. Tooltips and menus
+dialog open, or while locked. Tooltips and menus
 write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
 elsewhere).
 
@@ -224,58 +208,42 @@ Dialogs, the palette, and the sync progress card share the command palette's
 treatment: the same faint, unblurred backdrop and frosted surface. Sheets, the
 right panel's sheet and the Settings modal follow T3 Code instead: an opaque
 popover (or page) surface over a dimmed, 4px-blurred backdrop. Dialogs hang
-from one anchor below the title bar
-(`--kb-dialog-top`, capped by `--kb-dialog-max-h`) instead of centring, so a
-dialog whose content changes size grows downward rather than jumping.
+from one anchor below the title bar (8% of the window height, at least 1rem;
+`dialog_top` in `src/shell/mod.rs`) instead of centring, so a dialog whose
+content changes size grows downward rather than jumping.
 
-Screens share one layout scale, defined as tokens in `globals.css`. Every page
-renders in the `lib/screen-layout.ts` frame: one gutter (`--kb-page-gutter`)
-and one gap between blocks (`--kb-page-gap`). Corners come in three surface
-tiers, outermost largest: the window tier (`--kb-radius-window`) for the page
-panel, dialogs, the palette and the lock and setup panels; the card tier
-(`Card` or `.kb-surface`) for a panel on a page; the inset tier
-(`.kb-surface-inset`) for a tile inside a card. Controls stay `rounded-md` and
-chips `rounded-full`. The title bar names the page and is its `h1`, so a page
-does not repeat its name or add an eyebrow line. A page shows a title only when
-the title bar does not already say it, such as a settings section or a wallet's
-name, and that title uses `pageTitleClassName`.
+Screens share one spacing scale in `src/theme.rs` (page inset, gap between
+cards, gap between blocks, card padding). The title bar names the page and is
+its heading, so a page does not repeat its name or add an eyebrow line. A page
+shows a title only when the title bar does not already say it, such as a
+settings section or a wallet's name.
 Settings opens as a large modal over the current page, after T3 Code's
 settings: a category rail on the left (an icon rail below `md`), a
 breadcrumb header with the close button, and the category below; Esc, the
 close button or the backdrop returns to the page, which stays mounted
 underneath. Each category keeps its `/settings/<slug>` route so links, the
 native menu, app search and `kassiber://` intents stay typed; the shell turns
-an in-app navigation to one into the modal without adding a history entry
-(`components/kb/settings/settingsModalNavigation.ts`), and a cold load of one opens the
-modal over Overview. Hovering or focusing a Settings link only preloads it;
-the modal opens on the navigation itself. Leaving the page from inside
+a navigation to one into the modal over the current page without adding a
+history entry (`redirect` in `src/shell/mod.rs`). Leaving the page from inside
 Settings (Open logs, Resume setup) closes it, as does locking the app, and a
 request for Settings made behind the lock screen is dropped rather than shown
 after unlocking.
 
-Scrollbars follow T3 Code: a 6px lane with a quiet thumb on a transparent
-track (`--app-scrollbar-*` in `globals.css`), for native scrollers and
-`ScrollArea` alike.
-
-`src/styles/layoutScale.test.ts` fails on bare `rounded` (square, because
-`--radius` is 0), arbitrary radii and shadows, page glass, and hand-rolled
-`rounded-* border bg-card` cards outside a short allowlist.
-
 The command palette (Cmd/Ctrl+K) opens as a launcher: the main pages and
-everyday actions with their shortcuts, before anything is typed. Page shortcuts
-come from the native menu, so the browser preview does not show them. The
+everyday actions with their shortcuts, before anything is typed. The
 palette, its actions, and the workflow shortcuts stay closed while the app is
 locked.
 
-The main window starts hidden and is sized before it is shown. The first launch
-centres a frame in the work area of the display it opens on (82% by 88%, capped
-at 1440×960 and floored at the configured minimum). After that the last frame
-is restored: macOS uses AppKit's frame autosave, which keeps the frame in the
-app's preferences and fits it onto the displays that are connected; Windows and
-Linux use `tauri-plugin-window-state`, which writes `.window-state.json` to
-Tauri's config directory. Tauri's macOS config directory is Kassiber's state
-root, which must not gain files before the default-root migration runs, which
-is why macOS does not use the plugin.
+The main window is sized before it opens. The first launch centres a frame on
+the primary display (82% by 88%, capped at 1440×960 and floored at the
+980×700 minimum). After that the last normal frame and whether the window was
+maximized are restored, refitted onto the display the frame is mostly on, or
+the first-launch frame when it lands on none; full screen is never restored
+and Wayland, which hides window positions, keeps no position
+(`src/persist/window.rs`). The frame is kept in the desktop preferences file
+(`desktop-ui.json`, or `KASSIBER_DESKTOP_PREFS_FILE`): owner-only, written
+atomically, never inside a book, and on macOS kept in `~/.kassiber` until the
+default-root migration moves it (`src/persist/file.rs`).
 
 The native desktop shell also carries a deliberately minimal release notifier,
 modeled on Sparrow Wallet's cadence and manual-download flow. Setup explicitly
@@ -304,12 +272,11 @@ spawning the sidecar. The switch lives in the existing Privacy panel; there is
 no separate update settings panel.
 Kassiber never selects an asset, downloads a file, installs an update, or
 restarts itself; automatic failures stay silent so they cannot interfere with
-startup. The native shell independently
+startup. The app independently
 reads the same owner-only `<state-root>/config/update-checks.json` consent used
 by the packaged CLI before spawning anything, fails closed when it is absent,
 malformed, or disabled, and rejects any release URL that leaves the official
-repository. The renderer hydrates from that canonical native preference at
-startup and never restores consent from its own local storage; every check
+repository. The app keeps no copy of that consent of its own; every check
 re-reads the file before using its result, so a revocation made from the CLI
 while the desktop is running still suppresses the result and turns the toggle
 off. Consent writes are atomic and take effect immediately. See
@@ -368,7 +335,7 @@ references, and unsupported imports get an explicit empty state instead of a
 guessed graph. Liquid legs this book's wallets unblinded during sync keep their
 values, including spent inputs and another owned wallet's legs of the same
 transaction; conflicting observations stay confidential. Strand widths and
-positions follow mempool's bowtie graph unchanged (`TransactionGraphGeometry.ts`
+positions follow mempool's bowtie graph unchanged (`src/txdetail/graph/geometry.rs`
 ports its calcTotalValue, initLines and linesFromWeights): on Bitcoin the total
 is the outputs plus the fee; on Liquid, with unknown legs on both sides, unknown
 legs are assumed as large as the average known leg of their side and the
@@ -394,12 +361,10 @@ pointing at a row lights its leg (or the "+N more" strand it is folded
 into), and clicking an input or output leg brings
 its row into view, unfolding its column if needed (the fee and a folded
 "+N more" leg have no row to bring).
-The view loads three.js only when a graph is shown or loading,
-renders only on change, needs no network, and falls back to the flat bowtie
-without WebGL. Every glass view draws through one shared renderer, which keeps
-its environment light and compiled shaders between graphs; it is warmed while a
-graph loads, compiles before the first draw without blocking the page, and is
-released 30 s after its last view. The header's amount and the listed legs and
+The glass view renders on the GPU through Rune's compositor
+(`src/txdetail/graph/gpu/`), only when its pose, size, highlight or theme
+changed, needs no network, and falls back to the 2.5D drawing when no GPU
+compositor is available. The header's amount and the listed legs and
 totals follow the app's bitcoin/fiat switch, and clicking an amount flips it;
 legs are priced at the transaction's own price and stay in bitcoin without one,
 when that price is not in euro, for hidden values, and on another swap leg's
@@ -418,9 +383,7 @@ its own wallet syncs from, and nothing else, for them (`lookup:
 "wallet_backend"`; see [privacy and security](privacy-and-security.md#external-requests-complete-list)).
 Such rows show no lookup notice or button, only a subtle loading line, and one
 quiet line when the amounts could not be loaded ("Offline — input amounts not
-loaded", "Input amounts unavailable: backend unreachable"). The Rune desktop
-sends it; the Tauri renderer does not yet and keeps the explicit lookup for
-every row.
+loaded", "Input amounts unavailable: backend unreachable").
 Manual lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with
@@ -828,132 +791,87 @@ a native-menu or `kassiber://` intent for any of them lands on Settings ->
 Developer tools with the early-stage switch highlighted instead of a silent
 bounce (an intent for the assistant with AI off highlights the AI switch the
 same way). The
-choice is stored in the desktop's local UI state, so it survives updates;
-`ui-tauri/src/components/kb/devMode.ts` holds the route lists.
+choice is stored in the desktop preferences file, so it survives updates;
+`DEV_LOCKED` and `DEV_HIDDEN` in `src/shell/mod.rs` hold the route lists.
 
-The title bar's bell opens the notification list
-(`ui-tauri/src/components/kb/NotificationCenter.tsx`, model in
-`ui-tauri/src/store/notifications.ts`) in three sections:
+The title bar's bell opens the notification list (`src/shell/notifications.rs`)
+in three sections:
 
-- **Needs attention**: unresolved conditions, blockers first. Journals waiting
-  to be processed and the Review count come from `ui.review.badges`; sources
-  that could not refresh come from `ui.freshness.status`, book refreshes, and
-  background freshness events, tracked per source and folded into one row;
-  a failed book refresh, a failed journal run, a missing backend, and a
-  stopped background worker each have their own. Background freshness
-  events apply only to the book they name; the conditions' reads carry the
-  open book as `expected_scope`. A wallet, exchange,
-  or node sync that failed (per connection), BTCPay stores whose invoices did
-  not load, a price rebuild that failed, a source-of-funds case whose wallet
-  needs a full rescan, an all-books refresh that failed or left books
-  needing attention, unread evidence-watch changes, sources behind for the
-  previous calendar year ([coverage](#sources-live-sync-and-file-snapshots)),
-  Touch ID unlock turned
-  off, a saved unlock method that could not be removed, and a backup restore
-  that failed or could not reset unlock methods (both outlast the lock the
-  restore triggers) are conditions too. Each row says what is wrong and
-  what it means, offers
-  one action that opens the exact place to fix it (that connection or
-  transaction, the settings row, the overview of all books) or repeats the
-  operation, and keeps diagnostics behind Show details. A condition clears
-  only when a successful read or run
-  for the same book and source shows it resolved; a failed read, a lock, or a
-  source still syncing leaves it in place. A failed journal run clears on any
-later run whose journal step reports success (journal processing, a book
-refresh, a background refresh, or a sync or import that processes
-journals), in the same book. Rows cannot be dismissed, and
-  re-reading the same state does not count as a repeat.
-- **Running**: work in progress with its progress: book refresh, journal
-  processing, a connection sync, a price rebuild, a report export, and an
-  all-books refresh. A running book refresh reopens the sync card; the
-  newest running job also drives the shell's progress line.
-- **Recent**: up to 30 finished results from this session, newest first,
-  each dismissible; Clear recent empties this section only. Results are the
-  outcomes of the jobs above, which can finish after the user has left the
-  page that started them; a restored backup lands here too.
+- **Needs attention**: unresolved conditions, blockers first. A failed book
+  refresh and a failed journal run each have their own row with Retry, which
+  repeats the run as it was (a rescan stays a rescan) and sends the open
+  book's ids as `expected_scope`, so the daemon refuses it if another book
+  opened in the meantime. Journals waiting to be processed and the Review
+  count come from `ui.review.badges`; sources that failed or block reports
+  come from `ui.freshness.status`, folded into one row whose details group
+  each source's label and last error by cause. Sources that do not reach the
+  previous calendar year's end get one row that opens the coverage view
+  ([coverage](#sources-live-sync-and-file-snapshots)); it is a local read.
+  Conditions about saved unlock methods open Settings → Security. Each row
+  says what is wrong and what it means and offers one action from a closed
+  list. Conditions are rebuilt from those reads, so a row clears when a later
+  read shows it resolved; rows cannot be dismissed.
+- **Running**: a book refresh or journal processing in progress. A running
+  book refresh reopens the sync card.
+- **Recent**: up to 20 finished results from this session, newest first, filed
+  under the book that was open (nothing is filed while the open book is
+  unknown); Clear recent empties the open book's entries only.
 
-The badge counts Needs attention groups for the open book (a project's
-books are told apart by their workspace and profile ids). Conditions from
-another book stay in memory and return when that book is open again. Every
-action carries the book it came from and is checked against the open book
-when clicked: Retry repeats the original operation with its options (a
-rescan stays a rescan, journal processing keeps its auto-pair setting) and
-sends that book's ids as `expected_scope`, so the daemon refuses it if
-another book opened in the meantime. An action from another book, or one
-clicked while a book switch is in flight, only opens its review page.
-Book refreshes and journal runs started anywhere carry the open book's ids
-the same way. Actions name typed
-routes or operations from a closed list; anything else shows no button.
-Asking for a book refresh or journal run while one is running shows no
-notice; the menu's refresh reopens the sync card.
-
-Rows render from stable codes in the current language and privacy mode, not
-from stored sentences. Hide amounts withholds any free text (such as a backend
-error or a progress caption) that contains digits and masks wallet or source
-names that do; Hide all shows generic titles and no labels,
-file names, paths, or error text, while actions keep working. The list and
-the toasts are hidden while Kassiber is locked.
+The bell's badge counts the Needs attention rows; it turns amber, or red while
+one blocks reports. Rows render in the current language and privacy mode:
+details pass the backend's secret floor, Hide amounts withholds free text that
+contains digits and masks source names that do, and Hide all shows no details,
+while actions keep working. The locked title bar has no bell.
 
 Feedback on what the user just did (saved settings, attachments, edits,
-setup receipts, refused or failed foreground actions) never enters the
-list: errors in a form stay beside the form, and the rest are toasts. Short
-confirmations ("Book refreshed", "Journals processed") show as toasts
-at the bottom right: at most three, about four seconds for a success,
-paused while the pointer or focus is on them, dismissed with Escape or ×, and
-announced to screen readers. Equivalent confirmations replace each other.
-Toasts keep no history and are never sent to the operating system.
+setup receipts, refused or failed foreground actions) never enters the list as
+a condition: errors in a form stay beside the form, and the rest are toasts.
+Toasts show at the bottom right for about six seconds (ten when they carry
+Open or Reveal actions for a written file), stay while the pointer is on
+them, close with ×, and are announced to screen readers; equivalent
+confirmations replace each other and count repeats. Toasts keep no history,
+are hidden while Kassiber is locked, and are never sent to the operating
+system.
 
-Notifications live in memory only. Nothing of them (text, details, scope,
-timestamps, or actions) is written to the desktop's local UI state; a
-restart starts with an empty list and rebuilds conditions from the book after
-unlock. UI state version 5 removes notifications that older versions stored.
+Notifications live in memory only. Nothing of them is written to the desktop
+preferences file, and loading an older file drops any notifications a previous
+version stored; a restart starts with an empty list and rebuilds conditions
+from the book after unlock.
 
 OS notifications are opt-in: **Settings → Privacy → Desktop notifications**
 (off by default) lets background outcomes reach the operating system's
-notification center. The switch is the only thing stored (`desktopNotifications` in `kb.ui`; no
-version bump). Eligibility is decided in one place,
-`osNotificationEligibility` in `ui-tauri/src/lib/osNotifications.ts`:
+notification center. The switch is the only thing stored
+(`desktopNotifications` in the preferences file). Eligibility is decided in one
+place, `eligibility` in `src/settings/effects.rs`:
 
-- the switch is on and Kassiber runs in the native shell;
-- the event is an allowlisted background outcome: a raised failure that needs
-  action (source refresh, background worker, book refresh, journal run,
-  missing backend, connection sync, price rebuild, all-books refresh, backup
-  restore), a finished job, a "new transactions" result, or a pushed local
-  evidence-watch change;
-- the native window is not focused (a visible window behind another app
-  qualifies; an unknown focus state does not);
-- the event is new: only `raiseCondition` and `addResult` offer events, never
-  `reconcileConditions`, status reads, or the rebuild after unlock, and a
-  repeat of a condition the user has not yet seen is not news;
+- the switch is on;
+- the event is a finished book refresh or journal run, or one that failed
+  (the results the notification center files);
+- the window is not focused (an unknown focus state counts as focused);
 - the same event was not delivered in the last 30 minutes, and nothing was
   delivered in the last minute.
 
 Foreground receipts, toasts, progress, recovery, lock and unlock, and the
 unchanged Review or journal backlog never reach the OS.
 
-The text is fixed in Rust (`ui-tauri/src-tauri/src/os_notifications.rs`):
-the title "Kassiber" and one of "Background work needs your attention.",
-"Background work has finished.", or "New activity in Kassiber." (Austrian
-German when the UI is German). The webview calls `deliver_os_notification`
-with only an allowlisted category; unknown categories are rejected. The
-webview has no `notification:*` permission, so the plugin's own commands and
-the `window.Notification` shim its init script installs are refused (the
-shim's one permission probe at load is expected to fail and is not logged as
-an error). Rust re-checks the switch and window focus and spaces deliveries
-at least ten seconds apart as a backstop.
-
-`tauri-plugin-notification` is pinned to `~2.4`: 2.5 and later require Tauri
-2.12, newer than this lockfile's 2.11.5 runtime. Its desktop backend shows a
-notification but reports no click, so a click only brings Kassiber to the
-front, as the operating system does; the bell shows what happened. Nothing is
-guessed from window focus, and a click never syncs, approves, retries, opens
-a file, or unlocks.
+The text is fixed in Rust (`src/native/notify.rs`): the title "Kassiber" and
+one of "Background work needs your attention." or "Background work has
+finished." (Austrian German when the UI is German), so no amount, name,
+address, txid, server, path, or error text reaches the system's notification
+store. A native backstop spaces deliveries at least ten seconds apart. macOS
+posts through `UNUserNotificationCenter` (Rune's `rune-notify`) from a bundle,
+and through `osascript` when run unbundled; Windows shows a toast under the
+installer-registered AppUserModelID; Linux uses the freedesktop notification
+service over D-Bus (`gdbus`, else `notify-send`). A click only brings Kassiber
+to the front, as the operating system does; the bell shows what happened. A
+click never syncs, approves, retries, opens a file, or unlocks.
 
 Platform limits: on macOS the OS asks for permission, if at all, when the
-first notification is posted, which can only happen after the switch is on;
-debug builds post as Terminal. Linux notification servers generally do not
-activate the app on click. Delivery adds no network request, poll, or
-probe; it only reacts to work that was already authorized.
+first notification is posted, which can only happen after the switch is on.
+Linux notification servers generally do not activate the app on click.
+Delivery adds no network request, poll, or probe; it only reacts to work that
+was already authorized. Headless runs record notifications instead of showing
+them.
 
 ### Clipboard, screen sharing and OS backups (Rune desktop)
 
@@ -969,7 +887,7 @@ privacy rules are in
   (`clearClipboard`) sets the 30-second clear. Locking the session and
   quitting clear a copy that is still held.
 - **Hide amounts while the screen is shared** (`hideAmountsWhileScreenShared`
-  in `kb.ui`, default on) sits in Settings → Privacy → Screen & clipboard.
+  in the preferences file, default on) sits in Settings → Privacy → Screen & clipboard.
   While the app holds amounts hidden, a status line there says so, and a toast
   appears when hiding starts. Detection is macOS only (see the privacy
   reference); on other systems the switch is disabled and says why.
@@ -1006,8 +924,8 @@ Windows installer scope is deliberate: MSI is the machine-wide/admin route and
 owns its system PATH entry, while NSIS installs for the current user and owns
 only that user's PATH entry. Linux desktop and CLI-only Debian packages conflict
 and replace one another cleanly because both intentionally provide the
-`/usr/bin/kassiber` command; the desktop package carries GTK/WebKit, while
-`kassiber-cli` does not.
+`/usr/bin/kassiber` command; the desktop package depends on the display, input
+and Vulkan libraries the app draws with, while `kassiber-cli` does not.
 
 Package managers can link the bundled launcher at
 `Kassiber.app/Contents/Resources/bin/kassiber` instead. The first target is a
@@ -1121,7 +1039,7 @@ Reads: `ui.sources.coverage` (`period_end`, `wallet`, `check_file`) and
 `ui.overview.snapshot` embeds each connection's coverage for today (without
 scan-bound warnings, so the hot read skips the per-row balance walk) and derives
 its `status` from it (`synced` only for a current source, `behind`, `error`
-for a failed sync, `idle` otherwise). The legacy Tauri views name, style and filter `behind` like their other statuses. Write: `ui.sources.attest_coverage`
+for a failed sync, `idle` otherwise). Write: `ui.sources.attest_coverage`
 (`wallet`, `kind`, `date`, `note`, or `clear`) and `wallets attest-coverage`,
 behind the assistant's consent gate like every mutating tool.
 
@@ -1247,8 +1165,8 @@ the new ones load.
 
 A sync, a journal run, a market-rate refresh, a background freshness event,
 or a mutation that changes the book starts a book refresh cycle
-(`ui-tauri/src/daemon/bookRefresh.ts`). Every mounted `useDaemon` read keeps
-the data it showed while the cycle refetches. The cycle reads the book's
+(`refresh_reads` in `src/app.rs`). Every screen keeps the data it showed while
+the cycle re-reads. The cycle reads the book's
 revision (`status` with `revision: true`, see
 [request routing](daemon.md#request-routing)) before and after the refetch, and
 refetches again when a write landed in between, up to three passes. Then all
@@ -1258,9 +1176,7 @@ holds the screen for at most 15 seconds; requests made during a cycle merge
 into one follow-up cycle. The daemon refuses reads while a user-started sync
 runs, so a cycle never shows the book halfway through one; background
 workers can commit between cycles, which the next cycle picks up. While a
-cycle runs, every mounted read waits for it, including polling ones, and a
-read that changed its own key (another filter, period, or year) is never
-held.
+cycle runs, the re-reads' answers are held until the last one arrives.
 
 The title bar's book status names one state for the whole book: updating
 (syncing wallets, processing journals, or loading changes), refresh needs
@@ -1271,7 +1187,7 @@ on Transactions and the Overview's latest transactions for a few seconds. It
 is the screens' one live region for refreshes, kept for screen readers on
 narrow windows where it is not shown. While the book updates, screens dim
 only the figures that will change; they stay readable and clickable, and the
-table pauses loading more rows until the update lands. Cached reads stay for
-30 minutes after a screen closes, so reopening it shows its data at once and
-refetches if stale. Every lock, book switch, and profile switch empties the
-cache and forgets the change summary.
+table pauses loading more rows until the update lands. Reads stay cached by
+kind, so reopening a screen shows its data at once while it re-reads. Every
+lock, book switch, and profile switch empties the cache and forgets the change
+summary.

@@ -12,9 +12,9 @@ serves the command line, the desktop daemon, the MCP server, and the operator
 broker. Keep business decisions in its crates so the CLI, desktop, and
 in-product AI cannot produce different accounting. Read
 [backend guidance](crates/AGENTS.md) for Rust crate work and
-[desktop guidance](crates/kassiber-desktop/AGENTS.md) for the desktop app
-([Tauri guidance](ui-tauri/AGENTS.md) for the outgoing React shell). Changes to
-a shared contract need verification across its callers, including AI projections.
+[desktop guidance](crates/kassiber-desktop/AGENTS.md) for the desktop app.
+Changes to a shared contract need verification across its callers, including
+AI projections.
 
 - Keep observed transactions, ownership evidence, reviewed custody, tax inputs,
   and source-of-funds provenance distinct. A suggestion, graph connection, or
@@ -72,8 +72,7 @@ changing external I/O, storage, credentials, diagnostics, or AI disclosure.
   [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Update installation docs if
   runtime requirements change. Use the package-manager pins in the repo.
 - Remote scaffolders and regeneration over existing files require approval for
-  that specific run. Do not bypass the pnpm minimum release-age policy without
-  owner approval. Keep generated changes separate from handwritten behavior
+  that specific run. Keep generated changes separate from handwritten behavior
   when practical. Report accidental replacement of unrelated work immediately.
 - Kassiber is Rust only; Python was removed under
   [plan 22](docs/plan/22-python-removal.md). Do not add Python to the product or

@@ -467,12 +467,8 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
         ".git",
         ".venv",
         "target",
-        "ui-tauri/node_modules",
-        "ui-tauri/dist",
-        "ui-tauri/src-tauri/target",
-        // Sidecar binaries the desktop build copies in; not checked-in source.
-        "ui-tauri/src-tauri/binaries",
-        // The desktop app's own Cargo workspace: its build output and packaged apps.
+        // The desktop app's own Cargo workspace: its build output, and its packaged apps,
+        // which bundle the built `kassiber` binary; not checked-in source.
         "crates/kassiber-desktop/target",
         "crates/kassiber-desktop/dist",
     ]
@@ -641,7 +637,7 @@ fn other_crates_cannot_open_connections_or_depend_on_network_clients() {
     let own = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = own.parent().unwrap().parent().unwrap();
     let mut failures = Vec::new();
-    // Includes future workspace crates and existing tax/Tauri crates; no source
+    // Includes future workspace crates and the desktop app's own workspace; no source
     // exception for tests in other crates. Loopback fakes belong in kassiber-net.
     scan(root, own, &mut failures);
     assert!(
@@ -1037,16 +1033,13 @@ fn cargo_override_configs_and_forwarded_features_fail_in_real_tree_walk() {
 
 #[test]
 fn reviewed_process_call_is_bound_to_function_file_line_and_occurrence() {
-    let path = Path::new("ui-tauri/src-tauri/src/app_update.rs");
-    let source = "async fn run_sidecar_update_check() {\nlet mut child = tokio::process::Command::new(&program)\n}";
+    let path = Path::new("crates/kassiber-desktop/src/native/update.rs");
+    let source = "fn run_cli_check() {\nlet mut cmd = Command::new(program);\n}";
     assert!(!bypass(&source_without_reviewed_children(path, source)));
     for (path, source) in [
         (Path::new("other.rs"), source.to_owned()),
-        (
-            path,
-            source.replace("run_sidecar_update_check", "unreviewed"),
-        ),
-        (path, source.replace("&program", "\"curl\"")),
+        (path, source.replace("run_cli_check", "unreviewed")),
+        (path, source.replace("(program)", "(\"curl\")")),
         (path, source.to_owned() + "\nCommand::new(\"curl\");"),
         (path, source.to_owned() + source),
     ] {
@@ -1085,26 +1078,23 @@ fn disappearing_unrelated_cache_files_do_not_mask_missing_crate_sources() {
 }
 
 #[test]
-fn copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root() {
+fn packaged_desktop_apps_are_skipped_but_only_at_their_checkout_root() {
     let root = tempfile::tempdir().unwrap();
-    let tauri = root.path().join("ui-tauri/src-tauri");
-    fs::create_dir_all(tauri.join("binaries")).unwrap();
-    fs::create_dir_all(tauri.join("src/binaries")).unwrap();
+    let desktop = root.path().join("crates/kassiber-desktop");
+    fs::create_dir_all(desktop.join("dist")).unwrap();
+    fs::create_dir_all(desktop.join("src/dist")).unwrap();
     fs::write(
-        tauri.join("Cargo.toml"),
+        desktop.join("Cargo.toml"),
         "[package]\nname = \"example\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
     let networked = "std::net::TcpStream::connect(\"localhost:9\");";
-    // A built sidecar contains every string its dependencies do.
-    fs::write(
-        tauri.join("binaries/kassiber-cli-aarch64-apple-darwin"),
-        networked,
-    )
-    .unwrap();
-    fs::write(tauri.join("src/binaries/x.rs"), networked).unwrap();
+    // A packaged app bundles the built `kassiber`, which contains every
+    // string its dependencies do.
+    fs::write(desktop.join("dist/kassiber"), networked).unwrap();
+    fs::write(desktop.join("src/dist/x.rs"), networked).unwrap();
     let mut failures = Vec::new();
     scan(root.path(), &root.path().join("net"), &mut failures);
     assert_eq!(failures.len(), 1, "{failures:?}");
-    assert!(failures[0].ends_with("src/binaries/x.rs"), "{failures:?}");
+    assert!(failures[0].ends_with("src/dist/x.rs"), "{failures:?}");
 }

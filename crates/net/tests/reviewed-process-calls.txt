@@ -1,20 +1,6 @@
 # Reviewed child launches: file|enclosing function|exact call line. One occurrence each.
 # Includes consent-gated update/daemon sidecars, native pickers, explicit browser/file opens,
 # local codesign inspection, and disposable binary protocol tests. No arbitrary new process call.
-ui-tauri/src-tauri/src/app_update.rs|run_sidecar_update_check|let mut child = tokio::process::Command::new(&program)
-ui-tauri/src-tauri/src/supervisor.rs|spawn_command_with_secret_store|let mut process_command = Command::new(&command.program);
-ui-tauri/src-tauri/src/supervisor.rs|run_cli|let mut process = Command::new(&command.program);
-ui-tauri/src-tauri/src/lib.rs|choose_import_project_directory_macos|let mut command = Command::new("osascript");
-ui-tauri/src-tauri/src/lib.rs|choose_import_project_directory_windows|let mut command = Command::new("powershell.exe");
-ui-tauri/src-tauri/src/lib.rs|try_unix_folder_picker|let mut command = Command::new(program);
-ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("open");
-ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("explorer");
-ui-tauri/src-tauri/src/lib.rs|default_app_command|let mut command = Command::new("xdg-open");
-ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("open");
-ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("explorer");
-ui-tauri/src-tauri/src/lib.rs|default_browser_command|let mut command = Command::new("xdg-open");
-ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let verified = Command::new("/usr/bin/codesign")
-ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let details = Command::new("/usr/bin/codesign")
 crates/kassiber/tests/supervisor_protocol.rs|spawn|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/routing_ports/replay.rs|run_process|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
 crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
@@ -141,7 +127,7 @@ crates/kassiber/tests/exchange_swaps.rs|binary|let mut command = Command::new(en
 crates/kassiber-desktop/src/daemon.rs|migrate_default_state_root|let mut c = Command::new(&cmd.program);
 crates/kassiber-desktop/src/daemon.rs|spawn|let mut c = Command::new(&cmd.program);
 crates/kassiber-desktop/src/demo/mod.rs|run_create|let mut c = Command::new(&cmd.program);
-crates/kassiber-desktop/src/native/cli.rs|run_cli|match Command::new(&cmd.program)
+crates/kassiber-desktop/src/native/cli.rs|run_cli|let mut process = Command::new(&cmd.program);
 crates/kassiber-desktop/src/native/update.rs|run_cli_check|let mut cmd = Command::new(program);
 crates/kassiber-desktop/src/fixtures.rs|build_book|let out = Command::new(&bin)
 # Fixed local OS programs: explicit file/browser opens and reveals (open, explorer, xdg-open,

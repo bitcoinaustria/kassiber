@@ -1,8 +1,3 @@
-# Generated files. Marked so GitHub collapses them in review and leaves them out
-# of the language stats — resolver output, not code to read.
-
-ui-tauri/pnpm-lock.yaml linguist-generated=true
-
 # Embedded byte for byte by the desktop app, whose logo bounds are keyed by a hash of the
 # file: no line-ending conversion on Windows checkouts.
 assets/logos/** -text

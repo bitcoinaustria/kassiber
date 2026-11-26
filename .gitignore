@@ -20,10 +20,7 @@ log/
 # Cargo's build output for the root workspace (Cargo.toml).
 /target/
 /reports
-/.pnpm-store
 
-# Staged by the Windows packaging legs: the PATH copy of the sidecar.
-ui-tauri/src-tauri/bin/kassiber.exe
 # >>> generated test data: tests/test-data.lock (scripts/fetch-test-data.sh --ignore)
 /.test-data/
 /crates/ai/tests/data/vectors.json

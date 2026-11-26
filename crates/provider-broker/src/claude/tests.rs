@@ -177,21 +177,24 @@ fn recognises_only_claudes_fast_fallback_notification() {
 
 #[test]
 fn matches_the_desktops_mirror_of_claudes_effort_levels() {
+    // The desktop offers these levels when Claude's models list none
+    // (`NATIVE_RUNTIME_EFFORTS` in the Rune app's model picker).
     let source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui-tauri/src/lib/aiCapabilities.ts"),
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../kassiber-desktop/src/assistant/picker/data.rs"),
     )
     .unwrap();
     let line = source
         .lines()
-        .skip_while(|line| !line.contains("NATIVE_RUNTIME_REASONING_EFFORTS"))
-        .find(|line| line.trim_start().starts_with("claude:"))
+        .skip_while(|line| !line.contains("NATIVE_RUNTIME_EFFORTS: &["))
+        .find(|line| line.trim_start().starts_with("(\"claude\","))
         .unwrap();
     let mirrored: String = CLAUDE_EFFORTS
         .iter()
         .map(|effort| format!("\"{effort}\""))
         .collect::<Vec<_>>()
         .join(", ");
-    assert_eq!(line.trim(), format!("claude: [{mirrored}],"));
+    assert_eq!(line.trim(), format!("(\"claude\", &[{mirrored}]),"));
 }
 
 // broker.test.ts: "removes native tools ...".

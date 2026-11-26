@@ -161,8 +161,7 @@ only while that sync is still the wallet's stored last one.
 
 ## Daemon kinds
 
-All four are Rust-only daemon kinds, in the Tauri and browser-bridge
-allowlists, classified like their BTCPay counterparts (`status` read, the
+All four are Rust-only daemon kinds, in the desktop allowlist, classified like their BTCPay counterparts (`status` read, the
 rest operator), and refuse unknown arguments before any work.
 
 | Kind | Arguments | Network | Answer |
@@ -228,14 +227,13 @@ proxies; the desktop never sends it.
   equal. It also pins that only the explicit test and sync contact the fake,
   that offline mode stops both, the Binance trading-key refusal, the key
   scrub in output, tables and status, and the argument refusals.
-- `ui-tauri/src/components/kb/exchange/*.dom.test.tsx`: the setup panel
-  (guides, exact test arguments, retest after a change, explained errors,
-  German), the dialog flow (no request before Test connection, create without
-  sync unless opted in) and the wallet card.
 - The desktop app's unit tests (`crates/kassiber-desktop`):
-  `wallets::add::exchange::model` (the eight exchanges, their key guides,
-  that only a wallet with a backend is an API connection, exact msat as BTC),
-  `wallets::add::exchange` (the provider balance line), and
+  `wallets::add::exchange::model` (the eight exchanges, their key guides
+  with exact scopes, exactly the trimmed credentials, that only a wallet with
+  a backend is an API connection, exact msat as BTC),
+  `wallets::add::exchange` (the provider balance line, and answer routing: a
+  sync answer stays with its wallet, an earlier test's answer is not the
+  current form's result), and
   `wallets::assets::model` (the assets block, ticker order, when the asset
   scope prompt shows, the re-auth arguments of `ui.wallets.update`, and that
   only a path chosen for this import replays it). The scenes

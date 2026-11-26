@@ -386,6 +386,22 @@ mod tests {
         }
     }
 
+    /// The README's wordmarks (`docs/assets/`) are drawn from this grid.
+    #[test]
+    fn readme_wordmarks_are_drawn_from_this_grid() {
+        let d = format!("d=\"{}\"", path(&word().solid, false));
+        for variant in ["on-light", "on-dark"] {
+            let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../../docs/assets/kassiber-wordmark-{variant}.svg"));
+            let svg = std::fs::read_to_string(&file).unwrap();
+            assert!(
+                svg.contains(&d),
+                "{} is not drawn from the grid",
+                file.display()
+            );
+        }
+    }
+
     #[test]
     fn rows_are_even_and_the_k_column_gap_is_empty() {
         for row in GRID {

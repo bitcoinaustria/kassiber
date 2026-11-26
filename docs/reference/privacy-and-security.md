@@ -231,8 +231,8 @@ Native Electrum graph decoding also checks the computed transaction ID before
 using a response or caching a parent.
 
 Chat Markdown never loads remote images. Image references stay inert until
-the user explicitly opens the link in the browser, including in Vite preview
-and restored chat history. Checking models for one provider, or checking one
+the user explicitly opens the link in the browser, including in restored chat
+history. Checking models for one provider, or checking one
 provider in Settings, contacts only that provider; it does not refresh the
 other installed CLI runtimes. A provider switched off in Settings (or with
 `kassiber ai providers update <name> --disable`) is never contacted: chat,
@@ -462,12 +462,15 @@ layouts stay legacy, while `~/.kassiber/{bin,run}` stay fixed. An active legacy
 desktop or operator owner defers migration; startup keeps using the legacy root
 until that process stops. `kassiber status` reports the effective root.
 
-- The desktop's UI preferences (`kb.ui` in the webview's local storage:
-  language, theme, privacy mode, panel layout, the open book's identity,
-  table sorts, and similar) hold no notifications. Notification text, detail
-  lines, book and source scope, timestamps, and actions stay in RAM for the
-  session; UI state version 5 deletes notifications earlier versions stored
-  there, and none is ever restored, so a stored Retry cannot run against
+- The desktop's UI preferences (`desktop-ui.json` in the app's config
+  directory `at.bitcoinaustria.kassiber`, or `KASSIBER_DESKTOP_PREFS_FILE`:
+  language, theme, privacy mode, panel layout, the open book's identity
+  without paths, table sorts, the main window's frame, and similar) hold no
+  notifications. On macOS that directory is the native state root, so the file
+  sits in `~/.kassiber` until the default-root migration moves it. Notification
+  text, detail lines, book and source scope, timestamps, and actions stay in
+  RAM for the session; reading an older preferences shape drops any
+  notifications it stored, and none is ever restored, so a stored Retry cannot run against
   another book. Toasts keep no history and are not forwarded to the
   operating system. The only notification preference stored there is the
   **Desktop notifications** boolean. "Ask the assistant" (an entry's More
@@ -479,8 +482,9 @@ until that process stops. `kassiber status` reports the effective root.
   notifications** and off by default. Once on, the operating system receives
   the title "Kassiber" and one of three fixed sentences ("Background work
   needs your attention.", "Background work has finished.", or "New activity in
-  Kassiber.", or their Austrian German equivalents), built in the native shell from an allowlisted category; the
-  webview can send nothing else and holds no `notification:*` permission. No
+  Kassiber.", or their Austrian German equivalents), chosen in
+  `crates/kassiber-desktop/src/native/notify.rs` from an allowlisted
+  category; no other text reaches it. No
   amounts, counts, book or wallet names, addresses, txids, server names, file
   names, paths, or error text are ever included, in any privacy mode. The
   operating system may still keep them in its notification history and show
@@ -491,10 +495,8 @@ until that process stops. `kassiber status` reports the effective root.
   window focus and no entry is opened. Delivery
   only reacts to work that was already authorized and adds no network request,
   poll, or probe.
-- Main-window geometry (size, position, maximized) is kept outside the state
-  root: in the app's AppKit preferences on macOS, and in
-  `.window-state.json` under Tauri's config directory on Windows and Linux. It
-  holds no book, account, or path data.
+- Main-window geometry (size, position, maximized) is kept in the same
+  preferences file. It holds no book, account, or path data.
 - `<state-root>/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
@@ -764,15 +766,15 @@ policy, so both CLI and desktop rotation arm a non-secret
 Its value is an opaque generation token, so an older enrollment callback cannot
 clear a newer rotation's guard. Because a post-rekey verification failure is
 ambiguous, the guard stays armed on any rotation error and is compare-and-cleared
-only after the Tauri process successfully refreshes its credential, or cleared
+only after the desktop app successfully refreshes its credential, or cleared
 after verified removal. The desktop therefore requires manual passphrase entry
 and re-enrollment rather than attempting a known-stale biometric copy, including
 after a process crash between rekey and Keychain refresh. A preview build cannot
 replace an existing protected enrollment, and credential removal does not clear
 enrollment markers until the applicable fallback and protected copies have been
 cleaned up successfully.
-Managed-settings reads for this guard fail closed, and Tauri keeps the lexical
-data-root for the settings path even when the Keychain account uses a canonical
+Managed-settings reads for this guard fail closed, and the desktop keeps the
+lexical data-root for the settings path even when the Keychain account uses a canonical
 path; a symlinked final `data` directory therefore cannot split the two sides of
 the guard channel.
 
@@ -1144,21 +1146,17 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   `ai.providers.set_api_key` and can move a provider key with
   `ai.providers.move_api_key`; provider envelopes return only `has_api_key`
   plus `secret_ref.{store_id,state}`. No generic keyring get/list API is
-  exposed to the webview or assistant.
+  exposed to the assistant; the desktop answers the daemon's key requests
+  only within the book's own namespace.
 - **No encrypted-while-running claim.** Once the daemon is unlocked, it
   can read stored AI keys, backend tokens, descriptors, and blinding keys to do
   its job. This does not protect against malware, admin/root access, debugger
-  memory inspection, a compromised OS, or a compromised webview process.
-- **The Tauri shell allowlists exactly the AI daemon kinds.** The webview
+  memory inspection, a compromised OS, or a compromised desktop app process.
+- **The desktop reaches AI only through allowlisted daemon kinds.** The app
+  has no network code of its own (the network chokepoint scans it), so it
   cannot reach Ollama (or any other model API) directly — every call
-  passes through the daemon. The provider URL never reaches the
-  webview's CSP/CORS surface. The in-app AI has no shell, raw filesystem,
+  passes through the daemon. The in-app AI has no shell, raw filesystem,
   arbitrary CLI, or generic daemon-dispatch access.
-- **The Vite daemon bridge is development-only.** `pnpm --dir ui-tauri run
-  dev:bridge` exposes selected daemon kinds, including AI streaming and
-  consent controls, through the Vite server on loopback for browser testing.
-  Do not bind that server to a LAN address or use it as a REST API; it is only
-  a local development bridge to the same daemon trust boundary.
 - **Streaming Stop is best-effort cooperative cancel, not a billing
   guarantee.** Pressing Stop sends `ai.chat.cancel` to the local daemon and
   suppresses later streamed UI updates. The chat worker stops forwarding

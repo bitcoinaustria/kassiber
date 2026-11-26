@@ -1796,12 +1796,8 @@ operator leaves, brokered routing and `ui.agent_access.*` kinds and R6-8's
   `ui.profiles.update` (dry run first, then apply) for any book, including
   currency, holding days, coarse review, the rail default, the tax year
   start and the zone ([book settings](docs/reference/tax.md#book-settings));
-  add `ui.profiles.settings` to `ALLOWED_DAEMON_KINDS` and
-  `ALLOWED_BRIDGE_KINDS`; regenerate `ui-tauri/src/lib/taxCountries.generated.ts`
-  (`KASSIBER_UPDATE_TAX_COUNTRIES_TS=1 cargo test -p kassiber-tax-countries`,
-  stale until then: the registry gained four countries and the book-calendar
-  fields); year menus and export presets on the book's tax year and
-  `YYYY-YY` labels; the Overview's realized label as tax-year to date.
+  add `ui.profiles.settings` to the desktop's `ALLOWED_DAEMON_KINDS`; year
+  menus and export presets on the book's tax year and `YYYY-YY` labels; the Overview's realized label as tax-year to date.
 - [ ] Give the assistant and MCP the book settings: `ui.profiles.settings`
   as a read tool and `ui.profiles.update` as a mutating, non-reversible
   policy tool (always asks) whose plan step is its own `dry_run` preview,
@@ -2008,8 +2004,6 @@ See [tax countries](docs/reference/tax-countries.md) and
   Transfer legs book no value, so the report averages each asset across
   wallets; a wallet bought cheaper than the others reads at the average
   (verification of #773, 2026-11-18; stored data, needs owner sign-off).
-- [ ] Show an income receipt's basis from its acquisition in the outgoing
-  ui-tauri Tax panel (`TransactionTaxModel.ts`), as Rune does since #781.
 - [ ] Decide whether single-table machine CSVs (capital gains, transactions,
   platform formats) of a preview country carry the preview notice; the
   shared-design reports do, and a notice row would break those files'
@@ -2385,8 +2379,8 @@ Remaining:
 
 - [x] Adopt the Rune desktop as the desktop app: moved to
   `crates/kassiber-desktop` (own workspace and lockfile, excluded from the root
-  workspace), translations and integration logos shared with `ui-tauri/` from
-  `assets/`, Rune built without its default features (no MPL audio decoders),
+  workspace), translations and integration logos in `assets/`, Rune built
+  without its default features (no MPL audio decoders),
   `fmt`/clippy/tests in the gate and a macOS/Linux/Windows CI job.
 - [ ] Assistant change cards (PR #810 follow-ups): refresh the book after a
   successful Undo even when its conversation was cleared while it ran (the reply
@@ -2402,9 +2396,11 @@ Remaining:
   `transactions::prime`'s 30 s deadline (its reads never settle), so a full run
   takes hours; the scenes after `crash` had never been checked before the
   harness reset the recovery state between renders.
-- [ ] Ship the Rune app in releases: point the prerelease workflow, the
-  Homebrew cask and the Linux channels at `crates/kassiber-desktop/packaging/`
-  instead of the Tauri bundle, and run its Linux and Windows packaging natively.
+- [x] Ship the Rune app in releases: the prerelease workflow builds it on each
+  OS with `crates/kassiber-desktop/packaging/`, under the earlier artifact
+  names, so the Homebrew cask and the Linux channels take it unchanged (done
+  with the removal of `ui-tauri/`). Still to prove on real installs: an MSI
+  upgrade over a Tauri install, and Touch ID unlock from a notarized build.
 - [ ] Desktop reply routing left after the #773 sweep: the custody book-switch
   reset (`custody/mod.rs`) still drops the link/unlink preview, rules and
   components queues (only an outside book change, nothing user-started, hits
@@ -2423,16 +2419,17 @@ Remaining:
   (`wallets/add/setup.rs`) load a picked file into memory on the UI thread with
   no size cap. The assistant's attachments are bounded (`read_bounded`); these
   need a cap the daemon's import limits agree with, or a path handoff.
-- [ ] Decide when `ui-tauri/` retires. Until then it is the parity reference
-  (`crates/kassiber-desktop/parity/`) and its kind lists are checked against
-  the desktop's (`src/kinds/tests.rs`, which skips when `ui-tauri/` is absent).
+- [x] Retire the Tauri desktop: `ui-tauri/` was removed after commit
+  `1c8065d4b`; the parity harness (`crates/kassiber-desktop/parity/`) runs
+  against a separate checkout of that commit.
 - [ ] Two parts of the other-crypto-assets stack have no screen in the desktop app
   yet and stay out of it until one exists: the source-of-funds view's guess that
-  a Bitvavo, Bitfinex or Bitcoin.de account is an exchange (the Tauri
-  `txNetwork` in `routes/source-funds/model.ts`), and the secret scanner's
-  exchange qualifier words (`lib/secretScanner.ts`, which would list `bitvavo`;
-  the desktop app relies on the backend's redaction instead). Neither changes
-  what the CLI or daemon do.
+  a Bitvavo, Bitfinex or Bitcoin.de account is an exchange (the retired Tauri
+  app's `txNetwork` in `ui-tauri/src/routes/source-funds/model.ts` at
+  `1c8065d4b`), and the secret scanner's exchange qualifier words (its
+  `ui-tauri/src/lib/secretScanner.ts`, which would list `bitvavo`; the desktop
+  app relies on the backend's redaction instead). Neither changes what the CLI
+  or daemon do.
 
 - [ ] Let an agent request a brokered session that the user approves with
   Touch ID on signed macOS builds: allow `operator unlock --auth touch-id`
@@ -2558,18 +2555,13 @@ on the CLI, daemon and desktop.
   envelope boundaries; do not rebuild shared domain logic in handlers.
 - [ ] Centralize safe-view projection so CLI, desktop, and AI consumers retain
   their deliberate audience differences under one redaction contract.
-- [ ] Generate daemon/renderer/bridge allowlists from a common contract while
+- [ ] Generate the daemon and desktop allowlists from a common contract while
   preserving separate authority scopes. Existing drift tests remain required.
-- [ ] Derive JSON Schema and TypeScript contracts from the Rust daemon types,
+- [ ] Derive JSON Schema contracts from the Rust daemon types,
   with schema drift failing CI. The earlier proposal (Pydantic v2 models) went
   with Python.
-- [ ] Resolve the dev-bridge mutation/authentication policy: read-only by default
-  with explicit mutation opt-in, or a per-launch token. The shipped transport
-  is Vite HTTP middleware, not the old token-WebSocket plan. Complete the
-  relevant missing/wrong-token, non-loopback-bind, production-env refusal, and
-  no-token-in-logs checks for the chosen design; preserve origin containment.
 - [ ] Add systematic generated-artifact secret-leak scanning in CI beyond the
-  existing log/bridge redaction tests.
+  existing log redaction tests.
 - [ ] Add focused documentation drift checks for command, verification, and
   safe-output contracts across contributor docs, security guidance, in-product
   AI references, and the CLI skill. Avoid recreating manual catalogs.
@@ -2651,9 +2643,6 @@ on the CLI, daemon and desktop.
 - [ ] Complete explicit, opt-in guided Tor setup under
   [issue #311](https://github.com/bitcoinaustria/kassiber/issues/311). No silent
   install/start, global routing, or clearnet fallback for onion endpoints.
-- [ ] Reassess the transitive `glib` VariantStrIter advisory during the next
-  Tauri/GTK upgrade. Its recorded `not_used` dismissal is not an upstream fix;
-  verify the dependency graph and affected usage before changing that assessment.
 
 ## Distribution
 

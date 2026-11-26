@@ -22,6 +22,9 @@ fancy-regex = "0.20"
 [dev-dependencies]
 # Reads the Python-produced golden vectors; already locked for the tax engine.
 serde_json = "1"
+# Reads the locked, gzipped reviewer redaction corpora (tests/reviewer_corpora.rs);
+# the workspace's existing pin and pure-Rust backend.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
 
 [lints.rust]
 unsafe_code = "forbid"

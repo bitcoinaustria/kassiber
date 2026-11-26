@@ -1,7 +1,10 @@
 name: ci
 
 on:
+  # Pull requests run only on request: adding the `ci` label (see the note in
+  # ci.yml and docs/reference/testing.md#pull-request-ci).
   pull_request:
+    types: [labeled]
   push:
     branches:
       - main
@@ -20,75 +23,55 @@ on:
           - ubuntu-latest
 
 concurrency:
-  # Manual desktop runs get their own group so they never cancel main's CI.
-  group: ci-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}-{1}', inputs.desktop_os, github.ref) || github.event.pull_request.number || github.ref }}
+  # Manual desktop runs get their own group so they never cancel main's CI, and
+  # so does a pull request's other (non-`ci`) label, whose run does nothing.
+  group: ci-${{ github.event_name == 'workflow_dispatch' && format('dispatch-{0}-{1}', inputs.desktop_os, github.ref) || (github.event_name == 'pull_request' && github.event.label.name != 'ci' && format('other-label-{0}', github.run_id)) || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# A pull request into another pull request's branch (a stacked layer) runs the
-# fast lane: frontend, Rust crates, tooling and the Linux desktop build. The
-# recorded-session replay (32 runners), the chain-observer harness and the
-# macOS/Windows desktop builds run on pull requests into main and on main
-# itself. A stack therefore pays the full lane once, on the layer that targets
-# main; each layer pays it again when it becomes that layer. The condition is
-# spelled out per job because job-level `if:` cannot read workflow `env`:
-#   github.event_name == 'push' || github.base_ref == 'main'
+# Pushes to main run every job. A pull request runs only when someone adds the
+# `ci` label: one run per label, on the head at that moment. The `ci-label` job
+# takes the label off again, so adding it once more requests the next run (for
+# example after new commits). Any other label starts a run whose jobs skip and
+# whose `required` fails ("not requested"): a skipped required job would count
+# as passing.
+#
+# A requested run on a pull request into another pull request's branch (a
+# stacked layer) is the fast lane: Rust crates, tooling and the Linux desktop
+# build. The recorded-session replay (32 runners), the chain-observer
+# harness and the macOS/Windows desktop builds run on pull requests into main
+# and on main itself. The conditions are spelled out per job because job-level
+# `if:` cannot read workflow `env`:
+#   every job:       github.event_name == 'push' || github.event.label.name == 'ci'
+#   full lane only:  on pull requests also github.base_ref == 'main'
 # A manual run (workflow_dispatch) runs only the desktop job, on the chosen OS.
 
 jobs:
-  frontend:
-    name: Frontend checks
-    if: github.event_name != 'workflow_dispatch'
+  ci-label:
+    name: Take the ci label off
+    if: github.event.label.name == 'ci'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      # The redaction corpora the Vitest suites read are locked test data.
-      - name: Fetch pinned test data
-        shell: bash
-        run: scripts/fetch-test-data.sh
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 10.33.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '22'
-          cache: pnpm
-          cache-dependency-path: ui-tauri/pnpm-lock.yaml
-
-      - name: Install desktop dependencies
-        run: pnpm --dir ui-tauri install --frozen-lockfile
-
-      - name: Desktop UI typecheck
-        run: pnpm --dir ui-tauri run typecheck
-
-      - name: Desktop UI lint
-        run: pnpm --dir ui-tauri run lint
-
-      - name: Run Vitest
+      - name: Remove the ci label so the next request can add it again
+        # A fork's token cannot edit labels; the requested run goes ahead.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        # The labels API sometimes answers with an empty body; try three times.
         run: |
-          mkdir -p test-results
-          pnpm --dir ui-tauri exec vitest run \
-            --reporter=default \
-            --reporter=junit \
-            --outputFile.junit=../test-results/vitest.xml
-
-      - name: Upload frontend test report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: vitest-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: warn
-          retention-days: 7
+          for attempt in 1 2 3; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/ci" >/dev/null && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
 
   tax-engine:
     name: Rust crates
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event.label.name == 'ci'
     runs-on: ubuntu-latest
     # With every backend crate the workspace's test binaries alone run about
     # 18 minutes on the build machine (4 test threads), before this job's
@@ -171,7 +154,7 @@ jobs:
 
   tooling:
     name: Tooling scripts
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event.label.name == 'ci'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -187,7 +170,7 @@ jobs:
 
   session-replay-build:
     name: Recorded sessions (build)
-    if: github.event_name == 'push' || github.base_ref == 'main'
+    if: github.event_name == 'push' || (github.event.label.name == 'ci' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -224,7 +207,7 @@ jobs:
   session-replay:
     name: Recorded sessions (${{ matrix.part }})
     needs: session-replay-build
-    if: github.event_name == 'push' || github.base_ref == 'main'
+    if: github.event_name == 'push' || (github.event.label.name == 'ci' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     # About 24,000 sessions take hours on one 4-core runner. Each part
     # replays every 32nd session (session-replay --part K/N): about 760
@@ -302,7 +285,7 @@ jobs:
 
   chain-observers:
     name: Chain observers (Linux Docker)
-    if: github.event_name == 'push' || github.base_ref == 'main'
+    if: github.event_name == 'push' || (github.event.label.name == 'ci' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -370,6 +353,7 @@ jobs:
 
   desktop:
     name: Desktop app (${{ matrix.os }})
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -426,9 +410,11 @@ jobs:
 
   required:
     name: required
+    # Runs for every label, not only `ci`: a skipped required job would count as
+    # a passing check, so another label's run must fail it instead. A head that
+    # shows a failed `required` from such a run is untested; add `ci` for it.
     if: always() && github.event_name != 'workflow_dispatch'
     needs:
-      - frontend
       - tax-engine
       - session-replay
       - tooling
@@ -437,10 +423,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Refuse a run nobody requested
+        if: github.event_name == 'pull_request' && github.event.label.name != 'ci'
+        run: |
+          echo "::error::CI was not requested for this head; add the ci label to run it."
+          exit 1
+
+
       - name: Record required-check results
         run: |
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Rust crates: ${{ needs.tax-engine.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Recorded sessions: ${{ needs.session-replay.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tooling scripts: ${{ needs.tooling.result }}" >> "$GITHUB_STEP_SUMMARY"
@@ -453,7 +445,7 @@ jobs:
         env:
           FULL_LANE: ${{ github.event_name == 'push' || github.base_ref == 'main' }}
           RESULTS: >-
-            ${{ needs.frontend.result }} ${{ needs.tax-engine.result }}
+            ${{ needs.tax-engine.result }}
             ${{ needs.tooling.result }} ${{ needs.desktop.result }}
           FULL_LANE_RESULTS: >-
             ${{ needs.session-replay.result }} ${{ needs.chain-observers.result }}

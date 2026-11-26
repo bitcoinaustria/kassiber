@@ -1,8 +1,9 @@
 # Daemon Reference
 
-Kassiber's desktop shell talks to the Rust backend through a local JSONL
+Kassiber's desktop app talks to the Rust backend through a local JSONL
 daemon (`kassiber daemon`, from `crates/daemon` in the `kassiber` binary). The
-daemon is started by the Tauri supervisor, reads one JSON object per line from
+daemon is started by the desktop's supervisor
+(`crates/kassiber-desktop/src/daemon.rs`), reads one JSON object per line from
 stdin, and writes one JSON envelope per line to stdout.
 
 Start it directly for development:
@@ -15,14 +16,15 @@ The daemon bootstraps the normal Kassiber runtime: it creates the state
 layout if needed, opens the SQLite database, and serves status from that
 local store.
 
-The Tauri supervisor starts the same command with the Rust `kassiber`
-binary. `KASSIBER_BIN=/path/to/kassiber` overrides it for daemon startup and
-installed-app CLI forwarding during debugging. Otherwise packaged desktop
-builds start the bundled sidecar ([Rust packaging](rust-packaging.md)).
-Debug builds of the shell (`pnpm tauri:dev`) then fall back to the checkout's
+The desktop's supervisor starts the same command with the Rust `kassiber`
+binary. `--kassiber-bin` or `KASSIBER_BIN=/path/to/kassiber` overrides it for
+daemon startup during debugging. Otherwise packaged desktop builds start the
+bundled sidecar ([Rust packaging](rust-packaging.md)). Development builds of
+the app (with its `tooling` feature) then fall back to the checkout's
 `target/release/kassiber`, then `target/debug/kassiber`;
 `KASSIBER_REPO_ROOT=/path/to/checkout` points them at a different checkout.
-With none of these the supervisor refuses with `daemon_binary_missing`.
+Shipped builds never run a checkout binary. With none of these the supervisor
+refuses with `daemon_binary_missing`.
 
 The first record is `daemon.ready`. Its `data` includes `version` and
 `supported_kinds`; read that payload for the running daemon's capability list.
@@ -160,7 +162,7 @@ calls go through the AI executor with plan-digest binding, not the desktop's
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the
-ordinary webview invoke allowlist.
+desktop's ordinary invoke allowlist.
 
 Chat capability selection, `tool_profile` defaults (`full` when omitted), and
 execution validation are defined in [AI tool use](ai.md#tool-use).
@@ -308,7 +310,7 @@ absent from the desktop invoke allowlist.
 barrier: `ready` and the `blockers` that hold the book's reports back. It is
 a maintained read like `ui.reports.capital_gains` (a book whose report-read
 refresh policy is on may refresh first; nothing else leaves the machine). The
-AI tools and the desktop Reports page read it; the Tauri shell does not.
+AI tools and the desktop Reports page read it.
 
 `ui.transfers.dismissals.list` reads the profile's transfer-candidate
 dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
@@ -686,24 +688,20 @@ The result also includes `matched`, `skipped_unmatched`, and
 mode.
 
 No desktop screen starts this flow since the Transactions page's photo/PDF
-dialog was removed; the picker, staging, and kinds below remain for the next
-entry point. The desktop first uses the privileged native picker to invoke
-`internal.document_import.stage`. That kind is supported by the daemon
-but intentionally absent from the Tauri and Vite renderer allowlists. It keeps
-the canonical source path in a bounded, expiring, process-local daemon session
-and returns only an opaque `document_token` plus safe filename/type metadata.
-`source.kind` is `spreadsheet`, `delimited`, `pdf` or `image`. The chat's picker
-and a file dropped on the window pass `purpose: "chat_attachment"`, which
-accepts exports as well as images and PDFs; without it only images and PDFs
-are staged. Files dropped on the window are staged by the shell's
-`stage_dropped_chat_attachment` command, which takes no path: it uses the
-paths the native window reported for the drop, once and within ten seconds,
-stages each chat file type among them (up to eight) and returns
-`{staged: [...], dropped_count, unsupported_count}`. The daemon keeps at most
+dialog was removed; the staging and kinds below remain for the next entry
+point. `internal.document_import.stage` takes a natively picked path; it is
+supported by the daemon but intentionally absent from the desktop allowlist.
+It keeps the canonical source path in a bounded, expiring, process-local
+daemon session and returns only an opaque `document_token` plus safe
+filename/type metadata. `source.kind` is `spreadsheet`, `delimited`, `pdf` or
+`image`. `purpose: "chat_attachment"` accepts exports as well as images and
+PDFs; without it only images and PDFs are staged. The daemon keeps at most
 sixteen staging grants, enough for a chat's eight files and a document
 import.
 
-`ui.chat.attachments.upload` stages a pasted file without a path. The first
+`ui.chat.attachments.upload` stages a file without a path; the desktop sends
+every chat file the user picks or drops this way, so no path leaves the app.
+The first
 chunk names the file (`filename`, `total_bytes`) at `offset` 0; later chunks
 send the returned `upload_id` and the next `offset`. Each `chunk_base64` holds
 at most 512 KiB, and the whole file at most 25 MB of a chat file type.
@@ -719,7 +717,7 @@ optional contiguous `pages` range such as `2-6`. Raw path, draft, and row fields
 are rejected. PDFs within the page budget are rendered completely; longer PDFs
 require an explicit range, and the result reports total/rendered pages plus
 whether the selection is complete. It is read-only, but it calls a local AI
-model, so the Tauri shell gates it through `AI_RUNTIME_KINDS`. The daemon stores
+model, so the desktop gates it through `AI_RUNTIME_KINDS`. The daemon stores
 the normalized rows, source hash, selected page set, and active profile currency
 in a new immutable preview session and returns its fresh token; the renderer
 response omits the source path. A later preview therefore cannot change an
@@ -905,32 +903,21 @@ For a new desktop-invoked kind, keep these declarations in lockstep:
 | Layer | Declaration | Source |
 | --- | --- | --- |
 | Daemon handler support | `supported_kinds()` | [crates/daemon/src/lib.rs](../../crates/daemon/src/lib.rs) |
-| Desktop app invocation (canonical) | `ALLOWED_DAEMON_KINDS`, `STREAMING_DAEMON_KINDS`, `AI_RUNTIME_KINDS` | [kinds.rs](../../crates/kassiber-desktop/src/kinds.rs) |
-| Tauri renderer invocation (outgoing shell) | the same three lists | [lib.rs](../../ui-tauri/src-tauri/src/lib.rs) |
-| Browser bridge invocation | `ALLOWED_BRIDGE_KINDS` / `STREAM_CAPABLE_BRIDGE_KINDS` | [vite.config.ts](../../ui-tauri/vite.config.ts) |
+| Desktop app invocation | `ALLOWED_DAEMON_KINDS`, `STREAMING_DAEMON_KINDS`, `AI_RUNTIME_KINDS` | [kinds.rs](../../crates/kassiber-desktop/src/kinds.rs) |
 
-The desktop app's lists are the source: they must be a subset of daemon
-support, and until the Tauri shell is removed its lists and the bridge's must
-equal them, apart from the documented desktop-only kinds. Missing entries fail
-as `kind_not_allowed` in the app and Tauri or HTTP 403 in the bridge.
+The desktop app's lists must be a subset of daemon support. A kind missing
+from them fails as `kind_not_allowed` before the request leaves the app.
 [desktop_boundaries.rs](../../crates/daemon/tests/desktop_boundaries.rs)
-checks those relationships and actual React transport call sites; the app's
-own `kinds` tests check every kind its code sends.
+checks the lists against the daemon; the app's own `kinds` tests check every
+kind its code sends.
 
 These are privilege boundaries. AI runtime kinds have their own
 `AI_RUNTIME_KINDS` gate. AI-only reads and unsolicited worker events are
 intentionally absent from renderer invocation; confirm a real desktop caller
 before adding a kind. Do not add generic shell/filesystem dispatch or
-`reveal-*` kinds to the ordinary webview invoke path. Ordinary reads must redact
+`reveal-*` kinds to the ordinary desktop invoke path. Ordinary reads must redact
 stored wallet material and credentials. Explicit setup requests can carry
 locally entered wallet material; that does not authorize later disclosure.
-
-The browser preview uses the real daemon through the loopback Vite bridge:
-`pnpm --dir ui-tauri run dev:bridge` exposes `/__kassiber__/daemon` and the
-NDJSON `/__kassiber__/daemon/stream` endpoint. It starts the Rust binary
-(`KASSIBER_BIN`, else `target/release/kassiber`, else `target/debug/kassiber`)
-and refuses to start without one. Follow the
-[testing guide](testing.md) to choose an isolated data root.
 
 ## Request routing
 
@@ -941,8 +928,9 @@ Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 ```
 
 Responses use the normal machine envelope plus the same `request_id`.
-The supervisor resolves only the matching request's exact-kind terminal record
-or error; intermediate streaming records go to `daemon://stream`.
+The supervisor resolves only the matching request's exact-kind terminal record,
+`error` or `auth_required`; a streaming kind's intermediate records reach the
+same request as progress.
 `schema_version` follows the CLI machine-output contract; bump it only when
 consumers must change how they parse daemon envelopes.
 
@@ -1005,13 +993,11 @@ event envelope class: a top-level `event: true` marker and never a
 {"kind":"ui.freshness.background","schema_version":1,"data":{},"event":true}
 ```
 
-The Tauri supervisor forwards event records to the `daemon://event` channel
-(separate from per-request `daemon://stream` records) instead of routing them
-by `request_id`. Apart from the startup `daemon.ready` handshake, any other
-post-ready record without a `request_id` — including an event record that
-wrongly carries one — is a fatal supervisor protocol error that marks the
-daemon broken. The Vite dev bridge has no push channel to the browser, so it
-logs event records in the dev-server terminal instead.
+The desktop's supervisor hands event records to the app as events instead of
+routing them by `request_id`. Apart from the startup `daemon.ready` handshake,
+any other post-ready record without a `request_id` — including an event record
+that wrongly carries one — is a fatal supervisor protocol error that marks the
+daemon broken.
 
 `status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`,
 `ui.freshness.*`, and `ui.journals.process` are backed by real data today.
@@ -1391,8 +1377,8 @@ The port record is the
 When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon
 still bootstraps through the normal runtime path: it accepts
 `--db-passphrase-fd <FD>` for that selected project and falls back to an
-interactive prompt only if a controlling TTY is attached. The Tauri supervisor
-uses the existing `auth_required` challenge and a secret-store bridge whose
+interactive prompt only if a controlling TTY is attached. The desktop's
+supervisor uses the existing `auth_required` challenge and a secret-store bridge whose
 passphrase reply is consumed in daemon memory; terminal broker workers use
 inherited anonymous fds and never put the passphrase in daemon JSON.
 
@@ -1423,15 +1409,15 @@ books or the plaintext acknowledgement for unencrypted books, then copies the
 stored descriptor material as one clipboard payload. When the wallet stores
 separate receive and change descriptors, both raw descriptor strings are
 included on separate lines; when the wallet stores a combined multipath
-descriptor, that single string is copied unchanged. The webview still cannot
+descriptor, that single string is copied unchanged. The desktop still cannot
 invoke arbitrary backend-token or raw-config reveals.
 
 The supervisor and any client must redact `passphrase_secret`, `token`,
 `descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, `password`,
 and `api_key` fields from any persisted log line.
 The daemon also redacts secret-shaped strings and sensitive detail keys at the
-error-envelope boundary before responses cross into Tauri, the Vite bridge, or
-UI state. Provider-controlled AI error bodies are treated as hostile and are
+error-envelope boundary before responses cross into the desktop app or UI
+state. Provider-controlled AI error bodies are treated as hostile and are
 size-limited plus redacted before they become `error.details.body`.
 
 

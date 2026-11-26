@@ -49,7 +49,7 @@
         version = "@VERSION@";
         src = desktopSrc;
         nativeBuildInputs = [ pkgs.makeWrapper ];
-        extraPkgs = pkgs: with pkgs; [ gtk3 webkitgtk_4_1 ];
+        extraPkgs = pkgs: with pkgs; [ fontconfig libxkbcommon wayland vulkan-loader xorg.libX11 xorg.libXcursor xorg.libXrandr xorg.libXi ];
         extraInstallCommands = ''
           mv "$out/bin/kassiber" "$out/bin/kassiber-ui"
           makeWrapper "$out/bin/kassiber-ui" "$out/bin/kassiber"             --add-flags "--cli"

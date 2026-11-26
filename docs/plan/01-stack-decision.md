@@ -1,12 +1,13 @@
 # ADR: Desktop UI Stack
 
-**Status:** Accepted.
+**Status:** Accepted; superseded. The native Rune app (`crates/kassiber-desktop`)
+replaced the Tauri shell, and `ui-tauri/` was removed after commit `1c8065d4b`.
 **Decision:** Tauri 2 + React 19 + TypeScript + shadcn/ui, with the backend
 running as a long-lived sidecar daemon over stdin/stdout JSONL. The backend
 was Python when this ADR was written; since plans 21 and 22 it is the Rust
 `kassiber` binary (see the amendments below).
 **Date:** 2026-04-25.
-**Current source of truth:** the `ui-tauri/` workspace, the daemon crate
+**Current source of truth:** `crates/kassiber-desktop`, the daemon crate
 (`crates/daemon`), the [daemon contract](../reference/daemon.md),
 [04-desktop-ui.md](04-desktop-ui.md), and `TODO.md`.
 

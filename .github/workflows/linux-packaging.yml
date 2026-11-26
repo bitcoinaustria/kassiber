@@ -1,7 +1,10 @@
 name: linux-packaging
 
 on:
+  # Pull requests run only on request: adding the `ci` label (see the note in
+  # ci.yml and docs/reference/testing.md#pull-request-ci).
   pull_request:
+    types: [labeled]
     paths:
       - ".github/workflows/linux-packaging.yml"
       - ".github/workflows/finalize-signed-release.yml"
@@ -22,7 +25,7 @@ on:
       - "tests/test_linux_channel_renderers.py"
       - "tests/test_linux_packaging.py"
       - "tests/test_rpm_packaging.py"
-      - "ui-tauri/src-tauri/tauri.conf.json"
+      - "crates/kassiber-desktop/packaging/linux/**"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +34,7 @@ permissions:
 jobs:
   apt:
     name: Signed APT and Debian lifecycle
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -49,6 +53,7 @@ jobs:
 
   rpm:
     name: RPM and DNF lifecycle — Fedora ${{ matrix.fedora }}
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
@@ -86,6 +91,7 @@ jobs:
 
   aur:
     name: AUR recipes
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -127,6 +133,7 @@ jobs:
 
   nix:
     name: Nix flake evaluation
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -152,6 +159,7 @@ jobs:
 
   renderers:
     name: Channel renderer unit tests
+    if: github.event_name != 'pull_request' || github.event.label.name == 'ci'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

@@ -11,8 +11,9 @@ was notarized, uploaded, pushed or installed.
 This is the record of a run made while the Python backend still existed. Its
 Python comparisons, `uv` setup and `tests/*.py` names refer to code removed
 under [plan 22](../plan/22-python-removal.md); it is reachable at the
-`archive/python-backend` tag. The Rust findings and the open owner items
-below still apply.
+`archive/python-backend` tag. Its `ui-tauri/` paths and Node/pnpm setup belong
+to the Tauri desktop, removed after commit `1c8065d4b`. The Rust findings and
+the open owner items below still apply.
 
 ## Machine and toolchain
 

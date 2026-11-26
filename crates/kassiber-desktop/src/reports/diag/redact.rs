@@ -138,6 +138,14 @@ pub fn stable_hash(value: &str) -> String {
     format!("{h:08x}")
 }
 
+/// Unit tests salt amount pseudonyms with the corpus salt of
+/// `tests/fixtures/operational_redaction_cases.json`, so expected pseudonyms are fixed.
+#[cfg(test)]
+fn salt() -> &'static str {
+    "0000000100000002"
+}
+
+#[cfg(not(test))]
 fn salt() -> &'static str {
     static S: OnceLock<String> = OnceLock::new();
     S.get_or_init(|| {
@@ -510,6 +518,9 @@ pub fn field_name(name: &str, ty: &str) -> String {
     }
     ty.to_owned()
 }
+
+#[cfg(test)]
+mod corpus_tests;
 
 #[cfg(test)]
 mod tests {

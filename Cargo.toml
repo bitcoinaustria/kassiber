@@ -1,10 +1,9 @@
 # Kassiber's Rust workspace (docs/plan/21-rust-backend.md): the tax engine
-# and the backend crates. The desktop app (crates/kassiber-desktop) and
-# ui-tauri/src-tauri are their own workspaces with their own lockfiles, on the
-# same toolchain (rust-toolchain.toml).
+# and the backend crates. The desktop app (crates/kassiber-desktop) is its own
+# workspace with its own lockfile, on the same toolchain (rust-toolchain.toml).
 [workspace]
-# Cargo would otherwise claim these as undeclared members.
-exclude = ["crates/kassiber-desktop", "ui-tauri"]
+# Cargo would otherwise claim it as an undeclared member.
+exclude = ["crates/kassiber-desktop"]
 resolver = "2"
 members = [
   "crates/ai",
@@ -55,7 +54,7 @@ members = [
 [workspace.package]
 edition = "2021"
 # The repository's pinned toolchain (rust-toolchain.toml), which also builds
-# ui-tauri/src-tauri.
+# the desktop app (crates/kassiber-desktop).
 rust-version = "1.99"
 license = "MIT"
 authors = ["Bitcoin Austria"]
@@ -77,4 +76,10 @@ opt-level = 3
 # key derivation. Unoptimized it made a quarter of the Rust test time; the
 # Rust code it serves stays at the dev level.
 [profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
+# The secret floor runs the locked reviewer redaction corpora (about 700,000
+# cases, crates/envelope/tests/); unoptimized they add minutes to every debug
+# test run. Assertions and overflow checks stay on.
+[profile.dev.package.kassiber-envelope]
 opt-level = 3

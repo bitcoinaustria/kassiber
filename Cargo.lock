@@ -2673,6 +2673,7 @@ name = "kassiber-envelope"
 version = "0.1.0"
 dependencies = [
  "fancy-regex 0.20.0",
+ "flate2",
  "kassiber-pyjson",
  "kassiber-pytext",
  "serde_json",
