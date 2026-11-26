@@ -23,6 +23,8 @@ for f in "$rune_bin" "$kassiber_bin" "$build_info"; do [ -f "$f" ] || { echo "mi
 [ -n "$version" ] || { echo "--version is required" >&2; exit 1; }
 stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/binaries" "$stage/bin" "$stage/windows" "$output"
+# Absolute: makensis resolves OutFile from the script's directory, not the working one.
+output="$(cd "$output" && pwd)"
 cp "$rune_bin" "$stage/kassiber-ui.exe"
 cp "$kassiber_bin" "$stage/binaries/kassiber-cli-x86_64-pc-windows-msvc.exe"
 cp "$build_info" "$stage/binaries/BUILD_INFO.json"
