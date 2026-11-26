@@ -2178,6 +2178,31 @@ or as cross-book disclosure. The GUI uses that object and the exact tool payload
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
 
+### Balance checkpoints
+
+Three Rust-only tools expose [balance checkpoints](balance-checkpoints.md),
+appended last in the catalog so every Python tool keeps its position; the
+Python parity tests and the MCP registry test list them as Rust only.
+
+- `ui_wallets_checkpoints_list` (read, local): every checkpoint with its
+  comparison (matches, differs with a signed difference, or not comparable
+  and why), each wallet's worst state, and `journals.input_version`. The
+  projection drops `origin_ref` (an imported file or backend name) and
+  `attachment_id`; descriptors, xpubs, backend URLs and credentials are never
+  part of the payload. It never contacts a source.
+- `ui_wallets_checkpoints_add` and `ui_wallets_checkpoints_remove`
+  (mutating, consented, not reversible): a manual balance from a statement,
+  and the removal of a stored checkpoint. Both require
+  `expected_input_version` from the read; the service compares it with the
+  profile's journal input version inside the write's savepoint and refuses
+  a moved book with `stale_context`, as the frozen chat scope refuses
+  another book. Their results are projected like the list, so a repeated
+  add that returns the stored row never shows its import reference. A
+  checkpoint never changes journals, basis or tax results.
+
+MCP lists the read at every grant and the writes from `operator` up, with
+removal marked destructive.
+
 ### Backend certificate errors
 
 A sync or connection failure `tls_certificate_untrusted` means the user's own

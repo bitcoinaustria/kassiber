@@ -649,6 +649,19 @@ fn mutate(
                 Ok(envelope(kind, payload))
             })
         }
+        // Balance checkpoints (docs/reference/balance-checkpoints.md): the
+        // service refuses a write whose expected_input_version is stale.
+        "ui.wallets.checkpoints.add" | "ui.wallets.checkpoints.remove" => {
+            scoped(runtime, host, &mut |book, _| {
+                // Projected like the list: a repeated add returns the stored
+                // row, which must not show its import reference.
+                let payload = book.mutate(kind, arguments, "ai_tool")?;
+                Ok(envelope(
+                    kind,
+                    crate::projections::checkpoint_entry_for_ai(payload),
+                ))
+            })
+        }
         _ if kind.starts_with("ui.transfers.") || kind.starts_with("ui.saved_views.") => {
             if kind == "ui.transfers.update"
                 && !["kind", "policy", "notes"]

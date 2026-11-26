@@ -45,6 +45,28 @@ pub fn execute(
         );
         return book.service(&format!("wallets.{command}"), &args);
     }
+    if namespace.text("wallets_command") == Some("checkpoints") {
+        // Only the leaf's own arguments; the service refuses anything else.
+        let leaf = namespace.text("checkpoints_command").unwrap_or_default();
+        let args = dict(
+            [
+                "workspace",
+                "profile",
+                "wallet",
+                "history",
+                "btc",
+                "date",
+                "asset",
+                "note",
+                "attachment",
+                "id",
+                "file",
+            ]
+            .into_iter()
+            .filter_map(|key| namespace.get(key).map(|value| (key, value.clone()))),
+        );
+        return book.service(&format!("wallets.checkpoints.{leaf}"), &args);
+    }
     if namespace.text("wallets_command") == Some("import-samourai") {
         return book.import_samourai(kassiber_wallets::file_import::samourai::Request {
             workspace: namespace.get("workspace").cloned(),
