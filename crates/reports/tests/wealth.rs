@@ -1014,3 +1014,109 @@ fn custodial_exchange_kinds_classify_as_platform() {
         .expect("platform row");
     assert_eq!(py_str(field(platform, "quantityMsat")), "30000000000");
 }
+
+#[test]
+fn non_bitcoin_quantities_never_join_bitcoin_totals() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    // 10 ETH in the shared 10^-11 storage unit: a raw quantity 6.67x the
+    // book's 1.5 BTC that must not be added to it.
+    conn.execute_batch(
+        r#"
+        UPDATE profiles SET last_processed_tx_count = 4 WHERE id = 'prof-at';
+        INSERT INTO transactions(
+            id, workspace_id, profile_id, wallet_id, fingerprint, occurred_at, direction, asset,
+            amount, fee, fiat_value, excluded, created_at
+        ) VALUES (
+            'tx-eth', 'ws-1', 'prof-at', 'w-hot', 'fp-eth', '2024-05-01T10:00:00Z', 'inbound', 'ETH',
+            1000000000000, 0, 25000.0, 0, '2024-05-01T10:00:00Z'
+        );
+        INSERT INTO journal_entries(
+            id, workspace_id, profile_id, wallet_id, transaction_id, occurred_at,
+            entry_type, asset, quantity, fiat_value, cost_basis,
+            created_at
+        ) VALUES (
+            'je-eth', 'ws-1', 'prof-at', 'w-hot', 'tx-eth', '2024-05-01T10:00:00Z',
+            'acquisition', 'ETH', 1000000000000, 25000.0, 25000.0,
+            '2026-02-01T10:00:00Z'
+        );
+        INSERT INTO rates_cache(pair, timestamp, rate, rate_exact, source, fetched_at)
+        VALUES ('ETH-EUR', '2025-12-31T22:55:00Z', 3000.0, '3000', 'kraken_csv', '2026-01-01T00:00:00Z');
+        "#,
+    )
+    .unwrap();
+
+    let args = dict([
+        ("workspace", s("Privat")),
+        ("profile", s("Hauptbuch AT")),
+        ("as_of", s("2025-12-31")),
+        ("include_wallets", Value::Bool(true)),
+    ]);
+    let report =
+        kassiber_reports::execute_with_sources(conn, "reports.wealth", &args, &Fixed).unwrap();
+    let totals = field(&report, "totals");
+    assert_eq!(py_str(field(totals, "quantityMsat")), "150000000000");
+    assert_eq!(py_str(field(totals, "quantityBtc")), "1.50000000000");
+    assert_eq!(
+        list(field(totals, "excludedQuantityAssets")),
+        &[s("ETH")][..]
+    );
+    let eth: Vec<&Value> = list(field(&report, "assets"))
+        .iter()
+        .chain(list(field(&report, "walletHoldings")))
+        .filter(|row| py_str(field(row, "asset")) == "ETH")
+        .collect();
+    assert_eq!(eth.len(), 2, "one asset row and one wallet row for ETH");
+    for row in eth {
+        assert_eq!(py_str(field(row, "quantity")), "10.00000000000");
+        assert_eq!(py_str(field(row, "quantityUnit")), "ETH");
+        assert_eq!(field(row, "quantityMsat"), &Value::Null);
+        assert_eq!(field(row, "quantityBtc"), &Value::Null);
+    }
+
+    // The document drops the BTC header and the quantity sum of mixed units.
+    let model = kassiber_reports::wealth::model(conn, &args, &Fixed).unwrap();
+    let doc = report_design::wealth(&model);
+    let dumped = format!("{doc:?}");
+    assert!(
+        !dumped.contains("Menge (BTC)"),
+        "mixed-asset header must not claim BTC"
+    );
+    assert!(
+        !dumped.contains("11,50000000"),
+        "ETH must not be summed into BTC"
+    );
+}
+
+#[test]
+fn draft_flag_does_not_admit_blocked_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let book = Book::create(&dir.path().join("data"), None).unwrap();
+    let conn = book.connection();
+    seed_austrian_book(conn);
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 9, last_processed_input_version = 5 WHERE id = 'prof-at'",
+        [],
+    )
+    .unwrap();
+    for command in [
+        "reports.tax-summary",
+        "reports.balance-sheet",
+        "ui.reports.portfolio_summary",
+    ] {
+        let args = dict([
+            ("workspace", s("Privat")),
+            ("profile", s("Hauptbuch AT")),
+            ("draft", Value::Bool(true)),
+        ]);
+        let err = kassiber_reports::execute_with_sources(conn, command, &args, &Fixed)
+            .expect_err(command);
+        assert!(
+            err.code != "validation",
+            "{command}: expected the stale-journal block, got {}",
+            err.code
+        );
+    }
+}

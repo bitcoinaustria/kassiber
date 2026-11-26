@@ -334,7 +334,13 @@ books, UTC otherwise). Optional flags:
 - `--draft` (also supported on other report exports) explicitly marks the export
   as a draft with a diagonal PDF watermark and skips saving a `report_snapshots`
   entry; when readiness blockers exist, wealth statements fall back to draft
-  automatically instead of hard-blocking.
+  automatically instead of hard-blocking. Only exports and the wealth statement
+  honor `draft`; other report reads stay blocked until their inputs are ready.
+
+Each row carries `quantity` and `quantityUnit` in the asset's own unit;
+`quantityBtc` / `quantityMsat` are set only for Bitcoin (BTC, Liquid BTC).
+Quantity totals count Bitcoin only and `totals.excludedQuantityAssets` names
+the assets left out; fiat totals cover every asset.
 
 Daemon kinds: `ui.reports.wealth_preview`, `ui.reports.export_wealth_pdf`,
 `ui.reports.export_wealth_xlsx`, `ui.reports.export_wealth_csv`.

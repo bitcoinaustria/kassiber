@@ -416,7 +416,15 @@ pub fn wealth(model: &Value) -> Document {
     if include_regime {
         asset_cols.push(col("regime", t("wealth.col.regime"), Kind::Text, 0.92));
     }
-    asset_cols.push(col("quantity_btc", t("col.quantity_btc"), Kind::Btc, 1.28));
+    // Rows hold each asset's quantity in its own unit; the header says BTC
+    // only when every row is Bitcoin, and only Bitcoin rows carry msat.
+    let all_bitcoin = list(totals, "excludedQuantityAssets").is_empty();
+    let quantity_header = if all_bitcoin {
+        t("col.quantity_btc")
+    } else {
+        t("col.quantity")
+    };
+    asset_cols.push(col("quantity_btc", quantity_header, Kind::Btc, 1.28));
     asset_cols.push(col(
         "quantity_msat",
         t("col.quantity_msat"),
@@ -463,7 +471,7 @@ pub fn wealth(model: &Value) -> Document {
             if include_regime {
                 cells.push(Cell::Text(regime_label(&text(row, "regime"))));
             }
-            cells.push(dec_cell(row, "quantityBtc", true));
+            cells.push(dec_cell(row, "quantity", true));
             cells.push(msat_cell(row, "quantityMsat"));
             if include_valuation {
                 let basis_cell = dec_cell(row, "costBasis", false);
@@ -494,8 +502,14 @@ pub fn wealth(model: &Value) -> Document {
         if include_regime {
             tot.push(Cell::Empty);
         }
-        tot.push(dec_cell(totals, "quantityBtc", true));
-        tot.push(msat_cell(totals, "quantityMsat"));
+        if all_bitcoin {
+            tot.push(dec_cell(totals, "quantityBtc", true));
+            tot.push(msat_cell(totals, "quantityMsat"));
+        } else {
+            // Quantities in different units have no sum.
+            tot.push(Cell::Empty);
+            tot.push(Cell::Empty);
+        }
         if include_valuation {
             tot.push(Cell::Empty);
             tot.push(dec_cell(totals, "costBasis", false));
@@ -564,7 +578,7 @@ pub fn wealth(model: &Value) -> Document {
             col("wallet", t("col.wallet"), Kind::Text, 1.4),
             col("wallet_kind", t("wealth.col.wallet_kind"), Kind::Text, 1.1),
             col("asset", t("col.asset"), Kind::Text, 0.55),
-            col("quantity_btc", t("col.quantity_btc"), Kind::Btc, 1.2),
+            col("quantity_btc", quantity_header, Kind::Btc, 1.2),
             col("quantity_msat", t("col.quantity_msat"), Kind::Msat, 1.0),
             col("share_percent", t("wealth.col.share"), Kind::Percent, 0.65),
         ];
@@ -594,7 +608,7 @@ pub fn wealth(model: &Value) -> Document {
                     Cell::Text(wallet_cell),
                     Cell::Text(custody_label(row)),
                     Cell::Text(text(row, "asset")),
-                    dec_cell(row, "quantityBtc", true),
+                    dec_cell(row, "quantity", true),
                     msat_cell(row, "quantityMsat"),
                     pct_cell(row, "sharePercent"),
                 ];

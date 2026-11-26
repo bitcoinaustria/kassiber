@@ -315,11 +315,10 @@ pub fn execute_with_sources(
             command,
             "reports.austrian-e1kv" | "reports.austrian-tax-summary"
         );
-        if draft_mode(args) {
-            require_context_admit(conn, &profile, austrian, true)?;
-        } else {
-            require_context(conn, &profile, austrian)?;
-        }
+        // Reads stay strict even when `draft` is passed: only the export
+        // writers stamp a draft notice, so a read admitted in draft mode would
+        // present blocked accounting as authoritative.
+        require_context(conn, &profile, austrian)?;
         if command == "ui.reports.balance_sheet" || command == "ui.reports.portfolio_summary" {
             let Value::List(rows) =
                 holdings::report(conn, &profile, command == "ui.reports.portfolio_summary")?

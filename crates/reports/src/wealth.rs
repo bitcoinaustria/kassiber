@@ -80,6 +80,48 @@ fn msat_to_decimal(msat: i128) -> Result<Decimal> {
     Decimal::from_parts(msat < 0, msat.unsigned_abs().into(), -11).map_err(arithmetic)
 }
 
+/// A row's quantity fields. Every crypto asset shares the 10^-11 storage unit,
+/// but only Bitcoin (BTC, Liquid BTC) quantities are BTC and msat: other
+/// assets get their native quantity and unit with null BTC/msat fields, so no
+/// consumer can add them to a Bitcoin total (docs/plan/24-crypto-assets.md).
+fn quantity_fields(asset: &str, qty_msat: i128) -> Result<[(&'static str, Value); 4]> {
+    let native = s(decimal_exact_str(&msat_to_decimal(qty_msat)?));
+    let bitcoin = kassiber_store::assets::is_bitcoin(asset);
+    Ok([
+        ("quantity", native.clone()),
+        (
+            "quantityUnit",
+            s(if bitcoin {
+                "BTC".to_owned()
+            } else {
+                asset.trim().to_ascii_uppercase()
+            }),
+        ),
+        (
+            "quantityMsat",
+            if bitcoin {
+                Value::Int(BigInt::from(qty_msat))
+            } else {
+                Value::Null
+            },
+        ),
+        ("quantityBtc", if bitcoin { native } else { Value::Null }),
+    ])
+}
+
+/// `entries` with the quantity fields inserted after the leading `head` keys.
+fn with_quantity(
+    head: Vec<(&'static str, Value)>,
+    asset: &str,
+    qty_msat: i128,
+    tail: Vec<(&'static str, Value)>,
+) -> Result<Value> {
+    let mut entries = head;
+    entries.extend(quantity_fields(asset, qty_msat)?);
+    entries.extend(tail);
+    Ok(dict(entries))
+}
+
 fn opt_money(v: Option<&Decimal>) -> Result<Value> {
     v.map(|d| Ok(s(decimal_exact_str(d))))
         .transpose()
@@ -755,6 +797,7 @@ pub fn report(
     let mut total_qty_msat: i128 = 0;
     let mut alt_qty_msat: i128 = 0;
     let mut neu_qty_msat: i128 = 0;
+    let mut non_bitcoin_assets: BTreeSet<String> = BTreeSet::new();
     let mut total_basis: Option<Decimal> = if journals_usable && include_valuation {
         Some(Decimal::zero())
     } else {
@@ -792,6 +835,12 @@ pub fn report(
 
     for asset in &held_assets {
         let rate = rate_map.get(asset).and_then(Option::as_ref);
+        // Quantity totals are Bitcoin totals: other assets' quantities are
+        // in their own units and never add to them (fiat totals still do).
+        let bitcoin = kassiber_store::assets::is_bitcoin(asset);
+        if !bitcoin {
+            non_bitcoin_assets.insert(asset.trim().to_ascii_uppercase());
+        }
         type AssetValuation = (
             Value,
             Option<Decimal>,
@@ -835,19 +884,20 @@ pub fn report(
                 }
                 _ => (None, None, None),
             };
-            let row = dict([
-                ("asset", s(asset.as_str())),
-                ("regime", s(regime_code)),
-                ("quantityMsat", Value::Int(BigInt::from(qty_msat))),
-                ("quantityBtc", s(decimal_exact_str(&qty_dec))),
-                ("unitRate", opt_money(rate)?),
-                ("avgCost", opt_money(avg_cost.as_ref())?),
-                ("costBasis", opt_money(basis.as_ref())?),
-                ("marketValue", opt_money(market.as_ref())?),
-                ("lowerOfCostOrMarket", opt_money(lower.as_ref())?),
-                ("unrealizedPnl", opt_money(unrealized.as_ref())?),
-                ("impairmentIndicator", opt_money(impairment.as_ref())?),
-            ]);
+            let row = with_quantity(
+                vec![("asset", s(asset.as_str())), ("regime", s(regime_code))],
+                asset,
+                qty_msat,
+                vec![
+                    ("unitRate", opt_money(rate)?),
+                    ("avgCost", opt_money(avg_cost.as_ref())?),
+                    ("costBasis", opt_money(basis.as_ref())?),
+                    ("marketValue", opt_money(market.as_ref())?),
+                    ("lowerOfCostOrMarket", opt_money(lower.as_ref())?),
+                    ("unrealizedPnl", opt_money(unrealized.as_ref())?),
+                    ("impairmentIndicator", opt_money(impairment.as_ref())?),
+                ],
+            )?;
             Ok((row, basis, market, lower, unrealized, impairment))
         };
 
@@ -862,12 +912,14 @@ pub fn report(
                 if qty_msat <= 0 {
                     continue;
                 }
-                if idx == 1 {
-                    alt_qty_msat += qty_msat;
-                } else {
-                    neu_qty_msat += qty_msat;
+                if bitcoin {
+                    if idx == 1 {
+                        alt_qty_msat += qty_msat;
+                    } else {
+                        neu_qty_msat += qty_msat;
+                    }
+                    total_qty_msat += qty_msat;
                 }
-                total_qty_msat += qty_msat;
                 let (row, b, m, l, u, imp) = emit_row(code, qty_msat, Some(basis.clone()))?;
                 total_basis = add_opt(total_basis, b.as_ref())?;
                 total_market = add_opt(total_market, m.as_ref())?;
@@ -888,7 +940,9 @@ pub fn report(
             if qty_msat <= 0 {
                 continue;
             }
-            total_qty_msat += qty_msat;
+            if bitcoin {
+                total_qty_msat += qty_msat;
+            }
             let exact_wallet_basis = |wid: &str, asset: &str| -> Option<Decimal> {
                 if !per_wallet_basis {
                     return None;
@@ -1063,7 +1117,6 @@ pub fn report(
             entry.3 = entry.3 || allocated;
         }
         for ((group, asset), (qty_msat, basis_opt, market, allocated)) in grouped {
-            let qty_dec = msat_to_decimal(qty_msat)?;
             let asset_total = *scope_asset_qty.get(&asset).unwrap_or(&0);
             let share_pct = if asset_total > 0 {
                 let pct = Decimal::from(qty_msat)
@@ -1075,20 +1128,24 @@ pub fn report(
             } else {
                 Value::Null
             };
-            wallet_holdings.push(dict([
-                ("walletId", s("")),
-                ("wallet", s("")),
-                ("walletKind", s("")),
-                ("custodyClass", s(group)),
-                ("chain", s("")),
-                ("asset", s(asset.as_str())),
-                ("quantityMsat", Value::Int(BigInt::from(qty_msat))),
-                ("quantityBtc", s(decimal_exact_str(&qty_dec))),
-                ("sharePercent", share_pct),
-                ("costBasis", opt_money(basis_opt.as_ref())?),
-                ("costBasisAllocated", Value::Bool(allocated)),
-                ("marketValue", opt_money(market.as_ref())?),
-            ]));
+            wallet_holdings.push(with_quantity(
+                vec![
+                    ("walletId", s("")),
+                    ("wallet", s("")),
+                    ("walletKind", s("")),
+                    ("custodyClass", s(group)),
+                    ("chain", s("")),
+                    ("asset", s(asset.as_str())),
+                ],
+                &asset,
+                qty_msat,
+                vec![
+                    ("sharePercent", share_pct),
+                    ("costBasis", opt_money(basis_opt.as_ref())?),
+                    ("costBasisAllocated", Value::Bool(allocated)),
+                    ("marketValue", opt_money(market.as_ref())?),
+                ],
+            )?);
         }
     } else {
         for ((wid, asset), qty_msat) in &filtered_wallet_qty {
@@ -1137,20 +1194,24 @@ pub fn report(
                     (Some(Decimal::zero()), true)
                 }
             };
-            wallet_holdings.push(dict([
-                ("walletId", s(wid.as_str())),
-                ("wallet", s(label)),
-                ("walletKind", s(kind)),
-                ("custodyClass", s(c_class)),
-                ("chain", s(chain)),
-                ("asset", s(asset.as_str())),
-                ("quantityMsat", Value::Int(BigInt::from(*qty_msat))),
-                ("quantityBtc", s(decimal_exact_str(&qty_dec))),
-                ("sharePercent", share_pct),
-                ("costBasis", opt_money(basis_opt.as_ref())?),
-                ("costBasisAllocated", Value::Bool(allocated)),
-                ("marketValue", opt_money(market.as_ref())?),
-            ]));
+            wallet_holdings.push(with_quantity(
+                vec![
+                    ("walletId", s(wid.as_str())),
+                    ("wallet", s(label)),
+                    ("walletKind", s(kind)),
+                    ("custodyClass", s(c_class)),
+                    ("chain", s(chain)),
+                    ("asset", s(asset.as_str())),
+                ],
+                asset,
+                *qty_msat,
+                vec![
+                    ("sharePercent", share_pct),
+                    ("costBasis", opt_money(basis_opt.as_ref())?),
+                    ("costBasisAllocated", Value::Bool(allocated)),
+                    ("marketValue", opt_money(market.as_ref())?),
+                ],
+            )?);
         }
         wallet_holdings.sort_by_key(|r| (text(r, "asset"), text(r, "wallet")));
     }
@@ -1255,6 +1316,10 @@ pub fn report(
                 ("altQuantityBtc", s(decimal_exact_str(&alt_qty_dec))),
                 ("neuQuantityMsat", Value::Int(BigInt::from(neu_qty_msat))),
                 ("neuQuantityBtc", s(decimal_exact_str(&neu_qty_dec))),
+                (
+                    "excludedQuantityAssets",
+                    Value::List(non_bitcoin_assets.into_iter().map(s).collect()),
+                ),
                 ("costBasis", opt_money(total_basis.as_ref())?),
                 ("marketValue", opt_money(total_market.as_ref())?),
                 ("lowerOfCostOrMarket", opt_money(total_lower.as_ref())?),
