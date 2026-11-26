@@ -354,6 +354,18 @@
         "title_other": "{{count}} sources need action for {{period}}",
         "body": "Import a newer export, sync, review a failed sync, or state that nothing happened after a date.",
         "action": "Show sources"
+      },
+      "balanceDiffers": {
+        "title_one": "A reported balance differs from the book",
+        "title_other": "{{count}} wallets report a balance that differs from the book",
+        "titleNamed": "{{name}}: the reported balance differs from the book",
+        "body": "The source may be incomplete. The book is not changed."
+      },
+      "balanceWaits": {
+        "title_one": "A balance check waits for the next sync",
+        "title_other": "{{count}} balance checks wait for the next sync",
+        "titleNamed": "{{name}}: a balance check waits for the next sync",
+        "body": "The book has transactions dated after the last sync, so the reported balance can't be compared yet. Sync the source again."
       }
     },
     "result": {

@@ -2182,6 +2182,27 @@ See [tax countries](docs/reference/tax-countries.md) and
   `header_row` option; copying the statement file onto the accepted source;
   masking own non-IBAN account numbers inside bank free text; and network
   partitions of books holding statements.
+- [x] Balance checkpoints ([balance checkpoints](docs/reference/balance-checkpoints.md)):
+  the `balance_checkpoints` table, exact comparison with the wallet's journal
+  quantity postings (matches / differs / unknown), `api` checkpoints from the
+  balance the exchange contract already reads in a sync, chain and Core
+  Lightning node checkpoints derived from stored sync state, manual entries,
+  CSV import/export, `wallets checkpoints` and `ui.wallets.checkpoints.*`, the
+  desktop Balance checks card (wallet and Lightning node pages), the wallets
+  list mark, one Needs attention row, a readiness warning, and the assistant
+  tools `ui_wallets_checkpoints_list|add|remove`
+  ([AI](docs/reference/ai.md#balance-checkpoints)).
+- [ ] Balance checkpoints from imported files: the last row's running balance
+  as a `file` checkpoint at that row's time. Importers with such a column:
+  the Kraken ledger CSV (`balance`), Strike and Bull wallet statements, and a
+  generic ledger with a mapped balance column. Done when each importer stores
+  the checkpoint in its import savepoint, scoped by asset, with a fixture.
+- [ ] Desktop balance checks: mark differing checkpoints on the wallet's
+  balance history chart, offer the CSV import/export on the card, and attach
+  a newly uploaded statement to a manual checkpoint.
+- [ ] Kraken and Coinbase syncs read no balance, so they store no `api`
+  checkpoint. Reading one (Kraken `Balance` needs the Query funds key
+  permission) is new egress and needs its own consent review.
 - [ ] Other crypto assets per [plan 24](docs/plan/24-crypto-assets.md).
   Done: the foundation (`asset_scope`, the skip tally, exact units, swap
   pairing), Bitpanda, Kraken, Binance (without spot trades, which Binance

@@ -638,6 +638,8 @@ impl App {
         self.send("ui.backends.settings.list", Value::Null, "app.backends");
         // Sources behind for the previous year (`sources.behind`; a local read).
         crate::wallets::behind::read_behind(self);
+        // Which wallets report a balance the book does not hold (stored data only).
+        crate::wallets::checks::read_book(self);
     }
 
     /// Re-reads everything the screen shows (after a mutation, a sync, a journal run or a
@@ -685,6 +687,7 @@ impl App {
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.profiles.snapshot", Value::Null, "app.profiles");
         crate::wallets::behind::read_behind(self);
+        crate::wallets::checks::read_book(self);
         // Transactions re-reads its list and dashboard on its next poll (held with these); rows
         // the refresh brings in are highlighted.
         self.txs.list_key.clear();

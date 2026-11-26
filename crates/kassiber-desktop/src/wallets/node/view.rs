@@ -427,6 +427,9 @@ pub fn page(
         .gap(tk.section_gap())
         .fill(tk.background);
     let header = header(app, cx, tk, c, node.as_ref(), busy, sm);
+    // The balance checks (local reads; a node's balance warning leads here) and their dialog.
+    let checks = crate::wallets::checks::card(app, tk, c);
+    crate::wallets::checks::mount(app, tk, layer);
     let Some(node) = node else {
         let title = t(if snapshot_loading {
             "connections:node.loadingSnapshot.title"
@@ -459,17 +462,23 @@ pub fn page(
                 false,
                 None,
             ));
-        return shell.child(header).child(card(
-            tk,
-            sm,
-            None,
-            card_title(tk, sm, &title),
-            Some(card_desc(tk, desc)),
-            Some(body),
-        ));
+        return shell
+            .child(header)
+            .child(card(
+                tk,
+                sm,
+                None,
+                card_title(tk, sm, &title),
+                Some(card_desc(tk, desc)),
+                Some(body),
+            ))
+            .child(checks);
     };
     let xl = w >= 1280.0;
-    let mut out = shell.child(header).child(hero(app, tk, c, &node, busy, w));
+    let mut out = shell
+        .child(header)
+        .child(hero(app, tk, c, &node, busy, w))
+        .child(checks);
     out = out.child(tabs(tk, sm, st.tab));
     let content = match st.tab {
         Tab::Overview => col()

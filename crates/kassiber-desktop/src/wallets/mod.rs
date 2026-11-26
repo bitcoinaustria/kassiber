@@ -10,6 +10,7 @@
 //! - `detail`: routes/ConnectionDetail.tsx (wallet detail and its panels).
 //! - `coverage`, `sources`: lib/sourceCoverage.ts and the Coverage card (SourceCoverageCard.tsx);
 //!   `behind`: the `sources.behind` Needs attention read.
+//! - `checks`: the Balance checks card and the book-wide balance check read.
 //! - `node`: routes/NodeConnectionDetail.tsx (+ ConnectionDetail's NodeConnectionContainer).
 //! - `add`: components/kb/AddConnectionDialog.tsx (both steps, every setup form);
 //!   `add::btcpay` and `add::exchange` the BTCPay / exchange setup panels and ExchangeSyncCard.
@@ -23,6 +24,7 @@ pub mod add;
 pub mod asset_choice;
 pub mod assets;
 pub mod behind;
+pub mod checks;
 pub mod common;
 pub mod conn;
 pub mod coverage;
@@ -54,6 +56,8 @@ pub struct Ui {
     pub behind: Option<(String, u64)>,
     /// Successful file imports this session (the Coverage card judges the one after its Import).
     pub imports_done: u64,
+    /// Balance checks: the open book's, and the card on a connection's page.
+    pub checks: checks::State,
 }
 
 /// Whether this area renders `path` (the route without its query).
@@ -132,6 +136,14 @@ pub fn on_leave(app: &mut App, from: &str) {
         s.file_check = None;
         s.import_result = None;
         s.before = None;
+        // The card's `useState`s (history, the Add balance dialog, a Remove error).
+        let card = &mut app.wallets.checks.card;
+        if std::mem::take(&mut card.history) {
+            // Its read listed the history: the next visit reads the latest again.
+            card.wallet.clear();
+        }
+        card.add = None;
+        card.remove_error = None;
         app.wallets.node.leave();
         // `useExchangeSync`'s `lastError`; its status read stays cached.
         app.wallets.add.exchange.sync.last_error = None;
@@ -149,6 +161,7 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     node::on_reply(app, tag, r);
     sources::on_reply(app, tag, r);
     behind::on_reply(app, tag, r);
+    checks::on_reply(app, tag, r);
     add::on_reply(app, tag, r);
     assets::on_reply(app, tag, r);
 }

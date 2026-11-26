@@ -1595,14 +1595,19 @@ fn wallet_row(
         x
     };
     // Connection cell: `min-w-[260px] pr-6`, badge `mt-0.5`, name + metadata.
-    let mut name_col = col()
-        .min_w(0.0)
-        .grow(1.0)
-        .child(crate::ui::table::cell_text(
-            c.label.clone(),
-            tk.tsm(500.0),
-            tk.fg,
-        ));
+    let name = crate::ui::table::cell_text(c.label.clone(), tk.tsm(500.0), tk.fg);
+    // A wallet whose latest reported balance differs from the book is marked beside its name.
+    let name = if crate::wallets::checks::differs(app, &c.id) {
+        row()
+            .min_w(0.0)
+            .gap(tk.r(0.375))
+            .center_y()
+            .child(name.min_w(0.0))
+            .child(crate::wallets::checks::mark(tk))
+    } else {
+        name
+    };
+    let mut name_col = col().min_w(0.0).grow(1.0).child(name);
     if !meta.is_empty() {
         name_col = name_col.child(
             crate::ui::table::cell_text(meta.join(" · "), tk.txs(400.0), tk.muted_fg)
