@@ -165,13 +165,12 @@ pub fn wealth(model: &Value) -> Document {
     );
     let wallet_scope_items: Vec<String> = list(report, "walletScope").iter().map(py_str).collect();
     let wallet_scope_text = if privacy {
-        let holdings = list(report, "walletHoldings");
-        let has_self = holdings
+        let classes: Vec<String> = list(report, "scopeCustodyClasses")
             .iter()
-            .any(|row| text(row, "custodyClass") != "platform");
-        let has_platform = holdings
-            .iter()
-            .any(|row| text(row, "custodyClass") == "platform");
+            .map(py_str)
+            .collect();
+        let has_self = classes.iter().any(|class| class != "platform");
+        let has_platform = classes.iter().any(|class| class == "platform");
         match (has_self, has_platform) {
             (false, true) => t("privacy.platform").to_owned(),
             (true, true) => format!("{}, {}", t("privacy.self_custody"), t("privacy.platform")),

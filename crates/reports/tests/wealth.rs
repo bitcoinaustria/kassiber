@@ -1013,6 +1013,28 @@ fn custodial_exchange_kinds_classify_as_platform() {
         .find(|row| py_str(field(row, "custodyClass")) == "platform")
         .expect("platform row");
     assert_eq!(py_str(field(platform, "quantityMsat")), "30000000000");
+
+    // Hiding the wallet table must not turn a platform-only scope into
+    // self-custody in the document.
+    let args = dict([
+        ("workspace", s("Privat")),
+        ("profile", s("Hauptbuch AT")),
+        ("as_of", s("2025-12-31")),
+        ("privacy_mode", Value::Bool(true)),
+        ("include_wallets", Value::Bool(false)),
+        ("wallets", Value::List(vec![s("Strike App")])),
+    ]);
+    let model = kassiber_reports::wealth::model(conn, &args, &Fixed).unwrap();
+    assert!(list(field(field(&model, "report"), "walletHoldings")).is_empty());
+    let dumped = format!("{:?}", report_design::wealth(&model));
+    assert!(
+        dumped.contains("Handelsplattform"),
+        "platform scope label missing"
+    );
+    assert!(
+        !dumped.contains("Eigenverwahrung"),
+        "platform-only scope labelled self-custody"
+    );
 }
 
 #[test]

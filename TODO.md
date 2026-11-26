@@ -2343,6 +2343,11 @@ Remaining:
   The desktop and assistant exports already accept both, and the CLI has them
   only on `reports export-wealth-*`. Needs parser and request regression
   coverage (Codex P2 on #865).
+- [ ] Bound the wealth statement's cached-rate lookup (`wealth_fmv` in
+  `crates/reports/src/wealth.rs`) to the 24-hour cutoff window in SQL, keeping
+  manual-rate precedence. It now loads, sorts and parses a pair's whole history
+  for each held asset, twice per desktop export, inside the export's write
+  transaction (Codex P2 on #865).
 - [ ] Finish hiding the stored placeholder transaction time
   (`1970-01-01T00:00:00Z`) on the remaining surfaces. The CLI table/plain
   output, the desktop transactions table, overview recent activity, wallet

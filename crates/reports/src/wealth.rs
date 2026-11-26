@@ -1220,6 +1220,13 @@ pub fn report(
         || !draft_reasons.is_empty()
         || (include_valuation && !missing_fmv_assets.is_empty());
 
+    // The scope's custody classes, kept apart from the optional breakdown
+    // rows so hiding the wallet table cannot change the reported custody.
+    let scope_custody_classes: BTreeSet<String> = wallet_holdings
+        .iter()
+        .map(|row| text(row, "custodyClass"))
+        .collect();
+
     let wallet_scope_labels: Vec<Value> = if privacy {
         Vec::new()
     } else {
@@ -1276,6 +1283,10 @@ pub fn report(
         ("includeWallets", Value::Bool(include_wallets)),
         ("privacyMode", Value::Bool(privacy)),
         ("walletScope", Value::List(wallet_scope_labels)),
+        (
+            "scopeCustodyClasses",
+            Value::List(scope_custody_classes.into_iter().map(s).collect()),
+        ),
         (
             "journalInputVersion",
             if journals_usable {
