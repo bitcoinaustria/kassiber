@@ -1,59 +1,28 @@
-//! Package metadata that has to agree across the Rust, desktop and pnpm
-//! sides: the product version, and the locked package-manager workflow.
+//! Repository metadata contracts: the product is Rust only, with no
+//! JavaScript package manifest or lockfile, and shared defaults agree
+//! across crates.
 
 use std::fs;
 
 use kassiber_repo_checks::root;
 
-fn toml_version(path: &str, table: &str) -> String {
-    let text = fs::read_to_string(root().join(path)).unwrap();
-    let body = text
-        .split(&format!("[{table}]"))
-        .nth(1)
-        .unwrap_or_else(|| panic!("[{table}] not found in {path}"));
-    let body = body.split("\n[").next().unwrap();
-    body.lines()
-        .find_map(|line| line.trim().strip_prefix("version = \""))
-        .and_then(|rest| rest.strip_suffix('"'))
-        .unwrap_or_else(|| panic!("[{table}] in {path} declares no version"))
-        .to_owned()
-}
-
-fn json(path: &str) -> serde_json::Value {
-    serde_json::from_str(&fs::read_to_string(root().join(path)).unwrap()).unwrap()
-}
-
 #[test]
-fn app_version_is_consistent_across_package_metadata() {
-    let product = toml_version("crates/kassiber/Cargo.toml", "package");
-    assert_eq!(json("ui-tauri/package.json")["version"], product.as_str());
-    assert_eq!(
-        json("ui-tauri/src-tauri/tauri.conf.json")["version"],
-        product.as_str()
-    );
-    assert_eq!(
-        toml_version("ui-tauri/src-tauri/Cargo.toml", "package"),
-        product
-    );
-}
-
-#[test]
-fn the_desktop_uses_the_pinned_pnpm_and_its_lockfile_only() {
-    let package = json("ui-tauri/package.json");
-    assert_eq!(package["packageManager"], "pnpm@10.33.0");
-    let scripts = package["scripts"].as_object().unwrap();
-    assert!(scripts
-        .values()
-        .all(|s| !s.as_str().unwrap_or_default().contains("npx ")));
+fn no_javascript_package_manager_files_remain() {
+    // The React desktop was removed; the desktop app is Rust
+    // (crates/kassiber-desktop) and nothing in the tree installs npm packages.
     let root = root();
-    assert!(root.join("ui-tauri/pnpm-lock.yaml").is_file());
-    for stray in [
-        "package-lock.json",
-        "ui-tauri/package-lock.json",
-        "yarn.lock",
-        "ui-tauri/yarn.lock",
-    ] {
-        assert!(!root.join(stray).exists(), "{stray}");
+    for dir in ["", "crates/kassiber-desktop"] {
+        for stray in [
+            "package.json",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "pnpm-workspace.yaml",
+            "yarn.lock",
+            ".npmrc",
+        ] {
+            let path = root.join(dir).join(stray);
+            assert!(!path.exists(), "{}", path.display());
+        }
     }
 }
 

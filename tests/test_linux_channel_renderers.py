@@ -54,7 +54,8 @@ class AurRendererTest(unittest.TestCase):
             self.assertIn("APPIMAGE_EXTRACT_AND_RUN", (output / "kassiber").read_text())
             self.assertIn("--cli", (output / "kassiber").read_text())
             self.assertIn("conflicts=('kassiber' 'kassiber-cli'", pkgbuild)
-            self.assertIn("'webkit2gtk-4.1'", pkgbuild)
+            self.assertIn("'vulkan-icd-loader'", pkgbuild)
+            self.assertNotIn("webkit", pkgbuild)
             self.assertIn("sha256sums = " + sha256(output / "kassiber"), srcinfo)
 
     def test_cli_recipe_uses_the_frozen_archive(self):

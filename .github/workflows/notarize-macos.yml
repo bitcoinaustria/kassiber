@@ -76,7 +76,8 @@ jobs:
             test -z "$remote_tag"
             commit="$SOURCE_COMMIT"
             # The app's CFBundleShortVersionString comes from this version.
-            version="$(git show "$commit:ui-tauri/src-tauri/tauri.conf.json" | jq -r .version)"
+            version="$(git show "$commit:crates/kassiber/Cargo.toml" \
+              | sed -n 's/^version *= *"\([^"]*\)".*/\1/p' | head -n 1)"
             echo "candidate_id=$TAG" >> "$GITHUB_OUTPUT"
           else
             test -z "$SOURCE_COMMIT"

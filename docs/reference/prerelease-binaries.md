@@ -10,7 +10,8 @@ release-manifest signing; older unsigned downloads are not retroactively signed.
 
 - Pull requests run `.github/workflows/ci.yml`. Pull requests that touch the
   release workflow, packaging scripts/metadata, the Rust backend crates and
-  the data they embed, the Rust tax engine, the pinned Rust toolchain, or Tauri bundle inputs also run
+  the data they embed (including the desktop app and its packaging under
+  `crates/kassiber-desktop/`), the Rust tax engine, or the pinned Rust toolchain also run
   `.github/workflows/prerelease-binaries.yml` without publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`
@@ -132,8 +133,8 @@ Tag and publishing runs fail before building when the tag without its leading
 tag, Debian/RPM package metadata, Homebrew definition, and embedded build
 identity from advertising different versions.
 
-Pull requests that change the release workflow, backend crate inputs, or Tauri
-packaging files run the same cross-platform CLI and desktop build matrix without
+Pull requests that change the release workflow, backend crate inputs, or the
+desktop app and its packaging run the same cross-platform CLI and desktop build matrix without
 publishing. These CI artifacts identify themselves as `dev`; tag and manual
 publishes remain `prerelease` or `release`.
 
@@ -176,8 +177,27 @@ filenames are internal to the desktop package and use Rust target triples such
 as `kassiber-cli-aarch64-apple-darwin`; those raw sidecars are not release
 assets.
 
-The macOS desktop leg uses GitHub's `macos-latest` runner with Tauri's
-`--target aarch64-apple-darwin` and bundles the single arm64 CLI sidecar.
+The desktop legs build the Rune app (`crates/kassiber-desktop`, `cargo build
+--release --locked --no-default-features`, so the shipped app refuses Rune's
+agent tooling) and package it around the sidecar the CLI leg built and smoked:
+
+- macOS (`macos-latest`, arm64 only): `crates/kassiber-desktop/packaging/macos/build-app.sh`
+  writes `Kassiber.app` and `kassiber-macos-arm64.app.zip`; the DMG is a plain
+  `hdiutil` image of that app.
+- Linux (`ubuntu-22.04`, the glibc floor): `crates/kassiber-desktop/packaging/linux/build-packages.sh`
+  writes the deb and the AppImage; `scripts/package-desktop-rpm.sh` repacks the
+  deb as the rpm. appimagetool and its type-2 runtime are downloaded at the
+  versions the workflow pins (`APPIMAGETOOL_*`, `APPIMAGE_RUNTIME_*`) and
+  checked by SHA-256; the script refuses to build an AppImage without an
+  explicit runtime file, so appimagetool never fetches one itself. Nothing
+  display- or GPU-related is bundled: the Wayland client, xkbcommon and the
+  Vulkan loader come from the host.
+- Windows (`windows-2022`, which has WiX v3 and NSIS; `windows-2025` lacks
+  NSIS): `crates/kassiber-desktop/packaging/windows/build-installers.sh`
+  writes the MSI and the NSIS setup. The MSI keeps the Tauri MSI's upgrade
+  code, so it replaces an installed Tauri build.
+
+Artifact names are unchanged from the earlier Tauri bundles.
 
 The Rust binary links BDK and LWK natively on every packaged platform (macOS
 arm64, Linux x86_64, Windows x86_64), so packaged builds never fall back to a
@@ -200,12 +220,12 @@ around it as the sidecar; the details are under
 [Local Apple Silicon build details](#local-apple-silicon-build-details).
 The result is an ad-hoc-signed desktop app and DMG, copied to `dist/macos-arm64/`.
 Intel Macs are not a build target; see above.
-The package version comes from `crates/kassiber/Cargo.toml`, not the
-placeholder in `tauri.conf.json`.
+The package version comes from `crates/kassiber/Cargo.toml`; the desktop
+crate's own `0.0.0` is never shipped.
 
 #### First launch on macOS
 
-Tauri ad-hoc signs the binary (required for arm64 to launch at all), but
+The build ad-hoc signs both binaries (required for arm64 to launch at all), but
 ad-hoc is not a Developer ID, so Gatekeeper will challenge the first launch.
 The good news for a local build: nothing downloaded it, so there is no
 `com.apple.quarantine` xattr — Gatekeeper is on its softer path.
@@ -233,10 +253,10 @@ Subsequent launches from the same path go through silently. If you rebuild
 over the same path, macOS usually keeps the override; if it doesn't, repeat
 the right-click → Open dance once.
 
-For day-to-day frontend iteration, skip the .app bundle entirely and use
-`pnpm --dir ui-tauri tauri:dev` — that runs the webview + Rust supervisor +
-the checkout's `target/{release,debug}/kassiber` daemon with HMR, no bundle,
-no DMG, no Gatekeeper dialog.
+For day-to-day desktop iteration, skip the .app bundle entirely and use
+`crates/kassiber-desktop/scripts/run.sh` on a disposable book: it runs the app
+against the checkout's `target/{release,debug}/kassiber` daemon, with no
+bundle, no DMG and no Gatekeeper dialog.
 Use the full build script when you specifically need a real installable
 `.app` to test packaging, the bundled CLI sidecar, file associations, or
 to hand a build to someone else on Apple Silicon.
@@ -276,7 +296,7 @@ CLI-only archives are intentionally portable: extract them and place the
 `kassiber` executable in an existing PATH directory, or invoke it by path.
 They do not edit PATH or require a GUI. Linux users can instead install the
 CLI-only Debian or RPM package; it owns `/usr/bin/kassiber`, conflicts cleanly
-with the matching desktop package, and has no GTK/WebKit dependency. The
+with the matching desktop package, and has no GUI library dependency. The
 update checker treats these packages as manual installs and shows the GitHub
 release link; see [Linux packaging](linux-packaging.md) for why no `apt`/`dnf`
 command is offered.
@@ -393,11 +413,10 @@ git diff --check
 ./scripts/quality-gate.sh
 ```
 
-If desktop packaging changes, also run the relevant local Tauri build when the
-host OS supports it, for example on macOS:
-
-```bash
-cd ui-tauri
-pnpm install --frozen-lockfile
-pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg --ci
-```
+If desktop packaging changes, also run the relevant local packaging build when
+the host OS supports it: `./scripts/build-macos-arm64-app.sh` on Apple Silicon,
+`scripts/build-linux-x64-rust-artifacts.sh` on Linux x86_64 (it builds the deb
+and, given `--appimage-runtime`, the AppImage) or
+`scripts/build-windows-x64-rust-app.sh` in Git Bash on Windows.
+`crates/kassiber-desktop/packaging/linux/build-packages.sh --stage-only` checks
+the deb tree with dummy binaries on any host.

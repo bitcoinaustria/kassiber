@@ -8,12 +8,12 @@ regtest infrastructure.
 
 The repository root is one Cargo workspace: the backend crates under
 `crates/` and the tax engine under `tax-engine/core`, with one `Cargo.lock`
-and one `target/`. `rust-toolchain.toml` pins one Rust release for every
-crate, including `ui-tauri/src-tauri`. rustup selects it inside the
+and one `target/`. The desktop app (`crates/kassiber-desktop`) is its own
+workspace with its own lockfile. `rust-toolchain.toml` pins one Rust release
+for every crate, the desktop app's included. rustup selects it inside the
 checkout; with mise, run cargo as `mise exec rust@<pinned release> -- cargo …`.
 `./scripts/bootstrap-dev-env.sh` installs that release through rustup, checks
-the C toolchain, installs the frontend's locked pnpm dependencies, and reports
-whether a `python3` 3.11 or newer is there for the regtest harness (standard
+the C toolchain, and reports whether a `python3` 3.11 or newer is there for the regtest harness (standard
 library only); it sets up no Python environment.
 The quality gate refuses any other `rustc`, and CI and release workflows
 install the pin through `.github/actions/setup-rust`. The storage crate builds
@@ -34,11 +34,10 @@ integration tests need (see [test builds](#test-builds)); a release build
 never has them.
 
 Daemon-backed desktop development runs the same binary. Build it with
-`cargo build -p kassiber` (or `--release`); `tauri dev` and the Vite bridge
-start `KASSIBER_BIN` when it is set, else the checkout's
-`target/release/kassiber`, else `target/debug/kassiber`. Desktop dependencies
-come from `pnpm --dir ui-tauri install --frozen-lockfile`. Keep tests and
-exploratory commands on disposable data roots.
+`cargo build -p kassiber --release`; the desktop's `scripts/run.sh` starts
+`KASSIBER_BIN` when it is set, else the checkout's `target/release/kassiber`
+(see the [desktop README](../../crates/kassiber-desktop/README.md#run-it)).
+Keep tests and exploratory commands on disposable data roots.
 
 ## Tax engine backends
 
@@ -437,8 +436,9 @@ that each fetch the locked test data first:
    job and the replay parts install
    Poppler (`poppler-utils`), so the PDF import and chat paths run instead of
    skipping.
-3. `Frontend checks` runs TypeScript, ESLint and Vitest and uploads a JUnit
-   report even after failure.
+3. `Desktop app` runs the desktop crate's format, clippy and unit-test checks
+   (`crates/kassiber-desktop/packaging/ci/rune-checks.sh --skip-scenes`) on
+   macOS, Linux and Windows.
 4. `Tooling scripts` runs the standard-library tests of the packaging,
    publishing and harness scripts (`tests/tooling/`, `python3 -I`) and the
    product-free check that keeps every Python module in the tree off the
@@ -475,13 +475,12 @@ pins and restores a Cargo cache of the registry and the dependency builds (the
 workspace's own crates rebuild after every checkout). Each job keeps its own
 key, and only pushes to `main` save, so pull requests restore `main`'s cache.
 Release builds take no cache. PR pushes use a concurrency group and cancel
-superseded CI; test failures are never broadly retried. The pnpm store is
-cached; a cache miss still installs only from the checked-in lockfile.
+superseded CI; test failures are never broadly retried.
 
 The local `./scripts/quality-gate.sh` runs the same checks serially: fmt,
 clippy, the workspace tests, the mutation catalog `check`, the ledger-features
 check, the net observer and `kassiber` harness tests, the no-test-tape check,
-`scripts/replay-sessions.sh`, then TypeScript, ESLint and Vitest. It replays
+the desktop app's checks, then `scripts/replay-sessions.sh`. It replays
 the [custody recordings](#custody-recordings) too when
 `KASSIBER_CUSTODY_REPLAY_DIR` names them. Slow tests and timings are in
 [test speed](test-speed.md).
@@ -1075,26 +1074,23 @@ generated `data_root` and `export_dir`, for example:
 ## Developer Regtest Demo Environment
 
 `demo-full` is a test lane: it builds a throwaway book and tears the node
-down. For day-to-day development there is a persistent variant that replaces
-browser fixtures with a real, synced book — the same model as
-BTCPayServer's `docker-compose up dev` + launch-profile workflow:
+down. For day-to-day development there is a persistent variant that gives the
+desktop app a real, synced book — the same model as BTCPayServer's
+`docker-compose up dev` + launch-profile workflow:
 
 ```bash
 ./scripts/integration-harness.sh demo-up   # node + demo book, kept running
-cd ui-tauri && pnpm dev:demo               # dev preview on that real book
+crates/kassiber-desktop/scripts/run.sh --data-root ~/.kassiber/regtest-demo/data
 ```
 
 Prerequisites on any machine: Docker (Desktop or engine), the Rust toolchain,
-`python3` 3.11 or newer (standard library only, for the harness), and `pnpm`.
-From a fresh clone, install the project/runtime dependencies once:
+and `python3` 3.11 or newer (standard library only, for the harness). From a
+fresh clone, run `./scripts/bootstrap-dev-env.sh` once.
 
-```bash
-./scripts/bootstrap-dev-env.sh
-pnpm --dir ui-tauri install --frozen-lockfile
-```
-
-After that, the two commands above take you to a browser preview backed by the
-`kassiber daemon` reading a multi-year regtest book. The harness checks for
+After that, the two commands above open the desktop app with the
+`kassiber daemon` reading a multi-year regtest book. The demo book is
+disposable regtest data, so the app may act on it in place; `run.sh` keeps the
+app's preference files in a scratch directory. The harness checks for
 the Rust binary and `python3` and fails with a setup hint otherwise.
 
 What `demo-up` does:
@@ -1159,21 +1155,10 @@ Remaining backend-parity work is demo-wallet sync through Bitcoin explorer HTTP,
 plus broader Liquid Electrum/explorer/Elements comparisons across the historical
 fixture set.
 
-`pnpm dev:demo` runs the Vite daemon bridge with
-`KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
-shows the regtest data mode instead of static fixtures. `pnpm dev:browser` is an
-alias for the same regtest-backed browser preview. Focused fixture objects remain
-in UI unit tests; there is no interactive mock transport.
-
-The bridge treats `KASSIBER_DEV_DATA_ROOT` as the preview's launch book, and
-Open Regtest Demo opens it in place rather than as an imported folder. Books
-opened through the dev folder picker restart the daemon on that folder, and
-leaving them (Open other books on the lock screen, Back to setup, Reset Welcome
-state, cancelling an import) restarts
-it on the launch book again. Only a bridge started without
-`KASSIBER_DEV_DATA_ROOT` falls back to the implicit default root, which on a
-developer machine is the real book, so point exploratory previews at a
-disposable one.
+The desktop's headless tooling (snapshots, scenes, scripts) runs against the
+same book; see the [desktop README](../../crates/kassiber-desktop/README.md#headless-tooling).
+`run.sh` refuses to start without `--data-root`, so a preview never falls back
+to the account's default book.
 
 ### Making resync do something (`demo-tick`)
 

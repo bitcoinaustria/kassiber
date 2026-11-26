@@ -10,14 +10,6 @@ run() {
   "$@"
 }
 
-run_in_dir() {
-  local dir="$1"
-  shift
-  echo
-  echo "> (cd $dir && $*)"
-  (cd "$dir" && "$@")
-}
-
 if ! command -v cargo >/dev/null 2>&1; then
   echo "quality gate requires a Rust toolchain; run ./scripts/bootstrap-dev-env.sh" >&2
   exit 2
@@ -61,21 +53,6 @@ run crates/kassiber-desktop/packaging/ci/rune-checks.sh --skip-scenes
 # The parity sessions recorded where Rust and Python agreed
 # (docs/reference/testing.md#replaying-the-recorded-sessions).
 run scripts/replay-sessions.sh
-
-echo
-if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then
-  echo "quality gate requires ui-tauri/node_modules for Vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
-  exit 2
-fi
-for tool in eslint tsc vitest; do
-  if [ ! -x "$ROOT/ui-tauri/node_modules/.bin/$tool" ]; then
-    echo "quality gate requires ui-tauri/node_modules/.bin/$tool; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
-    exit 2
-  fi
-done
-run_in_dir ui-tauri ./node_modules/.bin/tsc -b --noEmit
-run_in_dir ui-tauri ./node_modules/.bin/eslint .
-run_in_dir ui-tauri ./node_modules/.bin/vitest run
 
 echo
 echo "quality gate passed"

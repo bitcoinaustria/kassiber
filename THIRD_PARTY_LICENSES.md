@@ -8,17 +8,16 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 Kassiber is a Rust workspace (`crates/`, `tax-engine/core`), a native
 desktop app (`crates/kassiber-desktop`, its own workspace; see
-[Desktop app](#desktop-app-crateskassiber-desktop)) and the earlier Tauri
-desktop (`ui-tauri/`). It depends directly on [BDK](https://github.com/bitcoindevkit/bdk)
+[Desktop app](#desktop-app-crateskassiber-desktop)). It depends directly on [BDK](https://github.com/bitcoindevkit/bdk)
 for watch-only Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk)
 for watch-only Liquid observation, [rust_xlsxwriter](https://github.com/jmcnamara/rust_xlsxwriter)
 for XLSX exports, [Typst](https://github.com/typst/typst) for PDF exports,
 SQLCipher through `rusqlite` for at-rest encryption, and the `keyring-core`
 store crates for opt-in native credential storage. Python, uv and the
 packages they pulled in were removed under plan 22.
-The descriptor connection screen uses local-only QR scanner libraries for
-webcam-based descriptor and BBQR import.
-The desktop shell includes Rust keyring crates for AI-provider-key native
+The descriptor connection screen decodes webcam QR codes locally with the
+operating system's detector (macOS) for descriptor and BBQR import.
+The desktop app includes Rust keyring crates for AI-provider-key native
 storage. This applies only to AI provider API keys; backend tokens, descriptors,
 xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 The R1 Rust runtime reuses those explicit native stores for bound CLI
@@ -108,21 +107,8 @@ third-party package or runtime requirement is added.
 | `roxmltree` | `0.21` (already locked through Typst) | Read-only parsing of ISO 20022 camt.053 bank statements with DTDs refused and a node limit; no entity resolver, no file or network access. The standard library has no XML parser | MIT OR Apache-2.0 |
 | `typst` / `typst-layout` / `typst-pdf` | `=0.15.1` (exact, default features off) | Layout and PDF output for the shared report design (plan 21). A sealed in-memory world: embedded templates and fonts, no package resolver, system font scan, file access or network; the standard library has no layout or PDF engine | Apache-2.0 |
 | Typst's transitive crates (`krilla`, `hayro-*`, `rustybuzz`/`ttf-parser`, `icu_*`, `image`, `tiny-skia`, `wasmi`/`wasmparser` and others; 216 locked packages) | locked transitive | Text shaping, Unicode segmentation, image decoding and PDF writing inside the engine; Kassiber exposes no plugin, image-file or font-file input | mostly MIT OR Apache-2.0; also Apache-2.0, MIT, Unicode-3.0 (`icu_*`, `zerovec`, `yoke`, `litemap`), BSD-2-Clause (`arrayref`, `kamadak-exif`, `mutate_once`), BSD-3-Clause (`tiny-skia`), Zlib (`slotmap`), Apache-2.0 WITH LLVM-exception (`wasmparser`, `ar_archive_writer`), 0BSD OR CC0-1.0 (`roman-numerals-rs`), Unlicense OR MIT (`csv`, `byteorder-lite`) |
-| `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
-| `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
-| `three` | `0.186.0` (exact) | Glass ribbon 3D view of a transaction graph, loaded only when that view opens; every mesh, material and light is generated locally, with no models, textures or network requests. `@types/three` supplies typings only and is not bundled | MIT |
-| `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
-| `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
-| `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
-| `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
-| `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider storage and runtime CLI remembered unlock; no standard-library native credential API | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
-| `block2` | `0.6.2` | Objective-C block bridge for the macOS Touch ID LocalAuthentication callback | MIT |
-| `objc2` / `objc2-foundation` / `objc2-app-kit` | `0.6.4` / `0.3.2` / `0.3.2` | Rust Objective-C bridge used for macOS Touch ID prompts and AppKit's main-window frame autosave | MIT |
-| `tauri-plugin-window-state` | `~2.4` (Windows and Linux only) | Remembers the main window's size, position, and maximized state across launches, restoring a position only onto a connected monitor. macOS uses AppKit's frame autosave instead | Apache-2.0 OR MIT |
-| `tauri-plugin-notification` | `~2.4` | Opt-in OS notifications with fixed generic text, built in the native shell; the webview gets no notification permission. Held on 2.4 because 2.5 and later require a newer Tauri runtime than this lockfile's. Its desktop backend wraps `notify-rust`; the standard library has no OS notification API | Apache-2.0 OR MIT |
-| `notify-rust` / `mac-notification-sys` / `tauri-winrt-notification` / `windows` 0.62 family (`windows-core`, `-collections`, `-future`, `-numerics`, `-result`, `-strings`, `-threading`) / `rand` 0.9 / `rand_chacha` / `rand_core` / `ppv-lite86` / `zerocopy` / `zerocopy-derive` | locked transitive | `tauri-plugin-notification`'s desktop backends (macOS NSUserNotificationCenter, Windows toasts, Linux D-Bus through the already locked `zbus`) and its notification-id generator; no network transport | MIT OR Apache-2.0 (`zerocopy`: BSD-2-Clause OR Apache-2.0 OR MIT) |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys and Python-compatible CLI remembered unlock | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Explicit Linux Secret Service backend for AI provider API keys and Python-compatible CLI remembered unlock; runtime use is isolated behind `kassiber-secrets/native-keyring`, keeping D-Bus/Tokio out of core-only builds; avoids kernel-keyutils fallback | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
@@ -137,7 +123,7 @@ third-party package or runtime requirement is added.
 | `httparse` | `1.10` | Mature bounded HTTP/1.1 header parser; a full HTTP client could introduce an ungated connector | MIT OR Apache-2.0 |
 | `url` / `idna` / `idna_adapter` | `2.5` / locked transitive / `~1.0`, default features off | URL and redirect-origin parsing without DNS; the adapter's ASCII-only mode enforces reviewed A-label host identities without pulling in ICU4X | MIT OR Apache-2.0 |
 | `form_urlencoded` / `percent-encoding` / `utf8_iter` / `smallvec` | locked transitive | URL query/escape parsing and IDNA ASCII validation support | MIT OR Apache-2.0 |
-| `base64` | `0.22` | Explicit HTTP proxy Basic authentication, separately from target headers; reuses the desktop dependency | MIT OR Apache-2.0 |
+| `base64` | `0.22` | Explicit HTTP proxy Basic authentication, separately from target headers | MIT OR Apache-2.0 |
 
 | `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |
 | `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
@@ -150,7 +136,7 @@ third-party package or runtime requirement is added.
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
 | `tempfile` | `3` | Private partition staging and atomic publication of exports and machine preferences; disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
-| `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate local Kraken and generic-ledger XLSX ZIP members without extracting files or starting a subprocess; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
+| `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate local Kraken and generic-ledger XLSX ZIP members without extracting files or starting a subprocess, and (test-only, `kassiber-envelope`) the locked gzip redaction corpora; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
 
 | `bitcoin_hashes` | `0.14.101` | HASH160/SHA-256 for replaying legacy public HTLC witness evidence; std and existing SHA-256 code do not provide RIPEMD160. Pure hashing only; no transport or key handling | CC0-1.0 |
 
@@ -172,7 +158,7 @@ licence text (`packaging/licenses/RUNE-LICENSE`).
 | `rune` / `rune-kit` / `rune-notify` | git `f6cf57d` (exact) | Windowing, layout, text, GPU rendering, accessibility, widgets, file dialogs and OS notifications; Rune also patches its forks of `winit`, `parley_engine`, `wgpu-hal`, `accesskit_macos` and `accesskit_windows` at the same revision | MIT |
 | `wgpu` / `bytemuck` | `~30.0.2` (default features off) / `1.25` | The transaction graph's 3D glass view, drawn on the device Rune's compositor hands over | MIT OR Apache-2.0 / Zlib OR Apache-2.0 OR MIT |
 | `serde` / `serde_json` | `1` | The daemon's JSONL protocol and the app's preference files | MIT OR Apache-2.0 |
-| `keyring-core`, `apple-native-keyring-store`, `windows-native-keyring-store`, `zbus-secret-service-keyring-store` / `zeroize` | `1.0` / `1.8` | The same native credential stores and versions as the Tauri shell, so items it wrote keep working; passphrase buffers are cleared | MIT OR Apache-2.0 |
+| `keyring-core`, `apple-native-keyring-store`, `windows-native-keyring-store`, `zbus-secret-service-keyring-store` / `zeroize` | `1.0` / `1.8` | The same native credential stores and versions as the backend and the earlier Tauri desktop, so items they wrote keep working; passphrase buffers are cleared | MIT OR Apache-2.0 |
 | `miniz_oxide` | `0.8.9` (already locked) | Raw DEFLATE for BBQR wallet-material scans; the standard library has no inflater | MIT OR Zlib OR Apache-2.0 |
 | `objc2` / `objc2-foundation` / `block2` / `dispatch2` / `core-foundation` / `security-framework` | macOS only | Touch ID, Keychain access control and the QR scanner's camera queue | MIT / Zlib OR Apache-2.0 OR MIT / MIT OR Apache-2.0 |
 
@@ -627,12 +613,11 @@ inventory, with flags for git, unknown and copyleft entries, from local data onl
 
 ## Notable downstream license note
 
-The September 2026 security refresh uses frontend overrides to select patched
-compatible versions for existing router and build-tool dependencies, rather
-than adding new frameworks; the provider-broker ones left with the TypeScript
-broker ([plan 23](docs/plan/23-rust-provider-broker.md)). Device sync was removed on
+The npm packages of the TypeScript provider broker
+([plan 23](docs/plan/23-rust-provider-broker.md)) and the earlier Tauri desktop
+are gone; Kassiber ships no JavaScript dependencies. Device sync was removed on
 2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies.
-The package-manager lockfiles remain the authoritative transitive inventory.
+The Cargo lockfiles remain the authoritative transitive inventory.
 
 ### Optional document tools (not bundled)
 
@@ -671,7 +656,6 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | --- | --- | --- | --- |
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [serde_yaml](https://github.com/dtolnay/serde-yaml) | `crates/repo-checks/Cargo.toml` (dev only), `0.9.34`, locked transitive of Typst | Parses the GitHub Actions workflows for the repository's action pin-policy test; not linked into any shipped binary | MIT OR Apache-2.0 |
-| [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
 ## Adapted source code
 
@@ -680,10 +664,10 @@ a dependency. Each adapted file names its origin in a header comment.
 
 | Project | Files | Role | License |
 | --- | --- | --- | --- |
-| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `PendingApprovalRow.tsx`, `ComposerModelTraits.tsx`, `ProviderModelPicker.tsx` (the trigger's trait marks, focusing the reasoning levels and the docked layout), `providerIdentity.ts` (provider initials), the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx`, `ui-tauri/src/components/kb/settings/AiProviderCard.tsx` and `aiProviderStatus.ts`, the add-provider wizard in `ui-tauri/src/components/kb/AiProviderForm.tsx`, the setup wizard's `ui-tauri/src/components/kb/Onboarding/stepper.tsx`, `frame.tsx` and the option card in `fields.tsx`, the right panel, its tabs and surface launcher in `ui-tauri/src/components/kb/assistant-panel/RightPanel.tsx` and its surfaces' frame in `surfaces/SurfaceLayout.tsx` and the sheet surface in `ui-tauri/src/components/ui/sheet.tsx`, the Settings modal in `ui-tauri/src/components/kb/settings/SettingsModal.tsx` and its rail in `SettingsNavigation.tsx`, and the composer surface, message surface, scrollbar and light-theme colour tokens in `ui-tauri/src/styles/globals.css` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons, ArrowUp prompt recall, the inline tool-approval row, and the model picker's docked reasoning column, speed toggle and permission-mode menu (after T3 Code's pending-approval row, approval actions, runtime-mode select and `ComposerModelEffort.tsx`), the Settings → Assistant provider rows (row layout and the provider status vocabulary, after T3 Code's provider instance cards and `providerStatus.ts`), the setup wizard's layout (after T3 Code's welcome wizard, wizard step track and settings rows), the docked right panel with its tab strip, `+` menu, surface launcher and maximize control, surface toolbars, the diff-style change list and the log tail (after T3 Code's diff and terminal panels), a sheet on narrow windows (after T3 Code's `RightPanelTabs`, `PreviewPanelShell`, `PanelLayoutControls`, `RightPanelSheet` and sheet popup), Settings as a large modal over the page with a grouped category rail (after T3 Code's `AppRouteModal` and `SettingsSidebarNav`), the redesigned composer outline, sent-message surface, inline code and thin scrollbars, and the light theme's zinc palette (after T3 Code's default light theme). Copyright (c) 2026 T3 Tools Inc. | MIT |
-| [Simple Icons](https://simpleicons.org) | The Ollama mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for Ollama providers in the model picker; the mark itself remains Ollama's trademark | CC0-1.0 |
+| [T3 Code](https://github.com/pingdotgg/t3code) | Under `crates/kassiber-desktop/src/`: the model picker in `assistant/picker/` (`data.rs` ranked search, keys and provider initials; `view.rs` and `mod.rs` its layout, trait marks, docked reasoning column and composer controls), the composer's send/stop marks, action buttons and prompt recall in `assistant/composer.rs`, the tool-approval row in `assistant/thread/approval.rs`, the docked right panel in `assistant/panel.rs`, the Settings → Assistant provider rows in `settings/ai.rs` and the add-provider form in `settings/aiform.rs`, the setup wizard's frame, step track and option card in `onboarding/fields.rs`, the surfaces' frame in `reports/diag/surfaces.rs`, the sheet and Settings modal in `shell/mod.rs` and `settings/mod.rs`, and the light-theme colour tokens in `theme.rs`; each ports the earlier Tauri desktop's adapted component it cites | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons, ArrowUp prompt recall, the inline tool-approval row, and the model picker's docked reasoning column, speed toggle and permission-mode menu (after T3 Code's pending-approval row, approval actions, runtime-mode select and `ComposerModelEffort.tsx`), the Settings → Assistant provider rows (row layout and the provider status vocabulary, after T3 Code's provider instance cards and `providerStatus.ts`), the setup wizard's layout (after T3 Code's welcome wizard, wizard step track and settings rows), the docked right panel with its tab strip, `+` menu, surface launcher and maximize control, surface toolbars, the diff-style change list and the log tail (after T3 Code's diff and terminal panels), a sheet on narrow windows (after T3 Code's `RightPanelTabs`, `PreviewPanelShell`, `PanelLayoutControls`, `RightPanelSheet` and sheet popup), Settings as a large modal over the page with a grouped category rail (after T3 Code's `AppRouteModal` and `SettingsSidebarNav`), the redesigned composer outline, sent-message surface, inline code and thin scrollbars, and the light theme's zinc palette (after T3 Code's default light theme). Copyright (c) 2026 T3 Tools Inc. | MIT |
+| [Simple Icons](https://simpleicons.org) | The Ollama mark in `crates/kassiber-desktop/src/assistant/picker/brands.rs` | Brand mark for Ollama providers in the model picker; the mark itself remains Ollama's trademark | CC0-1.0 |
 | [RP2](https://github.com/eprbell/rp2), through the [Kassiber-maintained fork](https://github.com/bitcoinaustria/rp2) | `tax-engine/core/src/austria.rs`, `swaps.rs`, and `pool.rs` | Rust translations of the fork's Austrian and moving-average plugins (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`, `plugin/accounting_method/moving_average.py`, and `moving_average_at.py`, at the pinned `rp2` commit above): Austrian markers and regimes, swap pairing and the multi-asset runner, and the pool methods. Copyright 2026 bitcoinaustria | Apache-2.0 |
-| [oMLX](https://github.com/jundot/omlx) | The oMLX mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for oMLX providers in the model picker, from the project's own icon | Apache-2.0 |
+| [oMLX](https://github.com/jundot/omlx) | The oMLX mark in `crates/kassiber-desktop/src/assistant/picker/brands.rs` | Brand mark for oMLX providers in the model picker, from the project's own icon | Apache-2.0 |
 
 ### T3 Code license
 

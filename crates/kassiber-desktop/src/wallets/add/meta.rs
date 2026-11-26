@@ -1,6 +1,7 @@
 //! The setup fields of `ConnectionSource` that overview/catalog.rs (generated for the picker)
 //! does not carry: `status`, `setupKind`, `forwardTo`, `walletKind`, `exchange`, `sourceFormat`,
-//! `chain`, `network` — per source id, from ui-tauri/src/lib/connectionCatalog.tsx.
+//! `chain`, `network` — per source id, from ui-tauri/src/lib/connectionCatalog.tsx. The tests
+//! below keep the wallet kinds and source formats to the ones the daemon accepts.
 
 use crate::overview::add_connection::Source;
 use crate::overview::catalog::SOURCES;
@@ -331,7 +332,122 @@ pub fn is_exchange_evidence(fmt: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
+
+    fn backend_file(path: &str) -> String {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../").to_owned() + path;
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
+    }
+
+    /// The wallet kinds the daemon accepts (`crates/wallets/src/connections_catalog.json`).
+    fn wallet_kinds() -> BTreeSet<String> {
+        let rows: serde_json::Value =
+            serde_json::from_str(&backend_file("wallets/src/connections_catalog.json")).unwrap();
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["kind"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    /// The import formats the daemon accepts (`crates/wallets/src/connections.rs`
+    /// `SOURCE_FORMATS`).
+    fn source_formats() -> BTreeSet<String> {
+        let text = backend_file("wallets/src/connections.rs");
+        let body = text
+            .split_once("pub const SOURCE_FORMATS: &[&str] = &[")
+            .expect("SOURCE_FORMATS")
+            .1
+            .split_once("];")
+            .unwrap()
+            .0;
+        body.split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect()
+    }
+
+    #[test]
+    fn ready_sources_reference_known_wallet_kinds_and_formats() {
+        let (kinds, formats) = (wallet_kinds(), source_formats());
+        assert!(
+            kinds.len() > 10 && formats.len() > 10,
+            "{kinds:?} {formats:?}"
+        );
+        let mut checked = 0;
+        for s in SOURCES.iter().filter(|s| !s.planned) {
+            let m = meta(s.id);
+            if let Some(kind) = m.wallet_kind {
+                assert!(
+                    kinds.contains(kind),
+                    "{} references unknown wallet kind {kind}",
+                    s.id
+                );
+            }
+            if let Some(format) = m.source_format {
+                assert!(
+                    formats.contains(format),
+                    "{} references unknown source format {format}",
+                    s.id
+                );
+            }
+            // Backend-only, label-import, evidence-archive, BTCPay and exchange API sources
+            // name no wallet kind; the daemon owns their target. Forwards take their target's.
+            use SetupKind::*;
+            if !matches!(
+                m.setup,
+                None | Some(BackendSettings | Bip329 | Btcpay | PriorReport | ExchangeApi)
+            ) {
+                assert!(m.wallet_kind.is_some(), "{} has no wallet kind", s.id);
+                checked += 1;
+            }
+            if let Some(to) = m.forward_to {
+                assert!(
+                    source(to).is_some_and(|t| !t.planned),
+                    "{} forwards to {to}",
+                    s.id
+                );
+            }
+        }
+        assert!(checked > 10, "only {checked} wallet sources checked");
+    }
+
+    #[test]
+    fn exchange_api_sources_are_the_daemons_exchanges() {
+        let exchanges: BTreeSet<&str> = SOURCES
+            .iter()
+            .map(|s| meta(s.id))
+            .filter(|m| m.setup == Some(SetupKind::ExchangeApi))
+            .filter_map(|m| m.exchange)
+            .collect();
+        let kinds: BTreeSet<&str> = crate::wallets::add::exchange::model::KINDS
+            .into_iter()
+            .collect();
+        assert_eq!(exchanges, kinds);
+    }
+
+    #[test]
+    fn btcpay_csv_import_is_manual_file_wallet_source() {
+        assert_eq!(meta("btcpay").setup, Some(SetupKind::Btcpay));
+        let csv = source("btcpay-csv").expect("manual BTCPay CSV source");
+        assert!(!csv.planned);
+        let m = meta("btcpay-csv");
+        assert_eq!(m.setup, Some(SetupKind::FileWallet));
+        assert_eq!(m.wallet_kind, Some("custom"));
+        assert_eq!(m.source_format, Some("btcpay_csv"));
+        crate::i18n::set_lang(crate::i18n::Lang::En);
+        assert!(
+            csv.details()
+                .iter()
+                .any(|d| d.contains("invoice and payment-request provenance")),
+            "{:?}",
+            csv.details()
+        );
+        assert!(wallet_kinds().contains("custom"));
+    }
 
     #[test]
     fn every_ready_catalog_source_has_a_setup_or_forward() {

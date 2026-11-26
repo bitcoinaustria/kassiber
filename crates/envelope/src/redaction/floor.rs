@@ -7,8 +7,8 @@
 //! left to right as `re.sub` does. Run ends only move forward, so a record of
 //! repeated openers stays linear.
 //!
-//! This file uses only the standard library: the desktop supervisor
-//! (`ui-tauri/src-tauri/src/supervisor.rs`) compiles the same source.
+//! This file uses only the standard library: the desktop app
+//! (`crates/kassiber-desktop/src/secret_floor.rs`) compiles the same source.
 
 use super::scanner::redact_credential_chars;
 

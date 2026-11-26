@@ -1,6 +1,6 @@
 [package]
 name = "kassiber-repo-checks"
-description = "Development tests: repository contracts (workflow pins, test-data lock, versions)"
+description = "Development tests: repository contracts (workflow pins, test-data lock, metadata)"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

@@ -4,6 +4,11 @@ Started 2026-11-15, after the owner asked for the Rune build to be identical to 
 look and functionality. Tauri is the source of truth: any visible or behavioural difference is a
 bug, unless it is pure rasterisation noise.
 
+> **Historical.** The Tauri app was removed from the tree after commit `1c8065d4b`, so these
+> results are the record of the migration rather than a live comparison. The harness still runs
+> against a separate checkout of that commit (`PARITY_TAURI_CHECKOUT`, see
+> [the harness README](../parity/README.md)). `ui-tauri/` paths below refer to that commit.
+
 ## How it is measured
 
 [`parity/`](../parity/README.md) drives both apps into the same state on identical copies of the demo
@@ -16,7 +21,7 @@ book. It captures each scene and diffs four things:
 - **Containers:** size and position of large painted boxes.
 
 ```bash
-parity/run.sh <out-dir>                         # ONLY=scene,scene; SKIP_TAURI=1 reuses captures
+PARITY_TAURI_CHECKOUT=<checkout> parity/run.sh <out-dir>   # ONLY=scene,scene; SKIP_TAURI=1 reuses captures
 ```
 
 ## Results

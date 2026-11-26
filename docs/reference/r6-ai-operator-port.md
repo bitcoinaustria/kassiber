@@ -2,7 +2,8 @@
 
 > **Historical.** This page records the Python-to-Rust port. Python was removed
 > under [plan 22](../plan/22-python-removal.md); the `kassiber/` paths and Python
-> tests it cites exist only at the `archive/python-backend` tag.
+> tests it cites exist only at the `archive/python-backend` tag. Its `ui-tauri/`
+> paths refer to the removed Tauri desktop at commit `1c8065d4b`.
 
 Design for stage R6 of [plan 21](../plan/21-rust-backend.md#stages): AI chat,
 the provider broker client, AI tool execution with consent and the AI

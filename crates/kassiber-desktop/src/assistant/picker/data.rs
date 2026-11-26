@@ -381,6 +381,13 @@ pub fn model_key(provider: &str, model: &str) -> String {
 pub const KNOWN_EFFORTS: [&str; 6] = ["low", "medium", "high", "xhigh", "max", "ultra"];
 const HTTP_EFFORTS: [&str; 3] = ["low", "medium", "high"];
 const CLI_PROXY_EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+/// The fixed levels of the native runtimes whose models list none
+/// (`NATIVE_RUNTIME_REASONING_EFFORTS`): the provider broker's `CLAUDE_EFFORTS` and
+/// `COPILOT_EFFORTS`, whose tests keep these lines equal to them.
+const NATIVE_RUNTIME_EFFORTS: &[(&str, &[&str])] = &[
+    ("claude", &["low", "medium", "high", "xhigh", "max"]),
+    ("copilot", &["low", "medium", "high", "xhigh", "max"]),
+];
 
 fn raw_efforts(v: &Value) -> Vec<String> {
     v["reasoning_efforts"]
@@ -492,12 +499,9 @@ pub fn advertised_efforts(p: Option<&Provider>, model: Option<&ModelRow>) -> Vec
     if adv.is_empty()
         && model.is_none_or(|m| m.reasoning_efforts.is_empty())
         && let Some(r) = p.and_then(|p| native_runtime(&p.base_url))
-        && matches!(r, "claude" | "copilot")
+        && let Some((_, fixed)) = NATIVE_RUNTIME_EFFORTS.iter().find(|(n, _)| *n == r)
     {
-        return ["low", "medium", "high", "xhigh", "max"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        return fixed.iter().map(|s| s.to_string()).collect();
     }
     dedup(adv)
 }

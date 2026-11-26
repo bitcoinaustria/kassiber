@@ -25,7 +25,7 @@ on:
       - "tests/test_linux_channel_renderers.py"
       - "tests/test_linux_packaging.py"
       - "tests/test_rpm_packaging.py"
-      - "ui-tauri/src-tauri/tauri.conf.json"
+      - "crates/kassiber-desktop/packaging/linux/**"
   workflow_dispatch:
 
 permissions:

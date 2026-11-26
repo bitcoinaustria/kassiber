@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Kassiber MSI for the Rune desktop (WiX Toolset v3, as on GitHub's windows-latest image; the
-  same schema as ui-tauri/src-tauri/windows/fragments/cli-path.wxs). Per-machine install like
-  the Tauri MSI, same layout as the Tauri bundle so the sidecar lookup (src/bundle.rs), the PATH
+  Kassiber MSI for the Rune desktop (WiX Toolset v3, as on GitHub's Windows images; the
+  same schema as cli-path.wxs beside it). Per-machine install like
+  the Tauri MSI, same layout as the Tauri bundle so the sidecar lookup (`resource_dirs` in src/daemon.rs), the PATH
   copy and upgrades keep working:
 
     [INSTALLDIR]kassiber-ui.exe                                   the Rune app (no `tooling`)
@@ -11,10 +11,9 @@
     [INSTALLDIR]bin\kassiber.exe                                  PATH copy of the sidecar
     [INSTALLDIR]windows\update-path.ps1                           (NSIS hooks use it; kept for parity)
 
-  UpgradeCode: Tauri's default for productName "Kassiber" is uuid5(DNS, "Kassiber.exe.app.x64")
-  = f3c714a3-dc4a-53c3-ad68-fbede17c4009. VERIFY against an installed Tauri MSI
-  (`Get-CimInstance Win32_Product`/the MSI's Property table) before the first release, or
-  MajorUpgrade will install beside the Tauri app instead of replacing it.
+  UpgradeCode: the Tauri MSI's, so MajorUpgrade replaces an installed Tauri build. tauri-bundler
+  (msi/mod.rs) defaults it to uuid5(DNS, "<productName>.exe.app.x64"), and productName was
+  "Kassiber": f3c714a3-dc4a-53c3-ad68-fbede17c4009. Never change it.
 
   Build (CI, Git Bash): packaging/windows/build-installers.sh. NEEDS A WINDOWS RUNNER.
 -->
@@ -51,9 +50,14 @@
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="BinariesDir">
+      <!-- One file per component: the sidecar has no version resource, and WiX derives a
+           component's GUID from its key file only when that is the component's single
+           unversioned file (LGHT0367). -->
       <Component Id="Sidecar" Guid="*" Win64="yes">
         <File Id="SidecarExe" Source="$(var.Stage)\binaries\kassiber-cli-x86_64-pc-windows-msvc.exe" KeyPath="yes" />
-        <File Id="BuildInfo" Source="$(var.Stage)\binaries\BUILD_INFO.json" />
+      </Component>
+      <Component Id="BuildInfo" Guid="*" Win64="yes">
+        <File Id="BuildInfo" Source="$(var.Stage)\binaries\BUILD_INFO.json" KeyPath="yes" />
       </Component>
     </DirectoryRef>
     <DirectoryRef Id="CliBinDir">
@@ -76,10 +80,11 @@
     <Feature Id="Main" Title="Kassiber" Level="1">
       <ComponentRef Id="App" />
       <ComponentRef Id="Sidecar" />
+      <ComponentRef Id="BuildInfo" />
       <ComponentRef Id="CliCopy" />
       <ComponentRef Id="PathScript" />
       <ComponentRef Id="StartMenu" />
-      <!-- The unchanged PATH fragment: ui-tauri/src-tauri/windows/fragments/cli-path.wxs. -->
+      <!-- The PATH fragment (cli-path.wxs), unchanged from the Tauri MSI. -->
       <ComponentRef Id="KassiberCliPath" />
     </Feature>
   </Product>

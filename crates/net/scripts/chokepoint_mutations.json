@@ -1,23 +1,23 @@
 [
   {
-    "id": "binaries-scanned",
+    "id": "desktop-dist-scanned",
     "file": "crates/net/tests/chokepoint.rs",
-    "find": "        // Sidecar binaries the desktop build copies in; not checked-in source.\n        \"ui-tauri/src-tauri/binaries\",\n",
+    "find": "        \"crates/kassiber-desktop/dist\",\n",
     "replace": "",
     "expect_failing": [
-      "copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root"
+      "packaged_desktop_apps_are_skipped_but_only_at_their_checkout_root"
     ],
-    "rule": "Copied sidecar binaries at ui-tauri/src-tauri/binaries are build artifacts, not scanned source."
+    "rule": "Packaged desktop apps at crates/kassiber-desktop/dist are build artifacts, not scanned source."
   },
   {
-    "id": "binaries-skipped-anywhere",
+    "id": "dist-skipped-anywhere",
     "file": "crates/net/tests/chokepoint.rs",
     "find": "    .any(|name| relative == Path::new(name))\n    {\n        return;\n    }",
-    "replace": "    .any(|name| relative == Path::new(name) || path.ends_with(\"binaries\"))\n    {\n        return;\n    }",
+    "replace": "    .any(|name| relative == Path::new(name) || path.ends_with(\"dist\"))\n    {\n        return;\n    }",
     "expect_failing": [
-      "copied_sidecar_binaries_are_skipped_but_only_at_their_checkout_root"
+      "packaged_desktop_apps_are_skipped_but_only_at_their_checkout_root"
     ],
-    "rule": "Only the exact checkout-root binaries directory is skipped."
+    "rule": "Only the exact checkout-root dist directory of the desktop app is skipped."
   },
   {
     "id": "pdf-preview-launch-changed",

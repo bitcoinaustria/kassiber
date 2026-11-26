@@ -49,9 +49,9 @@ pub fn desktop_cli_args(args: &[String], exe_is_kassiber: bool) -> Option<Vec<St
     exe_is_kassiber.then(|| args.to_vec())
 }
 
-/// `--operator-native-auth`: the operator broker's Touch ID helper. This build has no
-/// Keychain/biometric bridge (it needs a signed bundle with a provisioning profile), so it
-/// answers as Tauri does where Touch ID is unavailable instead of opening a window.
+/// `--operator-native-auth`: the operator broker's Touch ID helper. `main` runs
+/// `secrets::operator::run_if_requested` first, which handles it on every platform; this is the
+/// fail-closed backstop should that order ever change, so the flag never opens a window.
 fn operator_native_auth(args: &[String]) -> Option<i32> {
     (args.first().map(String::as_str) == Some("--operator-native-auth")).then(|| {
         eprintln!("kassiber native auth: Touch ID is unavailable in this build");
@@ -192,9 +192,9 @@ fn failure_hint(source: &str) -> &'static str {
     }
 }
 
-/// `run_cli`: the CLI with this process's stdio, its exit code ours. The operator broker's
-/// native-auth helper is not offered (`KASSIBER_NATIVE_AUTH_HELPER` stays unset): this build
-/// can't do Touch ID, so the CLI keeps its own passphrase path.
+/// `run_cli`: the CLI with this process's stdio, its exit code ours. On macOS this executable is
+/// the operator broker's Touch ID helper (`--operator-native-auth`, `secrets::operator`), so the
+/// CLI gets it as `KASSIBER_NATIVE_AUTH_HELPER`, as the bundle's `bin/kassiber` launcher does.
 pub fn run_cli(args: Vec<String>) -> i32 {
     let cmd = match kassiber_command() {
         Ok(c) => c,
@@ -204,11 +204,14 @@ pub fn run_cli(args: Vec<String>) -> i32 {
             return 1;
         }
     };
-    match Command::new(&cmd.program)
-        .args(&args)
-        .current_dir(&cmd.cwd)
-        .status()
+    let mut process = Command::new(&cmd.program);
+    process.args(&args).current_dir(&cmd.cwd);
+    if cfg!(target_os = "macos")
+        && let Ok(executable) = std::env::current_exe()
     {
+        process.env("KASSIBER_NATIVE_AUTH_HELPER", executable);
+    }
+    match process.status() {
         Ok(status) => status.code().unwrap_or(1),
         Err(e) => {
             eprintln!("Could not start Kassiber CLI with {:?}: {e}", cmd.program);

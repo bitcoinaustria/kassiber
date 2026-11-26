@@ -501,8 +501,8 @@ advertises an unusable stale secret. A live desktop owner prevents the child
 from starting the rekey, leaving both the desktop connection and old database
 passphrase usable.
 
-Production Tauri and development-bridge calls likewise have no arbitrary
-accepted-operation timeout. They wait for the exact request-id terminal record
+The desktop app's daemon calls likewise have no arbitrary accepted-operation
+timeout. They wait for the exact request-id terminal record
 or explicit process/transport failure; test-only supervisors may inject a
 deadline to exercise late-response handling.
 

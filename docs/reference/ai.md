@@ -867,9 +867,9 @@ authenticated screen, next to an open transaction's details, with a composer
 or launcher below the page while it is not in the panel (see
 [the desktop reference](desktop.md)). Its provider/model picker is fed by
 `ai.providers.list` and `ai.list_models` over the daemon protocol; chat
-streaming is wired through Tauri events (`daemon://stream`) so the UI can
-render loading status, reasoning (`<think>`), and the answer in real time
-without blocking navigation.
+streams its progress records to the running request so the UI can render
+loading status, reasoning (`<think>`), and the answer in real time without
+blocking navigation.
 
 The picker uses a provider rail plus a searchable model list. **Check models**
 discovers only the selected provider through `ai.list_models`; checking one
@@ -1059,20 +1059,6 @@ Local HTTP providers avoid the provider-side session stores, but Kassiber
 cannot control what a local server logs itself, so the tooltip promises only
 what Kassiber keeps. See
 [privacy and security](privacy-and-security.md#local-storage).
-
-For browser-driven development, the Vite dev server also exposes a loopback-only
-daemon bridge. Run:
-
-```bash
-pnpm --dir ui-tauri run dev:bridge
-```
-
-Then open `http://127.0.0.1:5173`. In bridge mode, the browser talks to the
-same local daemon protocol through Vite: normal calls use
-`/__kassiber__/daemon`, and `ai.chat` streams NDJSON records from
-`/__kassiber__/daemon/stream`. This is a development-only convenience for
-testing real local AI, tool cards, cancellation, and consent from an ordinary
-browser tab. Packaged builds and `tauri dev` do not use the bridge.
 
 Provider configuration is mirrored in the CLI:
 
@@ -1323,7 +1309,7 @@ provider. Without that acknowledgement, `ai.chat` returns
 off with `--disable` (or in Settings) returns `ai_provider_disabled` the same
 way.
 
-Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon
+Streaming is demuxed by `request_id`: the desktop's supervisor keeps one daemon
 process and one stdout reader, but routes each JSON envelope to the matching
 request. While a chat is streaming, unrelated daemon calls can complete
 independently.
@@ -1709,10 +1695,9 @@ navigating, or pinning or clearing another item, before it runs does not
 retarget it.
 
 Everything the assistant sends belongs to a book, and one rule binds it
-(`BookStamp` in `ui-tauri/src/components/ai/bookStamp.ts`). A stamp is the
-daemon session plus the book's workspace and profile ids. It is captured
-synchronously at the user's action that creates the content, before any
-await: the submit for a typed question or held edit (and for the open
+(`crates/kassiber-desktop/src/assistant/chat.rs`). A stamp is the book's
+workspace and profile ids. It is captured at the user's action that creates
+the content, before anything it waits for: the submit for a typed question or held edit (and for the open
 transaction the tray shows with it), the click for a pin, a
 page's handoff or a reopened chat, the click before the picker for an
 attached file. A page's handoff takes the book of the page's scope boundary
@@ -1720,13 +1705,11 @@ attached file. A page's handoff takes the book of the page's scope boundary
 stamp travels with the content, and a request is sent with its content's
 stamp, never the one current when it is sent. When the open book's ids are
 not known yet, the action is refused with a notice, and nothing is stamped
-later. Page handoffs start with `beginAssistantHandoff` before they await
-anything (a graph projection, a preview); a handoff cannot be sent without a
-stamp. Creating a book opens it without a new daemon session, so the ids are
-compared too, not only the session. Every send checks the stamp
-synchronously, so nothing from a book the user left (by a switch or by
-creating a book) is sent, even when the change lands in the same render as
-the send, and the daemon refuses a request whose `expected_scope` names a
+later. Page handoffs capture it before they wait for anything (a graph
+projection, a preview); a handoff cannot be sent without a stamp. Creating a
+book opens it without a new daemon session, so the ids are compared, not a
+session. Every send checks the stamp, so nothing from a book the user left
+(by a switch or by creating a book) is sent, and the daemon refuses a request whose `expected_scope` names a
 book that is no longer open. Nothing made in one book is
 sent in another: a queued question or edit is not sent, its pin is dropped
 and its text goes back to the composer (once: a prompt already there as a
@@ -1945,14 +1928,11 @@ restricted provider keeps prices, exclusions, unpairs and component creation. Co
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 
-A chat holds up to eight files, which reach it three ways. The **+** button
-opens the native picker. Files dropped on the desktop window over the
-assistant are staged by the shell, which records the paths of that drop and
-stages them only when the window asks right after it; the webview never names
-a path. A pasted file (or, in the browser preview, a dropped one) goes to the
+A chat holds up to eight files, from the **+** button's native picker or
+dropped on the assistant. The desktop reads each file and sends it to the
 daemon as bytes in chunks of at most 512 KiB through
-`ui.chat.attachments.upload`, up to 25 MB. All three return the same opaque
-token and are staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
+`ui.chat.attachments.upload`, up to 25 MB, so no path leaves the app. Each
+returns an opaque token and is staged with the chat's file list: CSV, TSV, XLSX, XLSM, PDF, PNG,
 JPEG, WebP and GIF. The composer shows each file as a card with its type and
 size, and an image as a small thumbnail: for a pasted one the renderer draws
 it from the bytes it already holds, for a picked or dropped one the daemon
@@ -2290,21 +2270,18 @@ visual the router drew and the model then drew again with the same data is
 shown once, as the model's.
 
 The desktop renders each visual as a card under the work log, above the answer
-(`ui-tauri/src/components/ai/visuals/`), with a placeholder while the daemon
-draws it. Cards animate in: figures count up and lines and bars draw from their
-baseline; the global reduced-motion rule stops all of it. A transaction flow
-is drawn with the transaction detail panel's flat bowtie
-(`TransactionFlowDiagram`), never the panel's 3D glass view. The desktop
-reads that graph itself with the panel's own local read (`ui.transactions.graph`
-without public lookup), so the chat and the panel draw the same data while the model only
-ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"
+(`crates/kassiber-desktop/src/assistant/thread/visual.rs`), with a placeholder
+while the daemon draws it. A transaction flow is drawn as input and output
+columns from the visual's own payload (positions, wallet labels and amounts),
+never the panel's 3D glass view; the payload, like the model's summary, has no
+outpoints or addresses. Every card has a table view, "Copy as CSV"
 (raw numbers; a text cell that starts with a formula character gets a leading apostrophe),
 "Open larger", and "Open in Kassiber" for the matching page or transaction.
 Follow-up chips and each readiness action send an ordinary prompt through the
 assistant's send path, so a write it leads to still needs consent. The desktop
 accepts only a version 1 payload with known sources, units, checks and actions
 and shows the tool card for anything else. Series are keyed `s0`, `s1`, …, so no
-data label becomes a CSS or object key, and the model's title is plain text.
+data label becomes a key, and the model's title is plain text.
 Colours were run through the dataviz palette validator for both themes; gains
 and losses, and received and sent, use a blue/red pair that stays apart under
 colour-vision deficiency, and every bar chart's axis includes zero. Hidden

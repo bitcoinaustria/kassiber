@@ -31,6 +31,8 @@ transport or adding a desktop-invoked kind.
   (`crates/net/tests/chokepoint.rs`) scans this crate; each process launch is a reviewed entry.
 - Logs stay in the bounded, redacted RAM ring. The secret floor is the backend's own source
   (`src/secret_floor.rs` compiles `crates/envelope/src/redaction/`); do not fork it.
+- Comments that cite `ui-tauri/...` paths refer to the removed Tauri desktop at commit
+  `1c8065d4b676675076a8ca593963e2d4a121b43b`, the last one that contains it.
 
 ## Interaction and localization
 

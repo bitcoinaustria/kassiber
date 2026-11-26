@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check and prepare a Kassiber development checkout: the pinned Rust toolchain
-# that builds the `kassiber` binary, the frontend's pnpm dependencies, and the
-# standard-library python3 the regtest harness runs under (`python3 -I`).
+# that builds the `kassiber` binary and the desktop app, the desktop app's Linux
+# build libraries, and the standard-library python3 the regtest harness runs under (`python3 -I`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,7 +11,7 @@ RUST_CHANNEL="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$ROOT/rust-toolchain
 if ! command -v cargo >/dev/null 2>&1; then
   cat >&2 <<EOF
 Kassiber is a Rust workspace: Rust $RUST_CHANNEL, which rust-toolchain.toml
-pins, builds the \`kassiber\` binary and the desktop shell.
+pins, builds the \`kassiber\` binary and the desktop app.
 
 Install rustup from https://rustup.rs and rerun:
   ./scripts/bootstrap-dev-env.sh
@@ -49,14 +49,17 @@ EOF
   exit 1
 fi
 
-if command -v pnpm >/dev/null 2>&1; then
-  pnpm --dir ui-tauri install --frozen-lockfile
-else
-  cat >&2 <<'EOF'
-warning: pnpm not found; the desktop frontend needs the pnpm version
-ui-tauri/package.json pins. Install it, then run:
-  pnpm --dir ui-tauri install --frozen-lockfile
+# The desktop app (crates/kassiber-desktop) links fontconfig and compiles the
+# Wayland client's C shim on Linux.
+if [ "$(uname -s)" = Linux ] && command -v pkg-config >/dev/null 2>&1; then
+  if ! pkg-config --exists fontconfig wayland-client xkbcommon; then
+    cat >&2 <<'EOF'
+warning: the desktop app's Linux build libraries are missing. On Debian/Ubuntu:
+  sudo apt-get install -y pkg-config libfontconfig1-dev libwayland-dev libxkbcommon-dev
 EOF
+  fi
+elif [ "$(uname -s)" = Linux ]; then
+  echo "warning: pkg-config not found; the desktop app's Linux build needs it (see crates/kassiber-desktop/README.md)" >&2
 fi
 
 # The regtest and demo harnesses are standard-library Python run with

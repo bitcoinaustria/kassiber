@@ -7,8 +7,8 @@
 //! final newline. Scans stay linear: line facts come from one table per
 //! record, and the floor's run lookups only move forward.
 //!
-//! This file uses only the standard library: the desktop supervisor
-//! (`ui-tauri/src-tauri/src/supervisor.rs`) compiles the same source.
+//! This file uses only the standard library: the desktop app
+//! (`crates/kassiber-desktop/src/secret_floor.rs`) compiles the same source.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
