@@ -165,6 +165,20 @@ pub struct Ctx<'a> {
     pub cur: &'a str,
 }
 
+/// The series the plot draws: the fiat ones only when the history has a fiat figure (no rate
+/// means every price, value and basis point is 0).
+pub fn drawn_series(vis: Visible, has_fiat: bool) -> Visible {
+    if has_fiat {
+        return vis;
+    }
+    Visible {
+        portfolio_value: false,
+        price: false,
+        basis: false,
+        ..vis
+    }
+}
+
 impl Ctx<'_> {
     fn x(&self, _col: usize, p: &Pt) -> f32 {
         self.geo
@@ -627,6 +641,7 @@ pub fn plot(
         );
     }
     if values_shown {
+        let btc_tick_decimals = super::axes::tick_decimals(&geo.btc_axis.ticks);
         for t in &geo.btc_axis.ticks {
             let y = c.y_btc(*t);
             if y.is_finite() {
@@ -642,7 +657,7 @@ pub fn plot(
                             text(if geo.pct {
                                 pct_label(*t, pct_span)
                             } else {
-                                format::btc_axis(*t, geo.btc_axis.fit)
+                                format::btc_axis_tick(*t, geo.btc_axis.fit, btc_tick_decimals)
                             })
                             .font(tick_style)
                             .color(tick_ink),

@@ -196,6 +196,20 @@ pub struct YAxis {
     pub fit: Option<(f64, f64)>,
 }
 
+/// The fewest decimals (up to 8, a satoshi) that print every tick exactly, so neighbouring
+/// ticks never round to the same label.
+pub fn tick_decimals(ticks: &[f64]) -> usize {
+    (0..=8)
+        .find(|&p| {
+            let scale = 10f64.powi(p as i32);
+            ticks.iter().filter(|t| t.is_finite()).all(|t| {
+                let v = t * scale;
+                (v - v.round()).abs() <= 1e-9 * v.abs()
+            })
+        })
+        .unwrap_or(8)
+}
+
 impl YAxis {
     pub fn build(values: &[Option<f64>], log: bool, fit: bool, expanded: bool) -> YAxis {
         let n = if expanded { 6 } else { 5 };
@@ -568,6 +582,31 @@ mod tests {
             vec![0.0, 25_000.0, 50_000.0, 75_000.0, 100_000.0]
         );
         assert_eq!(nice_ticks(0.0, 3.2, 5), vec![0.0, 0.8, 1.6, 2.4, 3.2]);
+    }
+
+    #[test]
+    fn small_balance_ticks_never_repeat_a_label() {
+        // A ₿0.003 balance: Recharts' ticks step by 0.00075, which three decimals print as
+        // ₿0.001, ₿0.002, ₿0.002.
+        let a = YAxis::build(&[Some(0.0), Some(0.003)], false, false, false);
+        let decimals = tick_decimals(&a.ticks);
+        assert_eq!(decimals, 5);
+        let labels: Vec<String> = a
+            .ticks
+            .iter()
+            .map(|t| crate::format::btc_axis_tick(*t, a.fit, decimals))
+            .collect();
+        assert_eq!(
+            labels,
+            ["₿0.00000", "₿0.00075", "₿0.00150", "₿0.00225", "₿0.00300"]
+        );
+        // Ticks that already print exactly keep the usual precision.
+        assert_eq!(tick_decimals(&[0.0, 25.0, 50.0, 75.0, 100.0]), 0);
+        assert_eq!(
+            crate::format::btc_axis_tick(0.25, None, tick_decimals(&[0.0, 0.25])),
+            "₿0.250"
+        );
+        assert_eq!(tick_decimals(&[0.000_000_01, 0.000_000_015]), 8);
     }
 
     #[test]
