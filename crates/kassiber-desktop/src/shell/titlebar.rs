@@ -220,8 +220,10 @@ fn freshness_dot(tk: &Tk, color: Color, pulse: bool) -> El {
 /// The title bar's book status, only when it's not OK (owner feedback: no standing "Up to date"):
 /// syncing (with the running step), processing, a failed refresh or source, journals waiting.
 /// Up to date draws nothing; the refresh button's tooltip and the refresh menu's header still say
-/// so, and a zero-size live region keeps announcing it to assistive technology.
-fn freshness(app: &App, tk: &Tk) -> El {
+/// so, and a zero-size live region keeps announcing it to assistive technology. In a narrow
+/// window only the dot shows (the words stay in its help and spoken label), so the right cluster
+/// leaves the breadcrumbs room.
+fn freshness(app: &App, tk: &Tk, narrow: bool) -> El {
     let f = freshness_state(app);
     let (color, label, pulse) = freshness_look(tk, f);
     if f == Freshness::Current {
@@ -248,8 +250,11 @@ fn freshness(app: &App, tk: &Tk) -> El {
         .role("status")
         .label(spoken.clone())
         .help(format!("{} · {spoken}", t("chrome:shell.freshness.label")))
-        .child(freshness_dot(tk, color, pulse))
-        .child(text(label).font(tk.txs(400.0)).color(tk.muted_fg));
+        .child(freshness_dot(tk, color, pulse));
+    if narrow {
+        return r;
+    }
+    r = r.child(text(label).font(tk.txs(400.0)).color(tk.muted_fg));
     if let Some(d) = detail {
         r = r.child(
             text(format!("· {d}"))
@@ -756,9 +761,11 @@ pub fn view(app: &App, tk: &Tk, folded: bool, narrow: bool, layer: &mut Vec<El>)
         .pl(tk.r(1.25))
         .gap(tk.r(0.75))
         .center_y()
-        // BreadcrumbBook: the crumb button and its `/` in a `gap-2` span.
+        // BreadcrumbBook: the crumb button and its `/` in a `gap-2` span. It may shrink (the
+        // book name truncates) rather than run under the right cluster.
         .child(
             row()
+                .shrink()
                 .gap(tk.r(0.5))
                 .center_y()
                 .child(books::crumb(app, tk, layer))
@@ -784,7 +791,7 @@ pub fn view(app: &App, tk: &Tk, folded: bool, narrow: bool, layer: &mut Vec<El>)
         .pl(tk.r(0.5))
         .pr(tk.r(0.5))
         .center_y()
-        .child(freshness(app, tk))
+        .child(freshness(app, tk, narrow))
         .child(refresh_split(app, tk, layer))
         .child(notifications::button(app, tk, layer))
         .child(currency_toggle(app, tk))

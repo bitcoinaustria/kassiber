@@ -245,6 +245,12 @@ pub fn count_in(n: usize, lang: crate::i18n::Lang) -> String {
 /// `formatBtcAxisFitted` with the tick's `₿ ` shortened to `₿`. Like `formatBtc` without
 /// `sign`, it prints the absolute value.
 pub fn btc_axis(value: f64, domain: Option<(f64, f64)>) -> String {
+    btc_axis_tick(value, domain, 0)
+}
+
+/// An axis tick: as `btc_axis`, with at least the decimals the axis' tick step needs, so two
+/// ticks never print the same label (`₿0.0008` and `₿0.0016`, not `₿0.001` twice).
+pub fn btc_axis_tick(value: f64, domain: Option<(f64, f64)>, min_decimals: usize) -> String {
     let precision = match domain {
         Some((lo, hi)) if hi > lo && value.abs() > 0.0 => {
             let step = (hi - lo) / 4.0;
@@ -265,7 +271,8 @@ pub fn btc_axis(value: f64, domain: Option<(f64, f64)>) -> String {
                 3
             }
         }
-    };
+    }
+    .max(min_decimals);
     format!("₿{:.*}", precision, value.abs())
 }
 

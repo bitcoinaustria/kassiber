@@ -166,6 +166,7 @@ pub fn crumb(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
     };
     let trigger = row()
         .key("sh-book-crumb")
+        .shrink()
         // `px-1 -mx-1`: the hover fill bleeds past the text, which stays on the crumb's edge.
         .px(tk.r(0.25))
         .mx(-tk.r(0.25))
@@ -202,6 +203,7 @@ pub fn crumb(app: &App, tk: &Tk, layer: &mut Vec<El>) -> El {
                 .font(tk.tsm(500.0))
                 .color(tk.muted_fg)
                 .max_w(tk.r(10.0))
+                .shrink()
                 .truncate(),
         )
         .children(crate::demo::tag(app, tk))

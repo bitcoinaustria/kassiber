@@ -293,6 +293,9 @@ pub struct Geo {
     pub btc_axis: axes::YAxis,
     pub price_axis: axes::YAxis,
     pub fiat_axis: bool,
+    /// Whether the history has any fiat figure at all. Without a rate every price, value and
+    /// basis point is 0, and their lines, tags and axis would draw a made-up 0–1 scale.
+    pub has_fiat: bool,
     pub btc_tag_domain: Option<(f64, f64)>,
     pub last_bal: Option<f64>,
     pub last_price: Option<f64>,
@@ -461,6 +464,12 @@ fn build_geo(ui: &ChartUi, s: &Snapshot, c: &Cache, view: View) -> Geo {
     );
     let plot_idx: Vec<usize> = cols.iter().map(|c| c.0).collect();
     let pos = |v: Option<f64>| v.filter(|v| v.is_finite() && *v > 0.0);
+    // Over the whole history, so zooming into a flat stretch doesn't flip the axis.
+    let has_fiat = display.iter().any(|p| {
+        [p.l_price, p.l_val, p.l_avg]
+            .into_iter()
+            .any(|v| pos(v).is_some())
+    });
     let mut plot: Vec<Pt> = if ui.log_y {
         cols.iter()
             .map(|&(i, at)| {
@@ -612,7 +621,8 @@ fn build_geo(ui: &ChartUi, s: &Snapshot, c: &Cache, view: View) -> Geo {
         xaxis,
         btc_axis,
         price_axis,
-        fiat_axis: !pct,
+        fiat_axis: !pct && has_fiat,
+        has_fiat,
         btc_tag_domain,
         last_bal: last(&|p| p.l_bal),
         last_price: last(&|p| p.l_price),
@@ -873,7 +883,7 @@ pub(crate) fn card(
         view,
         frame,
         hide,
-        vis: app.chart.vis,
+        vis: plot::drawn_series(app.chart.vis, g.has_fiat),
         active: app.chart.active,
         cur: &cur,
     };
