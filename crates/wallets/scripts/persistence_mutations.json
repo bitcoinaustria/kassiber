@@ -662,8 +662,8 @@
   {
     "id": "provenance-conflicting-id",
     "file": "crates/wallets/src/publication/provenance.rs",
-    "find": "Some((_, previous)) if *previous != id",
-    "replace": "Some((_, previous)) if false && *previous != id",
+    "find": "Some(previous) if *previous != id",
+    "replace": "Some(previous) if false && *previous != id",
     "expect_failing": [
       "provenance_and_accounting_inputs_match_python_oracle"
     ],
@@ -692,8 +692,8 @@
   {
     "id": "provenance-promote-txid",
     "file": "crates/wallets/src/publication/provenance.rs",
-    "find": "if canonical.is_some() && or_text(field(&row, \"external_id_kind\")) != \"txid\" {",
-    "replace": "if false && canonical.is_some() && or_text(field(&row, \"external_id_kind\")) != \"txid\" {",
+    "find": "if canonical.is_some() && or_text(field(row, \"external_id_kind\")) != \"txid\" {",
+    "replace": "if false && canonical.is_some() && or_text(field(row, \"external_id_kind\")) != \"txid\" {",
     "expect_failing": [
       "provenance_and_accounting_inputs_match_python_oracle"
     ],
@@ -712,7 +712,7 @@
   {
     "id": "provenance-quantity",
     "file": "crates/wallets/src/publication/provenance.rs",
-    "find": "Sql::Text(crate::observer_state::quantity_hash(&row)?),",
+    "find": "Sql::Text(crate::observer_state::quantity_hash(row)?),",
     "replace": "Sql::Text(String::new()),",
     "expect_failing": [
       "provenance_and_accounting_inputs_match_python_oracle"
@@ -722,7 +722,7 @@
   {
     "id": "provenance-graph",
     "file": "crates/wallets/src/publication/provenance.rs",
-    "find": "Sql::Text(graph_hash(field(&row, \"raw_json\"))?),",
+    "find": "Sql::Text(graph),",
     "replace": "Sql::Text(String::new()),",
     "expect_failing": [
       "provenance_and_accounting_inputs_match_python_oracle"
@@ -782,8 +782,8 @@
   {
     "id": "inventory-active",
     "file": "crates/wallets/src/publication/inventory.rs",
-    "find": "AND outpoint NOT IN ({})",
-    "replace": "AND outpoint IN ({})",
+    "find": "if !active_set.contains(outpoint.as_str()) {",
+    "replace": "if active_set.contains(outpoint.as_str()) {",
     "expect_failing": [
       "inventory_matches_python_oracle_cases"
     ],

@@ -271,9 +271,12 @@ separately from endpoint metadata and are redacted from Debug.
 
 ### Client API
 
-Blocking I/O fits the existing gate and the binary's worker-thread model:
-there is no executor, connection pool, idle task, preconnect, retry, cookie jar
-or background discovery. Async callers must dispatch it on a blocking worker.
+Blocking I/O fits the existing gate and the binary's worker-thread model.
+Async callers must dispatch it on a blocking worker. A client can opt into a
+request-scoped HTTP keep-alive pool. Reuse rechecks the route and its consent.
+A replay-safe request can retry a stale pooled connection once on a fresh
+socket. Other requests start on a fresh socket. The pool opens no connections
+on its own and has no idle task or cookie jar.
 `Connection` implements guarded `Read`/`Write` for raw TLS protocols and future
 WebSocket codecs. `HttpRequest::allow_upgrade` permits a 101 response;
 `HttpResponse::into_upgrade` preserves buffered bytes and returns a guarded
@@ -576,11 +579,12 @@ descriptor or reading its saved checkpoint opens no connection. Explicit
 the action includes the backend route/trust/proxy, descriptor, checkpoint and
 database/profile/wallet/environment/source scope. A different action or changed
 current scope refuses before network access. Saving a backend or pending job
-never grants consent. There is no timer, pool or background scan.
+never grants consent. Discovery starts only from an authorized action. HTTP
+requests can reuse a connection within the same client and route scope.
 
 | Preparation path | Exact authority | Regression |
 | --- | --- | --- |
-| Esplora/mempool GET `/scripthash/{reversed_sha256}` with at most eight workers | explicit discovery grant, rechecked by the shared client before connect/write | `every_discovery_path_requires_exact_action_consent_and_current_scope_before_traffic` |
+| Esplora/mempool GET `/scripthash/{sha256_digest}` with at most eight workers | explicit discovery grant, rechecked by the shared client before connect/write | `every_discovery_path_requires_exact_action_consent_and_current_scope_before_traffic` |
 | Compatibility Electrum TCP/TLS connect/version and `blockchain.scripthash.subscribe` batches | same grant and request deadline; no ordinary BDK route substitution | same regression; `electrum_status_batches_preserve_cached_non_null_and_requery_null` |
 | Cached/fixed discovery, including loopback | offline/unavailable policy refuses even without a needed probe | `offline_refuses_both_paths_including_cached_and_fixed_scans` |
 | Already transmitted discovery | cancellation prevents later batches; in-flight I/O remains deadline-bounded | `cancelled_discovery_returns_no_partial_result_and_stops_before_the_next_batch`; `revocation_between_http_batches_prevents_further_requests` |

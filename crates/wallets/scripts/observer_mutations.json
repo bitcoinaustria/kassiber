@@ -62,8 +62,8 @@
   {
     "id": "observer-hash-order",
     "file": "crates/wallets/src/observer_state.rs",
-    "find": "Ok(bytes.iter().map(|v| format!(\"{v:02x}\")).collect())",
-    "replace": "Ok(bytes.iter().rev().map(|v| format!(\"{v:02x}\")).collect())",
+    "find": "for &b in &bytes {",
+    "replace": "for &b in bytes.iter().rev() {",
     "expect_failing": [
       "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
     ],

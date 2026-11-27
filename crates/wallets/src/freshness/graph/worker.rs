@@ -97,6 +97,9 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Worker<'_, B> {
             remaining: MAX_PREVOUTS,
             requested: 0,
             refused: false,
+            electrum: None,
+            http: None,
+            core: None,
         };
         let (mut scanned, mut attempted, mut cached, mut skipped, mut failed) = (0, 0, 0, 0, 0);
         let mut exhausted = true;

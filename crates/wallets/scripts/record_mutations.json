@@ -102,7 +102,7 @@
   {
     "id": "record-graph-unresolved",
     "file": "crates/wallets/src/bitcoin_records.rs",
-    "find": "return given.into_iter().collect();",
+    "find": "return given.iter().cloned().collect();",
     "replace": "return vec![];",
     "expect_failing": [
       "bitcoin_records_match_python_vectors"
@@ -112,8 +112,8 @@
   {
     "id": "record-graph-scope",
     "file": "crates/wallets/src/bitcoin_records.rs",
-    "find": "given.intersection(&found).cloned().collect()",
-    "replace": "given.into_iter().collect()",
+    "find": "found.into_iter().collect()",
+    "replace": "given.iter().cloned().collect()",
     "expect_failing": [
       "bitcoin_records_match_python_vectors"
     ],
@@ -432,8 +432,8 @@
   {
     "id": "compose-output-replace",
     "file": "crates/wallets/src/composition.rs",
-    "find": "insert(&mut outputs, point, output.clone(), true);",
-    "replace": "insert(&mut outputs, point, output.clone(), false);",
+    "find": "insert_indexed(&mut outputs, &mut outputs_idx, point, output.clone(), true);",
+    "replace": "insert_indexed(&mut outputs, &mut outputs_idx, point, output.clone(), false);",
     "expect_failing": [
       "observer_composition_matches_python_vectors"
     ],
@@ -472,7 +472,7 @@
   {
     "id": "compose-group-union",
     "file": "crates/wallets/src/composition.rs",
-    "find": "group.push(raw.unwrap());",
+    "find": "groups[pos].1.push(raw.unwrap());",
     "replace": "let _ = raw.unwrap();",
     "expect_failing": [
       "observer_composition_matches_python_vectors"
@@ -482,8 +482,8 @@
   {
     "id": "compose-first-nonbdk",
     "file": "crates/wallets/src/composition.rs",
-    "find": "insert(&mut records, key(record), record.clone(), false);",
-    "replace": "insert(&mut records, key(record), record.clone(), true);",
+    "find": "insert_indexed(\n                    &mut records,\n                    &mut records_idx,\n                    key(record),\n                    record.clone(),\n                    false,\n                );",
+    "replace": "insert_indexed(\n                    &mut records,\n                    &mut records_idx,\n                    key(record),\n                    record.clone(),\n                    true,\n                );",
     "expect_failing": [
       "observer_composition_matches_python_vectors"
     ],
@@ -562,7 +562,7 @@
   {
     "id": "compose-retraction-dedup",
     "file": "crates/wallets/src/composition.rs",
-    "find": "&& !absent.contains(&value)",
+    "find": "&& absent_set.insert(value.clone())",
     "replace": "&& true",
     "expect_failing": [
       "observer_composition_matches_python_vectors"

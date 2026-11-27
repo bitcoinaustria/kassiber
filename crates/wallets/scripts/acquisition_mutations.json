@@ -322,7 +322,7 @@
   {
     "id": "anchor-esplora-height-bound",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "if esplora_block_hash(&client, observed, consent, deadline) == tip_hash {",
+    "find": "if esplora_block_hash(&client, observed, consent, deadline, cancel) == tip_hash {",
     "replace": "if true {",
     "expect_failing": [
       "esplora_history_anchors_match_python_requests_and_checkpoints"
@@ -342,8 +342,8 @@
   {
     "id": "anchor-esplora-version",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "let same_tip = same_tip && anchor_version(&c.checkpoint, 2.0);",
-    "replace": "let same_tip = same_tip;",
+    "find": "let same_tip = same_tip && current_hashes && anchor_version(&c.checkpoint, 2.0);",
+    "replace": "let same_tip = same_tip && current_hashes;",
     "expect_failing": [
       "esplora_history_anchors_match_python_requests_and_checkpoints"
     ],
@@ -413,7 +413,7 @@
     "id": "anchor-electrum-version",
     "file": "crates/wallets/src/acquisition/cached.rs",
     "find": "let same_tip = same_tip && anchor_version(&c.checkpoint, 3.0);",
-    "replace": "let same_tip = same_tip;",
+    "replace": "let same_tip = same_tip && current_hashes;",
     "expect_failing": [
       "electrum_history_anchors_match_python_requests_and_checkpoints"
     ],
@@ -542,7 +542,7 @@
   {
     "id": "anchor-electrum-utxo-reconnect",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "            drop(client);\n            cancel.check(deadline)?;\n            let mut client = ElectrumClient::connect(\n                self.backend.clone(),\n                gate,\n                Some(consent.clone()),\n                deadline,\n            )?;\n",
+    "find": "            drop(client);\n            cancel.check(deadline)?;\n            let mut client = ElectrumClient::connect_checked(\n                self.backend.clone(),\n                gate,\n                Some(consent.clone()),\n                deadline,\n                &|| cancel.check(deadline),\n            )?;\n",
     "replace": "            cancel.check(deadline)?;\n",
     "expect_failing": [
       "electrum_history_anchors_match_python_requests_and_checkpoints"

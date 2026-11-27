@@ -445,29 +445,57 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
         // prices nothing else.
         return counter_legs(conn, scope, &transactions, &BTreeSet::new());
     }
-    let registered: bool = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM pragma_function_list WHERE name='kassiber_timestamp_us')",
-        [],
-        |r| r.get(0),
-    )?;
-    if !registered {
-        conn.create_scalar_function(
-            "kassiber_timestamp_us",
-            1,
-            FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-            |ctx| {
-                Ok(match ctx.get_raw(0) {
-                    rusqlite::types::ValueRef::Text(raw) => std::str::from_utf8(raw)
-                        .ok()
-                        .and_then(kassiber_rates::time::parse),
-                    _ => None,
-                })
-            },
-        )?;
+    let mut pairs = BTreeSet::new();
+    for row in &transactions {
+        let currency = row
+            .currency
+            .as_deref()
+            .filter(|c| !c.is_empty())
+            .unwrap_or(scope.fiat_currency);
+        if let Some(pair) = kassiber_rates::transaction_rate_pair(&row.asset, currency) {
+            pairs.insert(pair);
+        }
     }
-    let mut lookup = conn.prepare_cached("SELECT pair,timestamp,rate,rate_exact,source,fetched_at,granularity,method
-        FROM rates_cache WHERE pair=? AND kassiber_timestamp_us(timestamp)<=kassiber_timestamp_us(?)
-        ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC LIMIT 1")?;
+    // Rank rates in SQLite's existing order, then index by parsed timestamp.
+    // Keep only row IDs so large minute caches do not duplicate rate data.
+    // Decode a rate's fields only if the lookup selects it.
+    let mut rates_by_pair: std::collections::HashMap<String, Vec<(i64, i64)>> =
+        std::collections::HashMap::with_capacity(pairs.len());
+    {
+        let mut load_pair = conn.prepare_cached(
+            "SELECT rowid,timestamp FROM rates_cache WHERE pair=?
+             ORDER BY timestamp DESC,CASE WHEN source='manual' THEN 0 ELSE 1 END ASC,fetched_at DESC",
+        )?;
+        for pair in pairs {
+            let mut cursor = load_pair.query([pair.as_str()])?;
+            let mut ranked = Vec::new();
+            while let Some(row) = cursor.next()? {
+                let rusqlite::types::ValueRef::Text(raw) = row.get_ref(1)? else {
+                    continue;
+                };
+                if let Some(timestamp) = std::str::from_utf8(raw)
+                    .ok()
+                    .and_then(kassiber_rates::time::parse)
+                {
+                    ranked.push((timestamp, ranked.len(), row.get::<_, i64>(0)?));
+                }
+            }
+            ranked.sort_unstable_by_key(|&(timestamp, rank, _)| (timestamp, rank));
+            let mut best_rank = usize::MAX;
+            let mut indexes = Vec::with_capacity(ranked.len());
+            for (timestamp, rank, id) in ranked {
+                if rank < best_rank {
+                    best_rank = rank;
+                    indexes.push((timestamp, id));
+                }
+            }
+            rates_by_pair.insert(pair, indexes);
+        }
+    }
+    let mut lookup = conn.prepare_cached(
+        "SELECT pair,timestamp,rate,rate_exact,source,fetched_at,granularity,method
+         FROM rates_cache WHERE rowid=?",
+    )?;
     let mut update = conn.prepare_cached("UPDATE transactions SET fiat_rate=?,fiat_value=?,fiat_price_source=?,fiat_rate_exact=?,fiat_value_exact=?,
         pricing_source_kind=?,pricing_provider=?,pricing_pair=?,pricing_timestamp=?,pricing_fetched_at=?,
         pricing_granularity=?,pricing_method=?,pricing_external_ref=?,pricing_quality=? WHERE id=?")?;
@@ -494,21 +522,28 @@ pub(super) fn run(conn: &Connection, scope: &PricingScope<'_>) -> Result<usize, 
             .filter(|t| !t.is_empty())
             .unwrap_or(&row.occurred_at);
         let pricing_at = timestamp(pricing_at)?;
-        let mut cached_rows = lookup.query(params![pair, pricing_at])?;
-        let Some(cached) = cached_rows.next()? else {
+        let Some(target_us) = kassiber_rates::time::parse(&pricing_at) else {
             continue;
         };
-        let cached = CachedRate {
-            pair: cached.get(0)?,
-            timestamp: cached.get(1)?,
-            rate: cached.get(2)?,
-            rate_exact: cached.get(3)?,
-            source: cached.get(4)?,
-            fetched_at: cached.get(5)?,
-            granularity: cached.get(6)?,
-            method: cached.get(7)?,
+        let Some(indexes) = rates_by_pair.get(&pair) else {
+            continue;
         };
-        drop(cached_rows);
+        let idx = indexes.partition_point(|&(ts, _)| ts <= target_us);
+        if idx == 0 {
+            continue;
+        }
+        let cached = lookup.query_row([indexes[idx - 1].1], |r| {
+            Ok(CachedRate {
+                pair: r.get(0)?,
+                timestamp: r.get(1)?,
+                rate: r.get(2)?,
+                rate_exact: r.get(3)?,
+                source: r.get(4)?,
+                fetched_at: r.get(5)?,
+                granularity: r.get(6)?,
+                method: r.get(7)?,
+            })
+        })?;
         // Round 5 (f823b4729): a cached valuation outside the shared price
         // bounds stores no price; the row is marked for a later valid cache.
         let Some((rate, value)) = valuation(row, &cached, scope.decimal_context)? else {

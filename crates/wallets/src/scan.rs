@@ -36,11 +36,12 @@ pub struct Scope {
 pub struct Cancellation(Arc<AtomicBool>);
 
 /// A request can add synchronous authority checks at protocol boundaries.
-/// Database checks run on the connection's owning thread; parallel discovery
-/// workers receive only the clonable cancellation flag.
+/// Parallel fetches require a control that can run those same checks in workers.
 pub trait Control {
     fn check(&self, deadline: Instant) -> Result<()>;
-    fn cancellation(&self) -> &Cancellation;
+    fn parallel(&self) -> Option<&(dyn Control + Sync)> {
+        None
+    }
     fn progress(&self, _event: Value) -> Result<()> {
         Ok(())
     }
@@ -56,17 +57,40 @@ impl Control for Checked<'_> {
         self.cancel.check(deadline)?;
         (self.check)()
     }
-    fn cancellation(&self) -> &Cancellation {
-        self.cancel
-    }
 }
 
 impl Control for Cancellation {
     fn check(&self, deadline: Instant) -> Result<()> {
         Cancellation::check(self, deadline)
     }
-    fn cancellation(&self) -> &Cancellation {
-        self
+    fn parallel(&self) -> Option<&(dyn Control + Sync)> {
+        Some(self)
+    }
+}
+
+pub(crate) fn fetch_group<T: Sync, R: Send>(
+    items: &[T],
+    control: &dyn Control,
+    fetch: impl Fn(&T, &dyn Control) -> Result<R> + Sync,
+) -> Result<Vec<R>> {
+    if let Some(parallel) = control.parallel().filter(|_| items.len() > 1) {
+        std::thread::scope(|threads| {
+            let fetch = &fetch;
+            let handles: Vec<_> = items
+                .iter()
+                .map(|item| threads.spawn(move || fetch(item, parallel)))
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                })
+                .collect()
+        })
+    } else {
+        items.iter().map(|item| fetch(item, control)).collect()
     }
 }
 impl Cancellation {
@@ -216,6 +240,28 @@ impl CompatibilityDiscovery {
         consent: Option<&DiscoveryConsent>,
         deadline: Instant,
         cancel: &dyn Control,
+        progress: impl FnMut(Value),
+    ) -> Result<Value> {
+        self.run_with_pool(
+            gate,
+            current_scope,
+            consent,
+            deadline,
+            cancel,
+            None,
+            progress,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn run_with_pool(
+        &self,
+        gate: &Gate,
+        current_scope: &Scope,
+        consent: Option<&DiscoveryConsent>,
+        deadline: Instant,
+        cancel: &dyn Control,
+        pool: Option<Arc<kassiber_net::HttpPool>>,
         mut progress: impl FnMut(Value),
     ) -> Result<Value> {
         cancel.check(deadline)?;
@@ -248,8 +294,11 @@ impl CompatibilityDiscovery {
         }
         let targets = match self.kind {
             Kind::Esplora => {
-                let client =
+                let mut client =
                     HttpClient::new(self.backend.clone(), gate.clone(), &self.product_version);
+                if let Some(pool) = pool {
+                    client = client.with_pool(pool);
+                }
                 let workers = self.backend.batch_size().clamp(1, 8);
                 scan_plan(
                     &self.plan,
@@ -259,55 +308,37 @@ impl CompatibilityDiscovery {
                     deadline,
                     &mut progress,
                     |targets| {
-                        // All workers finish before returning an error. No worker
-                        // or connection can outlive this request-local action.
-                        std::thread::scope(|threads| {
-                            let handles: Vec<_> = targets
-                                .iter()
-                                .map(|target| {
-                                    let client = &client;
-                                    let cancel = cancel.cancellation();
-                                    let checkpoint = &self.checkpoint;
-                                    let transport = &proof.transport;
-                                    threads.spawn(move || {
-                                        cancel.check(deadline)?;
-                                        let hash = script_hash(
-                                            target["script_pubkey"]
-                                                .as_str()
-                                                .expect("derived script"),
-                                        )?;
-                                        let cached =
-                                            &checkpoint["esplora_scripthashes"][&hash]["tx_count"];
-                                        if counter(cached)? > 0.into() {
-                                            return Ok(true);
-                                        }
-                                        let stats = client.get_json(
-                                            &format!("scripthash/{hash}"),
-                                            Some(transport),
-                                            deadline,
-                                        )?;
-                                        cancel.check(deadline)?;
-                                        has_history(&stats)
-                                    })
-                                })
-                                .collect();
-                            handles
-                                .into_iter()
-                                .map(|h| {
-                                    h.join()
-                                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-                                })
-                                .collect()
+                        fetch_group(targets, cancel, |target, control| {
+                            control.check(deadline)?;
+                            let hash = esplora_query_hash(
+                                target["script_pubkey"].as_str().expect("derived script"),
+                            )?;
+                            let cached =
+                                &self.checkpoint["esplora_scripthashes"][&hash]["tx_count"];
+                            if crate::compatibility_cache::esplora_hashes_current(&self.checkpoint)
+                                && counter(cached)? > 0.into()
+                            {
+                                return Ok(true);
+                            }
+                            let stats = client.get_json_checked(
+                                &format!("scripthash/{hash}"),
+                                Some(&proof.transport),
+                                deadline,
+                                &|| control.check(deadline),
+                            )?;
+                            control.check(deadline)?;
+                            has_history(&stats)
                         })
                     },
                 )?
             }
             Kind::Electrum => {
-                let mut client = ElectrumClient::connect(
+                let mut client = ElectrumClient::connect_checked(
                     self.backend.clone(),
                     gate,
                     Some(proof.transport.clone()),
                     deadline,
+                    &|| cancel.check(deadline),
                 )?;
                 let mut statuses: HashMap<String, Value> = self.checkpoint
                     ["electrum_scripthash_statuses"]
@@ -341,7 +372,10 @@ impl CompatibilityDiscovery {
                                     ("blockchain.scripthash.subscribe".into(), json!([hash]))
                                 })
                                 .collect::<Vec<_>>();
-                            let replies = client.batch_call(&requests, deadline)?;
+                            let replies =
+                                client.batch_call_checked(&requests, deadline, &|| {
+                                    cancel.check(deadline)
+                                })?;
                             cancel.check(deadline)?;
                             for (hash, status) in missing.into_iter().zip(replies) {
                                 statuses.insert(hash, status);
@@ -465,14 +499,39 @@ pub(crate) fn integer(value: &Value) -> Option<BigInt> {
     }
 }
 
-/// Electrum and Esplora both use reversed SHA-256 of the script bytes.
-pub fn script_hash(script: &str) -> Result<String> {
-    use bitcoin::hex::FromHex;
-    let bytes = Vec::<u8>::from_hex(script)
-        .map_err(|_| AppError::new("validation", "Invalid script encoding"))?;
+/// Electrum uses SHA-256 with the digest bytes reversed.
+pub(crate) fn script_hash_bytes(bytes: &[u8]) -> String {
     let mut digest = Sha256::digest(bytes);
     digest.reverse();
-    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+    digest_hex(&digest)
+}
+
+fn digest_hex(digest: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for &b in digest {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+/// Electrum script hash encoded for JSON-RPC.
+pub fn script_hash(script: &str) -> Result<String> {
+    Ok(script_hash_bytes(&decode_script(script)?))
+}
+
+/// Esplora encodes SHA-256 in digest order. Frozen test tapes used Electrum order.
+pub(crate) fn esplora_query_hash(script: &str) -> Result<String> {
+    if kassiber_net::uses_legacy_tape() {
+        return script_hash(script);
+    }
+    Ok(digest_hex(&Sha256::digest(decode_script(script)?)))
+}
+
+fn decode_script(script: &str) -> Result<Vec<u8>> {
+    use bitcoin::hex::FromHex;
+    Vec::<u8>::from_hex(script).map_err(|_| AppError::new("validation", "Invalid script encoding"))
 }
 
 fn scan_plan(

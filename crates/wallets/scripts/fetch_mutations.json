@@ -12,8 +12,8 @@
   {
     "id": "fetch-esplora-tip-read",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "            depth_height = client\n                .get_text(\"blocks/tip/height\", Some(consent), deadline)",
-    "replace": "            depth_height = client\n                .get_text(\"blocks/tip/unknown\", Some(consent), deadline)",
+    "find": "            depth_height = client\n                .get_text_checked(\"blocks/tip/height\", Some(consent), deadline, &|| {\n                    cancel.check(deadline)\n                })",
+    "replace": "            depth_height = client\n                .get_text_checked(\"blocks/tip/unknown\", Some(consent), deadline, &|| {\n                    cancel.check(deadline)\n                })",
     "expect_failing": [
       "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
     ],
@@ -413,8 +413,8 @@
   {
     "id": "fetch-revalidate-keeps-route",
     "file": "crates/wallets/src/fetch.rs",
-    "find": "if let Preflight::Prepared(prepared) = preflight {",
-    "replace": "if let Preflight::Prepared(prepared) = Preflight::Prepared(\"\") {",
+    "find": "let mut same = scope == self.scope && checkpoint == self.checkpoint;",
+    "replace": "let mut same = !self.observers.is_empty() && scope == self.scope && checkpoint == self.checkpoint;",
     "expect_failing": [
       "fetch_trimmed_electrum_descriptor_takes_the_compatibility_route"
     ],

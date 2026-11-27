@@ -73,12 +73,20 @@ fn canonical_or_literal(value: &str) -> String {
         value.into()
     }
 }
-fn insert<K: PartialEq, V>(rows: &mut Vec<(K, V)>, key: K, value: V, replace: bool) {
-    if let Some((_, previous)) = rows.iter_mut().find(|(k, _)| *k == key) {
+fn insert_indexed<K: Eq + std::hash::Hash + Clone, V>(
+    rows: &mut Vec<(K, V)>,
+    index: &mut std::collections::HashMap<K, usize>,
+    key: K,
+    value: V,
+    replace: bool,
+) {
+    if let Some(&pos) = index.get(&key) {
         if replace {
-            *previous = value;
+            rows[pos].1 = value;
         }
     } else {
+        let pos = rows.len();
+        index.insert(key.clone(), pos);
         rows.push((key, value));
     }
 }
@@ -107,11 +115,14 @@ pub fn compose(
         ));
     }
     let mut outputs = vec![];
+    let mut outputs_idx = std::collections::HashMap::new();
     let mut retracted = vec![];
     let mut checkpoints = BTreeMap::new();
     let mut highest = BTreeMap::<String, i64>::new();
     let mut records = vec![];
+    let mut records_idx = std::collections::HashMap::new();
     let mut groups: Vec<(String, Vec<Value>)> = vec![];
+    let mut groups_idx: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut reused = 0_u64;
     for observer in observers {
         reused = reused.checked_add(observer.reused_records).ok_or_else(|| {
@@ -122,7 +133,7 @@ pub fn compose(
                 text(&output["txid"]).to_owned(),
                 output["vout"].as_u64().unwrap_or(0),
             );
-            insert(&mut outputs, point, output.clone(), true);
+            insert_indexed(&mut outputs, &mut outputs_idx, point, output.clone(), true);
         }
         retracted.extend(observer.retracted_external_ids.iter().cloned());
         checkpoints.insert(observer.observer_id.clone(), observer.checkpoint.clone());
@@ -147,13 +158,21 @@ pub fn compose(
                 && record["asset"] == "BTC"
                 && raw.as_ref().is_some_and(|r| r["observer"] == "bdk")
             {
-                if let Some((_, group)) = groups.iter_mut().find(|(key, _)| key == &id) {
-                    group.push(raw.unwrap());
+                if let Some(&pos) = groups_idx.get(&id) {
+                    groups[pos].1.push(raw.unwrap());
                 } else {
+                    let pos = groups.len();
+                    groups_idx.insert(id.clone(), pos);
                     groups.push((id, vec![raw.unwrap()]));
                 }
             } else {
-                insert(&mut records, key(record), record.clone(), false);
+                insert_indexed(
+                    &mut records,
+                    &mut records_idx,
+                    key(record),
+                    record.clone(),
+                    false,
+                );
             }
         }
     }
@@ -226,8 +245,9 @@ pub fn compose(
                 backend_name
             },
         )? {
-            insert(
+            insert_indexed(
                 &mut records,
+                &mut records_idx,
                 (
                     id,
                     text(&record["asset"]).into(),
@@ -244,10 +264,11 @@ pub fn compose(
         .map(|r| canonical_or_literal(&txid(r)))
         .collect();
     let mut absent = vec![];
+    let mut absent_set = std::collections::HashSet::new();
     for value in retracted {
         if !live.contains(&canonical_or_literal(&value))
             && !value.is_empty()
-            && !absent.contains(&value)
+            && absent_set.insert(value.clone())
         {
             absent.push(value);
         }

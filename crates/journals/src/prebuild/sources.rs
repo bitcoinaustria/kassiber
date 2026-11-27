@@ -234,6 +234,13 @@ pub(super) fn index(conn: &Connection, profile: &str) -> Result<Index, Refusal> 
             }
         }
     }
+    let mut wallets_by_id: HashMap<String, (&Value, Value)> = HashMap::with_capacity(wallets.len());
+    for w in &wallets {
+        if let Some(id) = w["id"].as_str() {
+            wallets_by_id.insert(id.to_owned(), (w, mapping(&w["config_json"])));
+        }
+    }
+    let empty_config = json!({});
     let inventory = rows(conn, "SELECT DISTINCT wallet_id,chain,network,address,script_pubkey,branch_label,branch_index,address_index,raw_json FROM wallet_utxos WHERE profile_id=?", [profile])?;
     for row in &inventory {
         let s = script(&row["script_pubkey"])
@@ -243,19 +250,12 @@ pub(super) fn index(conn: &Connection, profile: &str) -> Result<Index, Refusal> 
             continue;
         };
         let missing = json!({"id":row["wallet_id"]});
-        let w = wallets
-            .iter()
-            .find(|w| w["id"] == row["wallet_id"])
-            .unwrap_or(&missing);
+        let (w, w_config) = row["wallet_id"]
+            .as_str()
+            .and_then(|id| wallets_by_id.get(id))
+            .map_or((&missing, &empty_config), |(w, c)| (*w, c));
         let (chain, network) = scope(&row["chain"], &row["network"]);
-        sources.push(make(
-            w,
-            &mapping(&w["config_json"]),
-            chain,
-            network,
-            s,
-            "inventory",
-        )?);
+        sources.push(make(w, w_config, chain, network, s, "inventory")?);
     }
     let mut maxes: HashMap<(String, u32), i64> = HashMap::new();
     for r in rows(conn, "SELECT wallet_id,branch_index,MAX(address_index) AS max_index FROM wallet_utxos WHERE profile_id=? AND branch_index IS NOT NULL AND address_index IS NOT NULL GROUP BY wallet_id,branch_index", [profile])? {

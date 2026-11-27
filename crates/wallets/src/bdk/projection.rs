@@ -190,8 +190,10 @@ impl Prepared {
                 }
             };
             let observed = self.aggregate.tx_graph.first_seen.get(&id).copied();
-            let owned =
-                bitcoin_records::graph_scoped_scripts(&json!({"vin":vin,"vout":vout}), &tracked);
+            let owned = bitcoin_records::graph_scoped_scripts_normalized(
+                &json!({"vin":vin,"vout":vout}),
+                &tracked,
+            );
             let fingerprint = record_fingerprint(
                 fingerprint_version,
                 &json!({"txid":id.to_string(),"vin":vin,"vout":vout,"position":position,"observed_at":observed,"owned_scripts":owned,"backend":backend_name}),

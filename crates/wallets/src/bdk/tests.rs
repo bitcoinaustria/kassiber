@@ -738,6 +738,64 @@ fn bdk_incremental_widens_until_a_full_unused_gap_and_fixed_stops() {
         .is_empty());
 }
 #[test]
+fn bdk_widening_rechecks_earlier_scripts_after_a_tip_change() {
+    struct Advancing {
+        fake: Fake,
+        subscriptions: usize,
+        late_history: BTreeMap<String, Value>,
+    }
+    impl Rpc for Advancing {
+        fn call(&mut self, method: &str, params: Value) -> Result<Value> {
+            if method == "blockchain.headers.subscribe" {
+                self.subscriptions += 1;
+                if self.subscriptions == 3 {
+                    self.fake.tip += 1;
+                    self.fake.history.append(&mut self.late_history);
+                }
+            }
+            self.fake.call(method, params)
+        }
+    }
+
+    let action_without_history = action(None);
+    let mut empty = Fake::new(&action_without_history, 0, false, true);
+    empty.history.clear();
+    let state = action_without_history
+        .execute(&mut empty, 100)
+        .unwrap()
+        .changeset();
+    let action = action(Some(&state));
+    let mut fake = Fake::new(&action, 2, false, false);
+    fake.header = empty.header;
+    let script = action
+        .wallet()
+        .unwrap()
+        .public_descriptor(KeychainKind::External)
+        .at_derivation_index(0)
+        .unwrap()
+        .script_pubkey();
+    let hash = crate::scan::script_hash(&script.to_hex_string()).unwrap();
+    let (mut parent, mut late) = fixture_tx(script, false);
+    parent.lock_time = absolute::LockTime::from_consensus(1);
+    late.input[0].previous_output = OutPoint::new(parent.compute_txid(), 0);
+    let id = late.compute_txid().to_string();
+    fake.txs.insert(
+        parent.compute_txid().to_string(),
+        consensus::encode::serialize_hex(&parent),
+    );
+    fake.txs
+        .insert(id.clone(), consensus::encode::serialize_hex(&late));
+    let mut backend = Advancing {
+        fake,
+        subscriptions: 0,
+        late_history: BTreeMap::from([(hash, json!([{"tx_hash":id,"height":0}]))]),
+    };
+    let result = action.execute(&mut backend, 200).unwrap();
+    assert_eq!(result.wallet.latest_checkpoint().height(), 13);
+    assert_eq!(result.wallet.transactions().count(), 2);
+}
+
+#[test]
 fn bdk_widening_refuses_after_exactly_sixty_four_unsettled_passes() {
     let a = action(None);
     let mut fake = Fake::new(&a, 0, false, false);
@@ -1226,8 +1284,10 @@ fn bdk_chain_snapshot_recovers_agreement_and_preserves_a_later_behind_tip() {
     let mut protocol = Protocol {
         rpc: &mut fake,
         txs: BTreeMap::new(),
+        txouts: BTreeMap::new(),
         headers: BTreeMap::from([(2, old), (0, old)]),
         anchors: BTreeMap::new(),
+        verified_anchors: BTreeMap::new(),
     };
     let recovered = protocol.chain_snapshot(prior.clone()).unwrap();
     assert_eq!(recovered.height(), 12);
@@ -1325,8 +1385,10 @@ fn bdk_preflight_does_not_seed_the_scan_header_cache() {
     let mut protocol = Protocol {
         rpc: &mut fake,
         txs: BTreeMap::new(),
+        txouts: BTreeMap::new(),
         headers: BTreeMap::new(),
         anchors: BTreeMap::new(),
+        verified_anchors: BTreeMap::new(),
     };
     let old = protocol.rpc.header;
     protocol.headers.insert(
@@ -1349,4 +1411,43 @@ fn bdk_preflight_does_not_seed_the_scan_header_cache() {
             .count(),
         2
     );
+}
+
+#[test]
+fn bdk_incremental_reuses_prior_txs_prevouts_and_verified_anchors_and_supports_electrum_14_hex() {
+    let a = action(None);
+    let mut fake = Fake::new(&a, 2, true, false);
+    let first = a.execute(&mut fake, 100).unwrap();
+    let state = first.changeset();
+    // Incremental sync against the same canonical chain must reuse already-fetched
+    // transactions, previous outputs, and verified anchors without re-fetching them.
+    let reload = action(Some(&state));
+    fake.calls.clear();
+    let restarted = reload.execute(&mut fake, 101).unwrap();
+    assert_eq!(restarted.changeset(), state);
+    assert_eq!(
+        fake.calls
+            .iter()
+            .filter(|(m, _)| m == "blockchain.transaction.get")
+            .count(),
+        0
+    );
+    assert_eq!(
+        fake.calls
+            .iter()
+            .filter(|(m, _)| m == "blockchain.transaction.get_merkle")
+            .count(),
+        0
+    );
+    // Electrum 1.4 `blockchain.block.headers` returns concatenated 80-byte `hex`.
+    let a = action(None);
+    let mut fake14 = Fake::new(&a, 0, true, false);
+    let header_hex = consensus::encode::serialize_hex(&fake14.header);
+    fake14.overrides.insert(
+        "blockchain.block.headers".into(),
+        json!({"count": 8, "hex": header_hex.repeat(8)}),
+    );
+    let p14 = a.execute(&mut fake14, 100).unwrap();
+    assert_eq!(p14.wallet.transactions().count(), 1);
+    assert_eq!(p14.wallet.latest_checkpoint().height(), 12);
 }

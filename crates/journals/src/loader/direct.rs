@@ -443,35 +443,146 @@ pub fn load_read_snapshot(
     let mut anchor_ids = BTreeSet::new();
     let mut wallet_ids = BTreeSet::new();
     let mut revision_ids = BTreeSet::new();
-    for header in reader.rows(conn,"components[].header","SELECT * FROM custody_components WHERE profile_id=? AND state='active' ORDER BY created_at,revision,id",[&profile_id],false)? {
-        let id = string(&header,"id");
-        let legs = reader.rows(conn,"components[].legs[]","SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id",[&id],false)?;
-        for leg in &legs {
-            for key in ["transaction_id","anchor_transaction_id"] { if leg.get(key).is_some_and(|v| !v.is_null()) { anchor_ids.insert(string(leg,key)); } }
-            if leg.get("wallet_id").is_some_and(|v| !v.is_null()) { wallet_ids.insert(string(leg,"wallet_id")); }
+    let headers = reader.rows(
+        conn,
+        "components[].header",
+        "SELECT * FROM custody_components WHERE profile_id=? AND state='active' ORDER BY created_at,revision,id",
+        [&profile_id],
+        false,
+    )?;
+    let mut legs_by_component: HashMap<String, Vec<kassiber_custody::snapshot::Record>> =
+        HashMap::new();
+    let mut allocs_by_component: HashMap<String, Vec<kassiber_custody::snapshot::Record>> =
+        HashMap::new();
+    let mut terms_by_component: HashMap<String, Vec<kassiber_custody::snapshot::Record>> =
+        HashMap::new();
+    let mut commits_by_component: HashMap<String, Vec<kassiber_custody::snapshot::Record>> =
+        HashMap::new();
+    if !headers.is_empty() {
+        for leg in reader.rows(
+            conn,
+            "components[].legs[]",
+            "SELECT l.* FROM custody_component_legs l JOIN custody_components c ON c.id=l.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY l.ordinal,l.id",
+            [&profile_id],
+            false,
+        )? {
+            legs_by_component
+                .entry(string(&leg, "component_id"))
+                .or_default()
+                .push(leg);
         }
-        for key in ["supersedes_component_id","superseded_by_component_id"] { if let Some(value) = header.get(key).filter(|v| !v.is_null()) { revision_ids.insert(revisions::Reference::from_json(value)?); } }
+        for alloc in reader.rows(
+            conn,
+            "components[].allocations[]",
+            "SELECT a.* FROM custody_component_allocations a JOIN custody_components c ON c.id=a.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY a.ordinal,a.id",
+            [&profile_id],
+            false,
+        )? {
+            allocs_by_component
+                .entry(string(&alloc, "component_id"))
+                .or_default()
+                .push(alloc);
+        }
+        for term in reader.rows(
+            conn,
+            "components[].economic_terms[]",
+            "SELECT t.* FROM custody_component_economic_terms t JOIN custody_components c ON c.id=t.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY t.ordinal,t.id",
+            [&profile_id],
+            false,
+        )? {
+            terms_by_component
+                .entry(string(&term, "component_id"))
+                .or_default()
+                .push(term);
+        }
+        for commit in reader.rows(
+            conn,
+            "components[].commitments[]",
+            "SELECT e.* FROM custody_component_evidence_commitments e JOIN custody_components c ON c.id=e.component_id WHERE c.profile_id=? AND c.state='active' AND e.profile_id=? ORDER BY e.ordinal,e.id",
+            [&profile_id, &profile_id],
+            false,
+        )? {
+            commits_by_component
+                .entry(string(&commit, "component_id"))
+                .or_default()
+                .push(commit);
+        }
+    }
+    for header in headers {
+        let id = string(&header, "id");
+        let legs = legs_by_component.remove(&id).unwrap_or_default();
+        for leg in &legs {
+            for key in ["transaction_id", "anchor_transaction_id"] {
+                if leg.get(key).is_some_and(|v| !v.is_null()) {
+                    anchor_ids.insert(string(leg, key));
+                }
+            }
+            if leg.get("wallet_id").is_some_and(|v| !v.is_null()) {
+                wallet_ids.insert(string(leg, "wallet_id"));
+            }
+        }
+        for key in ["supersedes_component_id", "superseded_by_component_id"] {
+            if let Some(value) = header.get(key).filter(|v| !v.is_null()) {
+                revision_ids.insert(revisions::Reference::from_json(value)?);
+            }
+        }
         components.push(Component {
-            header, legs,
-            allocations: reader.rows(conn,"components[].allocations[]","SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id",[&id],false)?,
-            economic_terms: reader.rows(conn,"components[].economic_terms[]","SELECT * FROM custody_component_economic_terms WHERE component_id=? ORDER BY ordinal,id",[&id],false)?,
-            commitments: reader.rows(conn,"components[].commitments[]","SELECT * FROM custody_component_evidence_commitments WHERE component_id=? AND profile_id=? ORDER BY ordinal,id",[&id,&profile_id],false)?,
+            header,
+            legs,
+            allocations: allocs_by_component.remove(&id).unwrap_or_default(),
+            economic_terms: terms_by_component.remove(&id).unwrap_or_default(),
+            commitments: commits_by_component.remove(&id).unwrap_or_default(),
         });
     }
     let mut anchors = serde_json::Map::new();
-    for id in anchor_ids {
-        let row=reader.rows(conn,"anchors.*","SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?",[&id],true)?.into_iter().next().map(|row| J::Object(row.into_map())).unwrap_or(J::Null);
-        anchors.insert(id, row);
+    let anchor_list: Vec<String> = anchor_ids.into_iter().collect();
+    if !anchor_list.is_empty() {
+        let mut by_id: HashMap<String, J> = HashMap::with_capacity(anchor_list.len());
+        for chunk in anchor_list.chunks(400) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql = format!(
+                "SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id IN ({placeholders})"
+            );
+            for row in reader.rows(
+                conn,
+                "anchors.*",
+                &sql,
+                rusqlite::params_from_iter(chunk.iter()),
+                true,
+            )? {
+                let id = string(&row, "id");
+                by_id.entry(id).or_insert_with(|| J::Object(row.into_map()));
+            }
+        }
+        for id in anchor_list {
+            let row = by_id.remove(&id).unwrap_or(J::Null);
+            anchors.insert(id, row);
+        }
     }
     let mut anchor_wallets = vec![];
-    for id in wallet_ids {
-        anchor_wallets.extend(reader.rows(
-            conn,
-            "anchor_wallets[]",
-            "SELECT id,kind,config_json FROM wallets WHERE id=?",
-            [&id],
-            true,
-        )?);
+    let wallet_list: Vec<String> = wallet_ids.into_iter().collect();
+    if !wallet_list.is_empty() {
+        let mut by_id: HashMap<String, Vec<kassiber_custody::snapshot::Record>> =
+            HashMap::with_capacity(wallet_list.len());
+        for chunk in wallet_list.chunks(400) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql =
+                format!("SELECT id,kind,config_json FROM wallets WHERE id IN ({placeholders})");
+            for row in reader.rows(
+                conn,
+                "anchor_wallets[]",
+                &sql,
+                rusqlite::params_from_iter(chunk.iter()),
+                true,
+            )? {
+                by_id.entry(string(&row, "id")).or_default().push(row);
+            }
+        }
+        for id in wallet_list {
+            if let Some(rows) = by_id.remove(&id) {
+                anchor_wallets.extend(rows);
+            }
+        }
     }
     let mut revision_headers = vec![];
     // INTEGER and REAL share a sortable family, unlike TEXT and BLOB.
@@ -488,6 +599,9 @@ pub fn load_read_snapshot(
             "Custody revision references contain incompatible types",
         )));
     }
+    // SQLite applies the id column's affinity to each reference. A numeric
+    // reference can match a stored TEXT id, so grouping by the returned id's
+    // storage type would lose the match.
     for id in revision_ids {
         revision_headers.extend(reader.rows(
             conn,

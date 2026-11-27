@@ -5,7 +5,7 @@
 //! prepares absence candidates only after a complete source-bound round.
 #[cfg(test)]
 use crate::scan::Cancellation;
-use crate::scan::{script_hash, Control, Scope};
+use crate::scan::{esplora_query_hash, script_hash, Control, Scope};
 use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
 use kassiber_envelope::AppError;
@@ -221,6 +221,23 @@ impl Acquisition {
         consent: Option<&AcquisitionConsent>,
         deadline: Instant,
         cancel: &dyn Control,
+        progress: impl FnMut(Value),
+        history: &mut dyn FnMut(&Value) -> Result<()>,
+    ) -> Result<Value> {
+        self.run_with_history_and_pool(
+            gate, scope, consent, deadline, cancel, None, progress, history,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn run_with_history_and_pool(
+        &self,
+        gate: &Gate,
+        scope: &Scope,
+        consent: Option<&AcquisitionConsent>,
+        deadline: Instant,
+        cancel: &dyn Control,
+        pool: Option<Arc<kassiber_net::HttpPool>>,
         mut progress: impl FnMut(Value),
         history: &mut dyn FnMut(&Value) -> Result<()>,
     ) -> Result<Value> {
@@ -251,9 +268,15 @@ impl Acquisition {
             ));
         }
         let result = match (self.protocol, self.cache.as_ref()) {
-            (Protocol::Esplora, Some(cache)) => {
-                self.cached_esplora(gate, &proof.transport, deadline, cancel, cache, history)
-            }
+            (Protocol::Esplora, Some(cache)) => self.cached_esplora(
+                gate,
+                &proof.transport,
+                deadline,
+                cancel,
+                cache,
+                pool,
+                history,
+            ),
             (Protocol::Electrum, Some(cache)) => {
                 self.cached_electrum(gate, &proof.transport, deadline, cancel, cache)
             }
@@ -282,33 +305,47 @@ impl Acquisition {
         progress: &mut impl FnMut(Value),
     ) -> Result<Value> {
         let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
-        let mut scripts = vec![];
+        let workers = self.backend.batch_size().clamp(1, 8);
+        let mut scripts = Vec::with_capacity(self.targets.len());
         let mut transactions = Map::new();
-        for target in &self.targets {
+        for chunk in self.targets.chunks(workers) {
             cancel.check(deadline)?;
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
-            let path = format!("scripthash/{hash}");
-            // Keep the pre/post statistics for the future membership authority.
-            let before = client.get_json(&path, Some(consent), deadline)?;
-            let history =
-                esplora_history(&client, &path, self.max_pages, consent, deadline, cancel)?;
-            cancel.check(deadline)?;
-            let after = client.get_json(&path, Some(consent), deadline)?;
-            cancel.check(deadline)?;
-            let utxos =
-                array(client.get_json(&format!("{path}/utxo"), Some(consent), deadline)?)?;
-            for tx in &history {
-                transactions.insert(tx["txid"].as_str().ok_or_else(invalid)?.into(), tx.clone());
+            let batch = crate::scan::fetch_group(chunk, cancel, |target, control| {
+                let check = || control.check(deadline);
+                check()?;
+                let hash =
+                    esplora_query_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+                let path = format!("scripthash/{hash}");
+                let before = client.get_json_checked(&path, Some(consent), deadline, &check)?;
+                let history =
+                    esplora_history(&client, &path, self.max_pages, consent, deadline, control)?;
+                let after = client.get_json_checked(&path, Some(consent), deadline, &check)?;
+                let utxos = array(client.get_json_checked(
+                    &format!("{path}/utxo"),
+                    Some(consent),
+                    deadline,
+                    &check,
+                )?)?;
+                let script = json!({"target":target,"before":before,"after":after,"history":history,"utxos":utxos});
+                Ok((script, history))
+            })?;
+            for (script, history) in batch {
+                for tx in &history {
+                    transactions
+                        .insert(tx["txid"].as_str().ok_or_else(invalid)?.into(), tx.clone());
+                }
+                scripts.push(script);
+                progress(
+                    json!({"phase":"acquisition","targets_checked":scripts.len(),"target_count":self.targets.len()}),
+                );
             }
-            scripts.push(json!({"target":target,"before":before,"after":after,"history":history,"utxos":utxos}));
-            progress(
-                json!({"phase":"acquisition","targets_checked":scripts.len(),"target_count":self.targets.len()}),
-            );
         }
         cancel.check(deadline)?;
         // Python treats an unavailable tip as unknown depth, never zero depth.
         let tip = client
-            .get_text("blocks/tip/height", Some(consent), deadline)
+            .get_text_checked("blocks/tip/height", Some(consent), deadline, &|| {
+                cancel.check(deadline)
+            })
             .ok()
             .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
             .and_then(|n| i64::try_from(n).ok());
@@ -331,8 +368,13 @@ impl Acquisition {
         cancel: &dyn Control,
         progress: &mut impl FnMut(Value),
     ) -> Result<Value> {
-        let mut client =
-            ElectrumClient::connect(self.backend.clone(), gate, Some(consent.clone()), deadline)?;
+        let mut client = ElectrumClient::connect_checked(
+            self.backend.clone(),
+            gate,
+            Some(consent.clone()),
+            deadline,
+            &|| cancel.check(deadline),
+        )?;
         let hashes = self
             .targets
             .iter()
@@ -488,7 +530,9 @@ fn esplora_history(
             || format!("{path}/txs/chain"),
             |c| format!("{path}/txs/chain/{c}"),
         );
-        let page = array(client.get_json(&path, Some(consent), deadline)?)?;
+        let page = array(
+            client.get_json_checked(&path, Some(consent), deadline, &|| cancel.check(deadline))?,
+        )?;
         for tx in &page {
             retain_transaction(tx, &mut seen, &mut transactions)?;
         }
@@ -506,7 +550,12 @@ fn esplora_history(
         pages += 1;
     }
     cancel.check(deadline)?;
-    for tx in array(client.get_json(&format!("{path}/txs/mempool"), Some(consent), deadline)?)? {
+    for tx in array(client.get_json_checked(
+        &format!("{path}/txs/mempool"),
+        Some(consent),
+        deadline,
+        &|| cancel.check(deadline),
+    )?)? {
         retain_transaction(&tx, &mut seen, &mut transactions)?;
     }
     Ok(transactions)
@@ -536,7 +585,7 @@ fn calls(
     for chunk in params.chunks(client.batch_size()) {
         cancel.check(deadline)?;
         let requests: Vec<_> = chunk.iter().map(|p| (method.into(), p.clone())).collect();
-        result.extend(client.batch_call(&requests, deadline)?);
+        result.extend(client.batch_call_checked(&requests, deadline, &|| cancel.check(deadline))?);
     }
     cancel.check(deadline)?;
     Ok(result)
@@ -700,6 +749,12 @@ fn normalize_graph(tx: &mut Value, lookup: &Map<String, Value>) -> Result<()> {
     Ok(())
 }
 fn graph_sats(value: &Value) -> Result<Value> {
+    if let Some(n) = value.as_u64() {
+        return Ok(json!(n));
+    }
+    if let Some(n) = value.as_i64() {
+        return Ok(json!(n));
+    }
     use kassiber_pydecimal::{Decimal, Rounding};
     let text = value
         .as_str()

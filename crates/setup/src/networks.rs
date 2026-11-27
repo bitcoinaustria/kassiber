@@ -204,6 +204,41 @@ pub fn evidence(row: &Value) -> EvidenceFacts {
         valid && instances.len() <= 1,
     )
 }
+pub fn binding_for(conn: &Connection, profile: &str) -> Result<Option<Value>> {
+    binding(conn, profile)
+}
+pub fn guard_observation_with_binding(
+    binding: Option<&Value>,
+    row: &Value,
+    operation: &str,
+) -> Result<()> {
+    let (environment, instance, valid) = evidence(row);
+    if !valid {
+        return Err(mismatch("Observation contradicts its configured network")
+            .with_details(dict([("operation", s(operation))])));
+    }
+    if let Some(binding) = binding {
+        for (actual, key, message) in [
+            (
+                environment,
+                "environment",
+                "Observation belongs to a different book environment",
+            ),
+            (
+                instance,
+                "chain_instance_id",
+                "Observation belongs to a different local chain instance",
+            ),
+        ] {
+            if let Some(actual) = actual {
+                if value(binding, key) != &s(actual) {
+                    return Err(mismatch(message).with_details(dict([("operation", s(operation))])));
+                }
+            }
+        }
+    }
+    Ok(())
+}
 pub fn guard_observation(
     conn: &Connection,
     profile: &str,

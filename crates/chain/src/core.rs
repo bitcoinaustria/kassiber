@@ -3,14 +3,52 @@ use base64::Engine;
 use kassiber_net::{Gate, HttpRequest};
 use serde_json::json;
 use std::io::Read;
+use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::SystemTime;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct CookieStamp {
+    len: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+}
+
+fn cookie_stamp(path: &std::path::Path) -> Option<CookieStamp> {
+    let meta = std::fs::metadata(path).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some(CookieStamp {
+            len: meta.len(),
+            modified: meta.modified().ok(),
+            dev: meta.dev(),
+            ino: meta.ino(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Some(CookieStamp {
+            len: meta.len(),
+            modified: meta.modified().ok(),
+        })
+    }
+}
+
+type CachedAuth = Option<(Option<(PathBuf, CookieStamp)>, String)>;
 
 pub struct CoreClient {
     http: HttpClient,
+    auth_cache: Mutex<CachedAuth>,
 }
 impl CoreClient {
     pub fn new(backend: Backend, gate: Gate, version: &str) -> Self {
         Self {
             http: HttpClient::new(backend, gate, version),
+            auth_cache: Mutex::new(None),
         }
     }
     pub fn backend(&self) -> &Backend {
@@ -29,8 +67,20 @@ impl CoreClient {
         consent: Option<&Consent>,
         deadline: Instant,
     ) -> Result<Value> {
+        self.call_checked(method, params, wallet, consent, deadline, &|| Ok(()))
+    }
+
+    pub fn call_checked(
+        &self,
+        method: &str,
+        params: Option<&Value>,
+        wallet: Option<&str>,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<Value> {
         if watch_only_admin(method, params)? {
-            return self.request(method, params, wallet, consent, deadline);
+            return self.request(method, params, wallet, consent, deadline, check);
         }
         if ![
             "getblockchaininfo",
@@ -60,7 +110,7 @@ impl CoreClient {
                 "Unsupported watch-only Bitcoin Core RPC method",
             ));
         }
-        self.request(method, params, wallet, consent, deadline)
+        self.request(method, params, wallet, consent, deadline, check)
     }
 
     fn request(
@@ -70,8 +120,10 @@ impl CoreClient {
         wallet: Option<&str>,
         consent: Option<&Consent>,
         deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
     ) -> Result<Value> {
         let backend = &self.http.backend;
+        check()?;
         // Gate first: missing/offline consent cannot even cause credential reads.
         self.http
             .gate
@@ -84,8 +136,9 @@ impl CoreClient {
             .unwrap_or_else(|| backend.url.clone());
         let id = format!("kassiber-{method}");
         let payload = json!({"jsonrpc":"1.0", "id":id, "method":method, "params":params.unwrap_or(&json!([]))});
-        let auth = auth(backend)?;
-        let response = self.http.retry(
+        let payload_bytes = payload.to_string().into_bytes();
+        let auth = self.cached_auth()?;
+        let response = self.http.retry_checked(
             &url,
             consent,
             deadline,
@@ -98,7 +151,17 @@ impl CoreClient {
                         r.header("User-Agent", &format!("kassiber/{}", self.http.version))
                     })
                     .and_then(|r| r.header("Authorization", &auth))
-                    .map(|r| r.body(payload.to_string().into_bytes()))
+                    .map(|r| {
+                        let request = r.body(payload_bytes.clone());
+                        if method.starts_with("get")
+                            || method.starts_with("list")
+                            || method == "decoderawtransaction"
+                        {
+                            request.retry_read_only_rpc()
+                        } else {
+                            request
+                        }
+                    })
                     .map_err(|e| e.app_error())
             },
             if method == "listsinceblock" {
@@ -106,6 +169,7 @@ impl CoreClient {
             } else {
                 RESPONSE_LIMIT
             },
+            check,
         )?;
         let envelope = if matches!(response.status, 400 | 404 | 500) {
             let value = serde_json::from_slice::<Value>(&response.body).ok();
@@ -153,6 +217,46 @@ impl CoreClient {
             .with_details(details(json!({"rpc_method":method,"rpc_error_code":code}))));
         }
         Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    fn cached_auth(&self) -> Result<String> {
+        let backend = &self.http.backend;
+        if let Some(raw_path) = config::value(&backend.config, &["cookiefile", "cookie_file"]) {
+            let path = if let Some(tail) = raw_path.strip_prefix("~/") {
+                std::path::PathBuf::from(
+                    std::env::var_os("HOME").ok_or_else(|| app("Home directory unavailable"))?,
+                )
+                .join(tail)
+            } else {
+                raw_path.into()
+            };
+            let stamp = cookie_stamp(&path);
+            if let Some(stamp) = stamp {
+                let guard = self.auth_cache.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some((Some((cached_path, cached_stamp)), header)) = guard.as_ref() {
+                    if *cached_path == path && *cached_stamp == stamp {
+                        return Ok(header.clone());
+                    }
+                }
+            }
+            let header = auth(backend)?;
+            if let Some(stamp) = stamp {
+                *self.auth_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some((Some((path, stamp)), header.clone()));
+            }
+            Ok(header)
+        } else {
+            {
+                let guard = self.auth_cache.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some((None, header)) = guard.as_ref() {
+                    return Ok(header.clone());
+                }
+            }
+            let header = auth(backend)?;
+            *self.auth_cache.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some((None, header.clone()));
+            Ok(header)
+        }
     }
 }
 /// Whether `method` is one of the watch-only wallet administration calls a

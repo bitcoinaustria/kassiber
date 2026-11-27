@@ -281,8 +281,8 @@ class BitcoinIndex:
                             "block_time": tx.get("blocktime") or tx.get("time"),
                         },
                     }
-                    for key in protocol_scripthashes(str(script_hex)):
-                        utxos.setdefault(key, []).append(row)
+                    key = electrum_scripthash(str(script_hex))
+                    utxos.setdefault(key, []).append(row)
             self._tip = tip
             self._txs = txs
             self._history = history
@@ -320,7 +320,7 @@ class BitcoinIndex:
                     )
                     script_hex = (prevout or {}).get("scriptpubkey")
                     if script_hex:
-                        history_keys.update(protocol_scripthashes(str(script_hex)))
+                        history_keys.add(electrum_scripthash(str(script_hex)))
                 except Exception:
                     pass
         for output in tx.get("vout") or []:
@@ -329,7 +329,7 @@ class BitcoinIndex:
             script_hex = _script_payload(output).get("scriptpubkey")
             if not script_hex:
                 continue
-            history_keys.update(protocol_scripthashes(str(script_hex)))
+            history_keys.add(electrum_scripthash(str(script_hex)))
         for key in sorted(history_keys):
             history.setdefault(key, []).append({"tx_hash": txid, "height": height})
 
@@ -386,14 +386,6 @@ def esplora_scripthash(script_hex: str) -> str:
     except ValueError:
         payload = b""
     return hashlib.sha256(payload).hexdigest()
-
-
-def protocol_scripthashes(script_hex: str) -> tuple[str, ...]:
-    """Return the wire representations used by Electrum and Esplora clients."""
-
-    electrum = electrum_scripthash(script_hex)
-    esplora = esplora_scripthash(script_hex)
-    return (electrum,) if electrum == esplora else (electrum, esplora)
 
 
 def electrum_status(history: list[dict[str, Any]]) -> str | None:
@@ -579,14 +571,15 @@ class ApiHandler(BaseHTTPRequestHandler):
         if len(parts) < 4:
             self._error(404, "not found")
             return
-        # Both Esplora and Electrum wire representations are direct keys in the
-        # shared index. Validate the requested key without changing byte order.
+        # The shared index uses Electrum order. Esplora sends digest order.
         try:
-            bytes.fromhex(parts[3])
+            digest = bytes.fromhex(parts[3])
+            if len(digest) != 32 or digest.hex() != parts[3].lower():
+                raise ValueError("invalid SHA-256 digest")
         except ValueError:
             self._error(400, "invalid scripthash")
             return
-        scripthash = parts[3]
+        scripthash = digest[::-1].hex()
         if len(parts) == 4:
             self._json(self.server.index.stats(scripthash))
         elif path.endswith("/txs"):
@@ -598,8 +591,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
         elif path.endswith("/txs/mempool"):
             self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=True)])
-        elif "/txs/chain" in path:
-            self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=False)])
+        elif parts[4:6] == ["txs", "chain"] and len(parts) <= 7:
+            rows = list(reversed(self.server.index.history(scripthash, mempool=False)))
+            if len(parts) == 7:
+                cursor = next((i for i, row in enumerate(rows) if row["tx_hash"] == parts[6]), None)
+                if cursor is None:
+                    self._error(400, "unknown transaction cursor")
+                    return
+                rows = rows[cursor + 1:]
+            self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in rows[:25]])
         elif path.endswith("/utxo"):
             self._json(self.server.index.utxos(scripthash))
         else:

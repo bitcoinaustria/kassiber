@@ -62,8 +62,8 @@
   {
     "id": "W-fixed-suffix",
     "file": "crates/wallets/src/descriptors.rs",
-    "find": ".derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index)",
-    "replace": ".derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index + 1)",
+    "find": ".derived_descriptor(&*BTC_SECP_VERIFY, index)",
+    "replace": ".derived_descriptor(&*BTC_SECP_VERIFY, index + 1)",
     "expect_failing": [
       "python_descriptor_vectors"
     ],
@@ -9463,8 +9463,8 @@
   {
     "id": "W-blinding-fixed-script",
     "file": "crates/wallets/src/descriptors.rs",
-    "find": "            .derived_descriptor(&secp, address_index)\n            .map_err(|_| Error::Value(\"Can't do hardened derivation from public key\".into()))?\n            .script_pubkey();\n        match blind {",
-    "replace": "            .derived_descriptor(&secp, 0)\n            .map_err(|_| Error::Value(\"Can't do hardened derivation from public key\".into()))?\n            .script_pubkey();\n        match blind {",
+    "find": "            .derived_descriptor(&*ELEMENTS_SECP_ALL, address_index)\n            .map_err(|_| Error::Value(\"Can't do hardened derivation from public key\".into()))?\n            .script_pubkey();",
+    "replace": "            .derived_descriptor(&*ELEMENTS_SECP_ALL, 0)\n            .map_err(|_| Error::Value(\"Can't do hardened derivation from public key\".into()))?\n            .script_pubkey();",
     "expect_failing": [
       "liquid_blinding_secrets_match_python_vectors"
     ],

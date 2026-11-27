@@ -109,22 +109,11 @@ pub fn entries_for_facts(
         .collect()
 }
 
-/// `fee_attribution_from_raw`.
-fn fee_attribution(raw: &Value) -> &'static str {
-    let payload = match raw {
-        Value::Str(_) | Value::Null => {
-            let text = or_text(raw);
-            match kassiber_pytext::loads(if text.is_empty() { "{}" } else { &text }) {
-                Ok(value) => value,
-                Err(_) => return "unknown",
-            }
-        }
-        other => other.clone(),
-    };
+fn fee_attribution_parsed(payload: &Value) -> &'static str {
     if !matches!(payload, Value::Dict(_)) {
         return "unknown";
     }
-    if let Some(component @ Value::Dict(_)) = get(&payload, "component") {
+    if let Some(component @ Value::Dict(_)) = get(payload, "component") {
         match get(component, "fee_attribution") {
             Some(Value::Str(text)) if text.as_str() == Some("exact") => return "exact",
             Some(Value::Str(text)) if text.as_str() == Some("implicit_wallet_delta") => {
@@ -134,7 +123,7 @@ fn fee_attribution(raw: &Value) -> &'static str {
         }
     }
     let observer =
-        kassiber_pytext::lower(&or_text(get(&payload, "observer").unwrap_or(&Value::Null)));
+        kassiber_pytext::lower(&or_text(get(payload, "observer").unwrap_or(&Value::Null)));
     if matches!(observer.as_str(), "bdk" | "bitcoinrpc") {
         "exact"
     } else {
@@ -142,10 +131,29 @@ fn fee_attribution(raw: &Value) -> &'static str {
     }
 }
 
-fn graph_hash(raw: &Value) -> Result<String> {
+fn graph_and_fee(raw: &Value) -> Result<(String, &'static str)> {
     match raw {
-        Value::Str(_) => crate::observer_state::graph_hash(&py_str(raw)),
-        other => crate::observer_state::graph_hash_value(other),
+        Value::Str(_) => {
+            let text = py_str(raw);
+            let parsed = if text.is_empty() {
+                Ok(Value::Dict(vec![]))
+            } else {
+                kassiber_pytext::loads(&text)
+            };
+            match parsed {
+                Ok(value) => {
+                    let hash = crate::observer_state::graph_hash_value(&value)?;
+                    let fee = fee_attribution_parsed(&value);
+                    Ok((hash, fee))
+                }
+                Err(_) => Ok((crate::observer_state::graph_hash(&text)?, "unknown")),
+            }
+        }
+        Value::Null => Ok((crate::observer_state::graph_hash_value(raw)?, "unknown")),
+        other => Ok((
+            crate::observer_state::graph_hash_value(other)?,
+            fee_attribution_parsed(other),
+        )),
     }
 }
 
@@ -196,19 +204,22 @@ pub fn persist(
     now: &mut dyn FnMut() -> String,
 ) -> Result<usize> {
     super::row::require_transaction(conn)?;
-    let mut resolved_by_key: Vec<(RecordKey, String)> = Vec::new();
+    let mut resolved_by_key: std::collections::HashMap<RecordKey, String> =
+        std::collections::HashMap::with_capacity(resolved.len());
     for record in resolved {
         let key = record_key(record);
         let id = or_text(field(record, "transaction_id"));
         if key.0.is_empty() || id.is_empty() {
             return Err(mismatch("invalid_resolved_record", vec![]));
         }
-        match resolved_by_key.iter().find(|(k, _)| *k == key) {
-            Some((_, previous)) if *previous != id => {
+        match resolved_by_key.get(&key) {
+            Some(previous) if *previous != id => {
                 return Err(mismatch("conflicting_resolved_ids", vec![]))
             }
             Some(_) => {}
-            None => resolved_by_key.push((key, id)),
+            None => {
+                resolved_by_key.insert(key, id);
+            }
         }
     }
     let keys: Vec<RecordKey> = entries.iter().map(record_key).collect();
@@ -216,7 +227,7 @@ pub fn persist(
     if unique.len() != keys.len() {
         return Err(mismatch("duplicate_provenance_key", vec![]));
     }
-    let resolved_keys: BTreeSet<&RecordKey> = resolved_by_key.iter().map(|(k, _)| k).collect();
+    let resolved_keys: BTreeSet<&RecordKey> = resolved_by_key.keys().collect();
     if unique != resolved_keys {
         return Err(mismatch(
             "provenance_key_mismatch",
@@ -231,39 +242,11 @@ pub fn persist(
         kassiber_pytext::lower(kassiber_pytext::strip(target.chain)).as_str(),
         "bitcoin" | "liquid"
     );
-    for (entry, key) in entries.iter().zip(&keys) {
-        let external = kassiber_pytext::strip(&or_text(field(entry, "external_id"))).to_owned();
-        let canonical = native
-            .then(|| canonical_txid(&Value::from(external.as_str())))
-            .flatten();
-        let id = &resolved_by_key
-            .iter()
-            .find(|(k, _)| k == key)
-            .expect("checked")
-            .1;
-        let row = first(
-            conn,
-            "SELECT * FROM transactions WHERE id = ? AND workspace_id = ? AND profile_id = ? AND wallet_id = ?",
-            [id.as_str(), target.workspace_id, target.profile_id, target.wallet_id],
-        )?
-        .ok_or_else(|| mismatch("resolved_row_missing", vec![]))?;
-        let row_key = (
-            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(&row, "external_id")))),
-            asset_code(field(&row, "asset")),
-            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(&row, "direction")))),
-        );
-        if row_key != *key {
-            return Err(mismatch("resolved_row_identity_mismatch", vec![]));
-        }
-        let row_id = py_str(field(&row, "id"));
-        if canonical.is_some() && or_text(field(&row, "external_id_kind")) != "txid" {
-            conn.execute(
-                "UPDATE transactions SET external_id_kind = 'txid' WHERE id = ?",
-                [row_id.as_str()],
-            )
-            .map_err(database_error)?;
-        }
-        conn.execute(
+    let mut update_kind = conn
+        .prepare_cached("UPDATE transactions SET external_id_kind = 'txid' WHERE id = ?")
+        .map_err(database_error)?;
+    let mut upsert_provenance = conn
+        .prepare_cached(
             "INSERT INTO chain_observation_provenance(
                 transaction_id, workspace_id, profile_id, wallet_id,
                 authority_version, observer_ids_json, observer_kinds_json,
@@ -282,11 +265,69 @@ pub fn persist(
                 fee_attribution = excluded.fee_attribution,
                 observed_at = excluded.observed_at,
                 updated_at = excluded.updated_at",
-            params_from_iter([
+        )
+        .map_err(database_error)?;
+    // Batch-preload all resolved transactions in one query per 400 rows instead
+    // of executing a per-row SELECT inside the provenance loop.
+    let mut resolved_rows: std::collections::HashMap<String, Value> =
+        std::collections::HashMap::with_capacity(resolved_by_key.len());
+    let unique_ids: Vec<&str> = resolved_by_key
+        .values()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    for chunk in unique_ids.chunks(400) {
+        let placeholders = vec!["?"; chunk.len()].join(",");
+        let found = rows(
+            conn,
+            &format!(
+                "SELECT * FROM transactions WHERE workspace_id = ? AND profile_id = ? AND wallet_id = ? AND id IN ({placeholders})"
+            ),
+            params_from_iter(
+                [
+                    target.workspace_id.to_owned(),
+                    target.profile_id.to_owned(),
+                    target.wallet_id.to_owned(),
+                ]
+                .into_iter()
+                .chain(chunk.iter().map(|id| (*id).to_owned())),
+            ),
+        )?;
+        for row in found {
+            resolved_rows.insert(py_str(field(&row, "id")), row);
+        }
+    }
+    for (entry, key) in entries.iter().zip(&keys) {
+        let external = kassiber_pytext::strip(&or_text(field(entry, "external_id"))).to_owned();
+        let canonical = native
+            .then(|| canonical_txid(&Value::from(external.as_str())))
+            .flatten();
+        let id = resolved_by_key.get(key).expect("checked");
+        let row = resolved_rows
+            .get(id)
+            .ok_or_else(|| mismatch("resolved_row_missing", vec![]))?;
+        let row_key = (
+            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(row, "external_id")))),
+            asset_code(field(row, "asset")),
+            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(row, "direction")))),
+        );
+        if row_key != *key {
+            return Err(mismatch("resolved_row_identity_mismatch", vec![]));
+        }
+        let row_id = py_str(field(row, "id"));
+        if canonical.is_some() && or_text(field(row, "external_id_kind")) != "txid" {
+            update_kind
+                .execute([row_id.as_str()])
+                .map_err(database_error)?;
+        }
+        let (graph, fee) = graph_and_fee(field(row, "raw_json"))?;
+        upsert_provenance
+            .execute(params_from_iter([
                 Sql::Text(row_id),
-                Sql::Text(py_str(field(&row, "workspace_id"))),
-                Sql::Text(py_str(field(&row, "profile_id"))),
-                Sql::Text(py_str(field(&row, "wallet_id"))),
+                Sql::Text(py_str(field(row, "workspace_id"))),
+                Sql::Text(py_str(field(row, "profile_id"))),
+                Sql::Text(py_str(field(row, "wallet_id"))),
                 Sql::Integer(AUTHORITY_VERSION),
                 Sql::Text(strings_json(
                     get(entry, "observer_ids").unwrap_or(&Value::List(vec![])),
@@ -297,14 +338,13 @@ pub fn persist(
                 Sql::Text(target.chain.into()),
                 Sql::Text(target.network.into()),
                 Sql::Text(target.application_revision.into()),
-                Sql::Text(graph_hash(field(&row, "raw_json"))?),
-                Sql::Text(crate::observer_state::quantity_hash(&row)?),
-                Sql::Text(fee_attribution(field(&row, "raw_json")).into()),
+                Sql::Text(graph),
+                Sql::Text(crate::observer_state::quantity_hash(row)?),
+                Sql::Text(fee.into()),
                 Sql::Text(timestamp.clone()),
                 Sql::Text(timestamp.clone()),
-            ]),
-        )
-        .map_err(database_error)?;
+            ]))
+            .map_err(database_error)?;
     }
     Ok(keys.len())
 }
@@ -319,15 +359,37 @@ pub struct AccountingInputs {
 impl AccountingInputs {
     /// Python's `(states, bindings)` dict-tuple equality.
     pub fn same(&self, other: &Self) -> bool {
-        self.states == other.states
-            && self.bindings.len() == other.bindings.len()
-            && self.bindings.iter().all(|(id, values)| {
-                other.bindings.iter().any(|(other_id, other_values)| {
-                    py_eq(id, other_id)
-                        && values.len() == other_values.len()
-                        && values.iter().zip(other_values).all(|(a, b)| py_eq(a, b))
-                })
+        if self.states != other.states || self.bindings.len() != other.bindings.len() {
+            return false;
+        }
+        let mut other_str_index = std::collections::HashMap::with_capacity(other.bindings.len());
+        let mut other_non_str = Vec::new();
+        for (idx, (other_id, _)) in other.bindings.iter().enumerate() {
+            if let Value::Str(text) = other_id {
+                if let Some(s) = text.as_str() {
+                    other_str_index.insert(s, idx);
+                    continue;
+                }
+            }
+            other_non_str.push(idx);
+        }
+        self.bindings.iter().all(|(id, values)| {
+            if let Value::Str(text) = id {
+                if let Some(s) = text.as_str() {
+                    return other_str_index.get(s).is_some_and(|&idx| {
+                        let other_values = &other.bindings[idx].1;
+                        values.len() == other_values.len()
+                            && values.iter().zip(other_values).all(|(a, b)| py_eq(a, b))
+                    });
+                }
+            }
+            other_non_str.iter().any(|&idx| {
+                let (other_id, other_values) = &other.bindings[idx];
+                py_eq(id, other_id)
+                    && values.len() == other_values.len()
+                    && values.iter().zip(other_values).all(|(a, b)| py_eq(a, b))
             })
+        })
     }
 }
 
@@ -355,6 +417,7 @@ pub fn accounting_inputs(
     let txids: Vec<String> = txids.into_iter().collect();
     let mut states = BTreeMap::new();
     let mut bindings: Vec<(Value, Vec<Value>)> = Vec::new();
+    let mut str_index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for batch in txids.chunks(400) {
         let placeholders = vec!["?"; batch.len()].join(",");
         let found = rows(
@@ -390,6 +453,18 @@ pub fn accounting_inputs(
                 .iter()
                 .map(|name| field(row, name).clone())
                 .collect();
+            if let Value::Str(text) = &id {
+                if let Some(s) = text.as_str() {
+                    if let Some(&idx) = str_index.get(s) {
+                        bindings[idx].1 = values;
+                    } else {
+                        let idx = bindings.len();
+                        str_index.insert(s.to_owned(), idx);
+                        bindings.push((id, values));
+                    }
+                    continue;
+                }
+            }
             if let Some(slot) = bindings.iter_mut().find(|(other, _)| py_eq(other, &id)) {
                 slot.1 = values;
             } else {

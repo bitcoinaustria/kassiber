@@ -399,8 +399,8 @@
   {
     "id": "routing-liquid-esplora-outputs",
     "file": "crates/wallets/src/acquisition/cached.rs",
-    "find": "                if liquid {\n                    // Each Liquid output decodes its transaction.",
-    "replace": "                if false {\n                    // Each Liquid output decodes its transaction.",
+    "find": "                    if liquid {\n                        // Each Liquid output decodes its transaction.",
+    "replace": "                    if false {\n                        // Each Liquid output decodes its transaction.",
     "expect_failing": [
       "test_liquid_compatibility_books_match_python_esplora_extra1_http_route_policy_extend"
     ],

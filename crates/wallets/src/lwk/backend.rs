@@ -109,7 +109,7 @@ fn decode<T: lwk_wollet::elements::encode::Decodable>(value: &Value) -> Result<T
 }
 
 fn script_hash(script: &Script) -> Result<String> {
-    crate::scan::script_hash(&lwk_wollet::elements::hex::ToHex::to_hex(script.as_bytes()))
+    Ok(crate::scan::script_hash_bytes(script.as_bytes()))
 }
 
 impl<R: Rpc> BlockchainBackend for Backend<'_, R> {

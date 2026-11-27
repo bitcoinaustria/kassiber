@@ -4,7 +4,7 @@
 //! This is an inert preparation boundary, not an observer implementation. It
 //! neither selects a canonical chain nor grants absence/retraction authority.
 //! In particular, it cannot replace BDK with the compatibility gap walker.
-use bitcoin::{consensus, hex::FromHex, Transaction};
+use bitcoin::{consensus, Transaction};
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pyjson::{dumps, Options, Value as PyValue};
 use kassiber_store::rusqlite::Connection;
@@ -66,11 +66,12 @@ fn unsigned(value: &Value, field: &str, max: u64) -> Result<u64> {
         .ok_or_else(|| invalid(field))
 }
 
-fn hex(value: &Value, field: &str, length: Option<usize>) -> Result<String> {
+fn hex_bytes(value: &Value, field: &str, length: Option<usize>) -> Result<Vec<u8>> {
     // Python's bytes.fromhex permits ASCII whitespace between complete bytes,
     // including vertical tab, but never between a byte's two hex digits.
-    let mut input = value.as_str().ok_or_else(|| invalid(field))?.bytes();
-    let mut bytes = vec![];
+    let raw = value.as_str().ok_or_else(|| invalid(field))?;
+    let mut input = raw.bytes();
+    let mut bytes = Vec::with_capacity(raw.len() / 2);
     while let Some(first) = input.next() {
         if matches!(first, b'\t'..=b'\r' | b' ') {
             continue;
@@ -87,7 +88,18 @@ fn hex(value: &Value, field: &str, length: Option<usize>) -> Result<String> {
     if length.is_some_and(|n| n != bytes.len()) {
         return Err(invalid(field));
     }
-    Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
+    Ok(bytes)
+}
+
+fn hex(value: &Value, field: &str, length: Option<usize>) -> Result<String> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let bytes = hex_bytes(value, field, length)?;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in &bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    Ok(out)
 }
 
 fn descriptor(value: &Value, field: &str, mainnet: bool) -> Result<Value> {
@@ -173,11 +185,9 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
         .as_array()
         .ok_or_else(|| invalid("tx_graph.txs"))?
     {
-        let raw = hex(raw, "tx_graph.txs", None)?;
-        let tx: Transaction = consensus::deserialize(
-            &Vec::<u8>::from_hex(&raw).map_err(|_| invalid("tx_graph.txs"))?,
-        )
-        .map_err(|_| invalid("tx_graph.txs"))?;
+        let bytes = hex_bytes(raw, "tx_graph.txs", None)?;
+        let tx: Transaction =
+            consensus::deserialize(&bytes).map_err(|_| invalid("tx_graph.txs"))?;
         txs.push(consensus::encode::serialize_hex(&tx));
     }
     txs.sort();

@@ -7,6 +7,12 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+pub(crate) const ESPLORA_HASH_ORDER: &str = "sha256_digest";
+
+pub(crate) fn esplora_hashes_current(checkpoint: &Value) -> bool {
+    checkpoint["esplora_scripthash_order"] == ESPLORA_HASH_ORDER || kassiber_net::uses_legacy_tape()
+}
+
 /// Force a fetch without destroying the prior positive absence baseline.
 /// Dependency observers keep their persisted tip and canonical txids, so a
 /// forced rebuild refuses a backend behind the book and retracts only
@@ -20,6 +26,13 @@ pub(crate) fn full_scan_checkpoint(checkpoint: &Value) -> Value {
         if saved.is_object() && saved["version"].as_u64() == Some(1) {
             retained.insert("esplora_history_memberships".into(), saved.clone());
         }
+    }
+    if checkpoint
+        .get("esplora_scripthash_order")
+        .and_then(Value::as_str)
+        == Some(ESPLORA_HASH_ORDER)
+    {
+        retained.insert("esplora_scripthash_order".into(), json!(ESPLORA_HASH_ORDER));
     }
     if let Some(instances) = checkpoint
         .get("observer_instances")

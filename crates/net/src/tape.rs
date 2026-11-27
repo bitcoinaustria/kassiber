@@ -59,6 +59,7 @@ use crate::{Connection, Error};
 const VARIABLE: &str = "KASSIBER_TEST_NET_TAPE";
 const HOLD_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_HOLD";
 const WRITES_VARIABLE: &str = "KASSIBER_TEST_NET_TAPE_WRITES";
+const WIRE_VERSION: &str = "wire\t2";
 
 enum Mode {
     Record(Mutex<File>),
@@ -72,6 +73,7 @@ struct Replays {
     by_key: HashMap<String, Vec<Option<Recorded>>>,
     /// `replay-strict:`: a first write must match a recording's.
     strict: bool,
+    current_wire: bool,
     /// Where a strict replay notes its misses.
     misses: Option<std::path::PathBuf>,
 }
@@ -179,11 +181,23 @@ fn mode() -> Option<&'static Mode> {
     MODE.get_or_init(|| {
         let value = std::env::var(VARIABLE).ok()?;
         if let Some(path) = value.strip_prefix("record:") {
-            let file = OpenOptions::new()
+            let mut file = OpenOptions::new()
                 .create(true)
+                .read(true)
                 .append(true)
                 .open(path)
                 .ok()?;
+            if file.metadata().ok()?.len() == 0 {
+                writeln!(file, "{WIRE_VERSION}").ok()?;
+            } else {
+                let mut version = String::new();
+                io::BufRead::read_line(&mut io::BufReader::new(&file), &mut version).ok()?;
+                assert_eq!(
+                    version.trim_end(),
+                    WIRE_VERSION,
+                    "Cannot append to a legacy network tape"
+                );
+            }
             return Some(Mode::Record(Mutex::new(file)));
         }
         let (path, strict) = match value.strip_prefix("replay-strict:") {
@@ -242,7 +256,10 @@ fn load(text: &str) -> Replays {
         }
     }
     connections.sort_by_key(|(id, _, _)| *id);
-    let mut replays = Replays::default();
+    let mut replays = Replays {
+        current_wire: text.lines().next() == Some(WIRE_VERSION),
+        ..Default::default()
+    };
     for (_, k, recorded) in connections {
         replays.by_key.entry(k).or_default().push(Some(recorded));
     }
@@ -254,6 +271,14 @@ fn load(text: &str) -> Replays {
 pub(crate) enum Replayed {
     Failed { attempts: u32, error: Error },
     Connected { attempts: u32, tape: Tape },
+}
+
+pub(crate) fn is_taped() -> bool {
+    mode().is_some()
+}
+
+pub(crate) fn uses_legacy_wire() -> bool {
+    matches!(mode(), Some(Mode::Replay(replay)) if !replay.lock().unwrap_or_else(|e| e.into_inner()).current_wire)
 }
 
 /// `None` when this process does not replay.
@@ -671,6 +696,71 @@ impl Write for Taped {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recorded_http_round_trips_with_strict_replay() {
+        use crate::{
+            Consent, Endpoint, Gate, HttpOptions, HttpPool, HttpRequest, HttpUrl, Ledger, Offline,
+            Request, Subsystem, TlsTrust,
+        };
+        const CHILD: &str = "KASSIBER_NET_TEST_TAPE_TARGET";
+        if let Ok(url) = std::env::var(CHILD) {
+            let port = HttpUrl::parse(&url).unwrap().port().unwrap();
+            let request = Request::new(
+                Subsystem::Sync,
+                Endpoint::new("127.0.0.1", port).unwrap(),
+                TlsTrust::Plaintext,
+            );
+            let gate = Gate::new(|| Offline::Online, Ledger::default());
+            let proof = Consent::explicit_trigger(&request);
+            let pool = HttpPool::new();
+            for (path, body) in [("first", "a"), ("second", "b")] {
+                let route = gate
+                    .authorize(request.clone(), Some(proof.clone()))
+                    .unwrap();
+                let response = HttpRequest::new("GET", &format!("{url}/{path}"))
+                    .unwrap()
+                    .send_pooled(route, HttpOptions::default(), &pool)
+                    .unwrap();
+                assert_eq!(response.body, body.as_bytes());
+            }
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let tape = dir.path().join("http.tape");
+        let server =
+            crate::test_support::FakeProvider::replies(vec![(200, "a".into()), (200, "b".into())])
+                .unwrap();
+        let url = server.base().trim_end_matches('/').to_owned();
+        let run = |mode| {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tape::tests::recorded_http_round_trips_with_strict_replay",
+                ])
+                .env(CHILD, &url)
+                .env(VARIABLE, format!("{mode}:{}", tape.display()))
+                .env_remove("KASSIBER_NO_EGRESS")
+                .env("KASSIBER_TEST_NO_EGRESS", "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        run("record");
+        assert_eq!(server.requests().len(), 2);
+        let recorded = std::fs::read_to_string(&tape).unwrap();
+        assert!(load(&recorded).current_wire);
+        assert!(!load("").current_wire);
+        drop(server);
+        run("replay-strict");
+        assert!(!tape.with_extension("tape.misses").exists());
+    }
 
     #[test]
     fn a_strict_tape_has_no_fallback_binding() {

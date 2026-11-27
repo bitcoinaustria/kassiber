@@ -7,10 +7,12 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{
     ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, SignatureScheme,
 };
+use std::collections::HashMap;
 use std::fmt;
 use std::io::Read;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 
 const MAX_CA_BYTES: u64 = 8 * 1024 * 1024;
 
@@ -21,13 +23,68 @@ enum RootSource {
     Backend,
 }
 
+#[derive(Default)]
+struct ConfigCache {
+    raw: OnceLock<Arc<ClientConfig>>,
+    http: OnceLock<Arc<ClientConfig>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FileStamp {
+    len: u64,
+    modified: Option<SystemTime>,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+    #[cfg(unix)]
+    ctime: i64,
+    #[cfg(unix)]
+    ctime_nsec: i64,
+}
+
+fn file_stamp(path: &Path) -> Option<FileStamp> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some(FileStamp {
+            len: meta.len(),
+            modified: meta.modified().ok(),
+            dev: meta.dev(),
+            ino: meta.ino(),
+            ctime: meta.ctime(),
+            ctime_nsec: meta.ctime_nsec(),
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Some(FileStamp {
+            len: meta.len(),
+            modified: meta.modified().ok(),
+        })
+    }
+}
+
 /// An immutable snapshot, binding consent to the actual selected CA certificates.
 /// Debug omits paths and certificate contents.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct RootCertificates {
     source: RootSource,
     certificates: Arc<[CertificateDer<'static>]>,
+    configs: Arc<ConfigCache>,
 }
+
+impl PartialEq for RootCertificates {
+    fn eq(&self, other: &Self) -> bool {
+        self.source == other.source && self.certificates == other.certificates
+    }
+}
+
+impl Eq for RootCertificates {}
 
 impl fmt::Debug for RootCertificates {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -76,11 +133,35 @@ impl TlsTrust {
             return Self::ca_file(path);
         }
         for path in host_bundles {
-            if let Ok(trust) = Self::from_file(path, RootSource::Host) {
+            if let Ok(trust) = Self::from_host_file(path) {
                 return Ok(trust);
             }
         }
         Ok(Self::BundledRoots)
+    }
+
+    fn from_host_file(path: &Path) -> Result<Self, Error> {
+        static HOST_CACHE: OnceLock<Mutex<HashMap<PathBuf, (FileStamp, RootCertificates)>>> =
+            OnceLock::new();
+        let stamp = file_stamp(path);
+        if let Some(stamp) = stamp {
+            let cache = HOST_CACHE.get_or_init(Default::default);
+            if let Ok(guard) = cache.lock() {
+                if let Some((cached_stamp, roots)) = guard.get(path) {
+                    if *cached_stamp == stamp {
+                        return Ok(Self::Roots(roots.clone()));
+                    }
+                }
+            }
+        }
+        let loaded = Self::from_file(path, RootSource::Host)?;
+        if let (Some(stamp), Self::Roots(roots)) = (stamp, &loaded) {
+            let cache = HOST_CACHE.get_or_init(Default::default);
+            if let Ok(mut guard) = cache.lock() {
+                guard.insert(path.to_path_buf(), (stamp, roots.clone()));
+            }
+        }
+        Ok(loaded)
     }
 
     pub fn ca_file(path: &Path) -> Result<Self, Error> {
@@ -143,13 +224,17 @@ impl TlsTrust {
         Ok(Self::Roots(RootCertificates {
             source,
             certificates: certificates.into(),
+            configs: Arc::new(ConfigCache::default()),
         }))
     }
 }
 
 fn provider() -> Arc<CryptoProvider> {
     // Fix the provider explicitly: workspace feature unification cannot change it.
-    Arc::new(rustls::crypto::ring::default_provider())
+    static PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    PROVIDER
+        .get_or_init(|| Arc::new(rustls::crypto::ring::default_provider()))
+        .clone()
 }
 
 /// The server-certificate verifier for one trust selection. Plaintext has none.
@@ -215,11 +300,47 @@ fn client_config(
 }
 
 pub(crate) fn config(trust: &TlsTrust, http: bool) -> Result<Option<Arc<ClientConfig>>, Error> {
-    if *trust == TlsTrust::Plaintext {
-        return Ok(None);
+    match trust {
+        TlsTrust::Plaintext => Ok(None),
+        TlsTrust::BundledRoots => {
+            static BUNDLED_RAW: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+            static BUNDLED_HTTP: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+            let slot = if http { &BUNDLED_HTTP } else { &BUNDLED_RAW };
+            if let Some(cached) = slot.get() {
+                return Ok(Some(cached.clone()));
+            }
+            let provider = provider();
+            let built = client_config(verifier(trust, provider.clone())?, provider, http)?;
+            let _ = slot.set(built.clone());
+            Ok(Some(slot.get().cloned().unwrap_or(built)))
+        }
+        TlsTrust::ExplicitInsecure => {
+            static INSECURE_RAW: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+            static INSECURE_HTTP: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+            let slot = if http { &INSECURE_HTTP } else { &INSECURE_RAW };
+            if let Some(cached) = slot.get() {
+                return Ok(Some(cached.clone()));
+            }
+            let provider = provider();
+            let built = client_config(verifier(trust, provider.clone())?, provider, http)?;
+            let _ = slot.set(built.clone());
+            Ok(Some(slot.get().cloned().unwrap_or(built)))
+        }
+        TlsTrust::Roots(snapshot) => {
+            let slot = if http {
+                &snapshot.configs.http
+            } else {
+                &snapshot.configs.raw
+            };
+            if let Some(cached) = slot.get() {
+                return Ok(Some(cached.clone()));
+            }
+            let provider = provider();
+            let built = client_config(verifier(trust, provider.clone())?, provider, http)?;
+            let _ = slot.set(built.clone());
+            Ok(Some(slot.get().cloned().unwrap_or(built)))
+        }
     }
-    let provider = provider();
-    client_config(verifier(trust, provider.clone())?, provider, http).map(Some)
 }
 
 pub(crate) fn wrap(

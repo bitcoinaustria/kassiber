@@ -37,16 +37,25 @@ fn column(value: ValueRef<'_>) -> Result<Value> {
     })
 }
 
+fn convert_with_names(row: &Row<'_>, names: &[Key]) -> Result<Value> {
+    let mut pairs = Vec::with_capacity(names.len());
+    for (index, name) in names.iter().enumerate() {
+        pairs.push((
+            name.clone(),
+            column(row.get_ref(index).map_err(database_error)?)?,
+        ));
+    }
+    Ok(Value::Dict(pairs))
+}
+
 fn convert(row: &Row<'_>) -> Result<Value> {
     let statement = row.as_ref();
-    let mut pairs = Vec::with_capacity(statement.column_count());
-    for index in 0..statement.column_count() {
-        let name = statement
-            .column_name(index)
-            .map_err(database_error)?
-            .to_owned();
+    let count = statement.column_count();
+    let mut pairs = Vec::with_capacity(count);
+    for index in 0..count {
+        let name = statement.column_name(index).map_err(database_error)?;
         pairs.push((
-            Key::from(name.as_str()),
+            Key::from(name),
             column(row.get_ref(index).map_err(database_error)?)?,
         ));
     }
@@ -55,17 +64,24 @@ fn convert(row: &Row<'_>) -> Result<Value> {
 
 /// All rows of one query, each as an insertion-ordered column dict.
 pub(crate) fn rows(conn: &Connection, sql: &str, params: impl Params) -> Result<Vec<Value>> {
-    let mut statement = conn.prepare(sql).map_err(database_error)?;
+    let mut statement = conn.prepare_cached(sql).map_err(database_error)?;
+    let count = statement.column_count();
+    let mut names = Vec::with_capacity(count);
+    for index in 0..count {
+        names.push(Key::from(
+            statement.column_name(index).map_err(database_error)?,
+        ));
+    }
     let mut cursor = statement.query(params).map_err(database_error)?;
     let mut output = Vec::new();
     while let Some(row) = cursor.next().map_err(database_error)? {
-        output.push(convert(row)?);
+        output.push(convert_with_names(row, &names)?);
     }
     Ok(output)
 }
 
 pub(crate) fn first(conn: &Connection, sql: &str, params: impl Params) -> Result<Option<Value>> {
-    let mut statement = conn.prepare(sql).map_err(database_error)?;
+    let mut statement = conn.prepare_cached(sql).map_err(database_error)?;
     let mut cursor = statement.query(params).map_err(database_error)?;
     cursor
         .next()

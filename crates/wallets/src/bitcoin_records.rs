@@ -126,21 +126,33 @@ pub fn graph_scoped_scripts(tx: &Value, scripts: &BTreeSet<String>) -> Vec<Strin
         .filter(|s| !s.is_empty())
         .map(|s| normalized(s))
         .collect();
+    graph_scoped_scripts_normalized(tx, &given)
+}
+
+/// Same as [`graph_scoped_scripts`] when `given` is already stripped and
+/// lowercased, avoiding an `O(|scripts|)` set rebuild on every transaction.
+pub fn graph_scoped_scripts_normalized(tx: &Value, given: &BTreeSet<String>) -> Vec<String> {
     let mut found = BTreeSet::new();
     for input in entries(tx, "vin") {
         let value = script(&input["prevout"]);
         if value.is_empty() {
-            return given.into_iter().collect();
+            return given.iter().cloned().collect();
         }
-        found.insert(normalized(value));
+        let norm = normalized(value);
+        if given.contains(&norm) {
+            found.insert(norm);
+        }
     }
     for output in entries(tx, "vout") {
         let value = script(output);
         if !value.is_empty() {
-            found.insert(normalized(value));
+            let norm = normalized(value);
+            if given.contains(&norm) {
+                found.insert(norm);
+            }
         }
     }
-    given.intersection(&found).cloned().collect()
+    found.into_iter().collect()
 }
 pub(crate) fn timestamp(value: &Value) -> Result<Option<String>> {
     if value.is_null() || value.as_str() == Some("") || value == 0 || value == "0" {

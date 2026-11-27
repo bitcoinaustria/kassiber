@@ -8,6 +8,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 /// is multiple request lines, not a JSON array. Responses may be out of order.
 pub struct ElectrumClient {
     backend: Backend,
+    gate: Gate,
+    consent: Option<Consent>,
     reader: BufReader<Connection>,
     next_id: u64,
     pub server_version: Value,
@@ -42,16 +44,30 @@ impl ElectrumClient {
         consent: Option<Consent>,
         deadline: Instant,
     ) -> Result<Self> {
+        Self::connect_checked(backend, gate, consent, deadline, &|| Ok(()))
+    }
+
+    pub fn connect_checked(
+        backend: Backend,
+        gate: &Gate,
+        consent: Option<Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<Self> {
+        check()?;
         let route = gate
-            .authorize(backend.request.clone(), consent)
+            .authorize(backend.request.clone(), consent.clone())
             .map_err(|e| e.app_error())?;
         let mut connection = route
             .connect(backend.timeout.min(remaining(deadline)?))
             .map_err(|e| e.app_error())?;
+        check()?;
         connection.set_deadline(Some(deadline));
         let mut client = Self {
             backend,
-            reader: BufReader::new(connection),
+            gate: gate.clone(),
+            consent,
+            reader: BufReader::with_capacity(64 * 1024, connection),
             next_id: 0,
             server_version: Value::Null,
         };
@@ -79,15 +95,57 @@ impl ElectrumClient {
         requests: &[(String, Value)],
         deadline: Instant,
     ) -> Result<Vec<Value>> {
+        self.batch_call_checked(requests, deadline, &|| Ok(()))
+    }
+
+    pub fn batch_call_checked(
+        &mut self,
+        requests: &[(String, Value)],
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<Vec<Value>> {
         // Validate the whole action before the first write, including later chunks.
         for (method, _) in requests {
             validate_method(method)?;
         }
         let mut results = Vec::with_capacity(requests.len());
         for chunk in requests.chunks(self.backend.batch_size) {
-            results.extend(self.batch_chunk(chunk, deadline)?);
+            self.batch_bounded(chunk, deadline, check, &mut results)?;
         }
         Ok(results)
+    }
+
+    fn batch_bounded(
+        &mut self,
+        requests: &[(String, Value)],
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+        results: &mut Vec<Value>,
+    ) -> Result<()> {
+        check()?;
+        match self.batch_chunk(requests, deadline) {
+            Ok(values) => results.extend(values),
+            Err(error)
+                if requests.len() > 1
+                    && error.code == "protocol_error"
+                    && error.message == "Electrum response exceeds size limit" =>
+            {
+                // A size refusal leaves unread replies on the socket.
+                check()?;
+                *self = Self::connect_checked(
+                    self.backend.clone(),
+                    &self.gate,
+                    self.consent.clone(),
+                    deadline,
+                    check,
+                )?;
+                let (left, right) = requests.split_at(requests.len() / 2);
+                self.batch_bounded(left, deadline, check, results)?;
+                self.batch_bounded(right, deadline, check, results)?;
+            }
+            Err(error) => return Err(error),
+        }
+        Ok(())
     }
     fn batch_chunk(
         &mut self,
@@ -97,22 +155,28 @@ impl ElectrumClient {
         remaining(deadline)?;
         self.reader.get_mut().set_deadline(Some(deadline));
         let mut pending = BTreeMap::new();
-        let mut payload = Vec::new();
+        let mut payload = Vec::with_capacity(requests.len().saturating_mul(128));
         for (index, (method, params)) in requests.iter().enumerate() {
             self.next_id = self
                 .next_id
                 .checked_add(1)
                 .ok_or_else(|| app("Electrum request IDs exhausted"))?;
             pending.insert(self.next_id, (index, method));
-            let params = if truthy(params) {
-                params.clone()
+            // Exact serde_json key order (`id`, `jsonrpc`, `method`, `params`)
+            // without allocating an intermediate JSON object or cloning `params`.
+            let _ = write!(
+                payload,
+                "{{\"id\":{},\"jsonrpc\":\"2.0\",\"method\":",
+                self.next_id
+            );
+            serde_json::to_writer(&mut payload, method).expect("JSON method");
+            payload.extend_from_slice(b",\"params\":");
+            if truthy(params) {
+                serde_json::to_writer(&mut payload, params).expect("JSON params");
             } else {
-                json!([])
-            };
-            let request =
-                json!({"jsonrpc":"2.0", "id":self.next_id, "method":method, "params":params});
-            serde_json::to_writer(&mut payload, &request).expect("JSON value");
-            payload.push(b'\n');
+                payload.extend_from_slice(b"[]");
+            }
+            payload.extend_from_slice(b"}\n");
         }
         if payload.len() > RESPONSE_LIMIT {
             return Err(AppError::new(
@@ -126,9 +190,10 @@ impl ElectrumClient {
             .map_err(io_error)?;
         let mut results = vec![Value::Null; requests.len()];
         let mut consumed = 0;
+        let mut line = Vec::with_capacity(4096);
         while !pending.is_empty() {
             remaining(deadline)?;
-            let mut line = Vec::new();
+            line.clear();
             // Bounded even when the peer never sends a newline. Total bytes,
             // including notifications/duplicate IDs, share the request budget.
             let count = self
@@ -150,7 +215,7 @@ impl ElectrumClient {
                     self.backend.name
                 )));
             }
-            let message =
+            let mut message =
                 serde_json::from_slice::<Value>(&line).map_err(|_| self.format_error())?;
             if !message.is_object() {
                 return Err(self.format_error());
@@ -183,7 +248,10 @@ impl ElectrumClient {
                     format!("Electrum call {method} failed {}", redacted(&detail)),
                 ));
             }
-            results[index] = message.get("result").cloned().unwrap_or(Value::Null);
+            results[index] = message
+                .as_object_mut()
+                .and_then(|obj| obj.remove("result"))
+                .unwrap_or(Value::Null);
         }
         Ok(results)
     }

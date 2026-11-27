@@ -515,6 +515,7 @@ impl Sync {
             sources,
             &mut backend,
             btcpay,
+            Some(start_time),
             |action, grant| {
                 action.emit_silent_progress();
                 action.run(
@@ -545,7 +546,7 @@ impl Sync {
         stage: impl FnMut(&str) -> Result<()>,
     ) -> Result<Vec<Value>> {
         self.execute_with(
-            conn, gate, consent, cancel, deadline, sources, backend, None, fetch, stage,
+            conn, gate, consent, cancel, deadline, sources, backend, None, None, fetch, stage,
         )
     }
 
@@ -560,6 +561,7 @@ impl Sync {
         sources: &mut dyn Sources,
         backend: &mut impl FnMut(&Connection, &str) -> Result<Json>,
         btcpay: Option<&btcpay::Context<'_>>,
+        parallel_start_time: Option<u64>,
         mut fetch_with: impl FnMut(&Fetch, &FetchConsent) -> Result<Json>,
         mut stage: impl FnMut(&str) -> Result<()>,
     ) -> Result<Vec<Value>> {
@@ -590,22 +592,102 @@ impl Sync {
                 "Wallet sync consent was already used",
             ));
         }
-        let mut prepared = Vec::new();
-        for (wallet, grant) in self.selected.iter().zip(&proof.grants) {
-            cancel.check(deadline)?;
-            self.validate(conn, backend, None)?;
-            let result = match &wallet.fetch {
-                Ok(Some(action)) => {
-                    let grant = grant.as_ref().expect("matching service grant");
-                    action
-                        .check_permission(gate, Some(grant))
-                        .and_then(|()| fetch_with(action, grant))
-                        .map(Some)
+        let mut prepared = Vec::with_capacity(self.selected.len());
+        let runnable_count = self
+            .selected
+            .iter()
+            .filter(|wallet| matches!(&wallet.fetch, Ok(Some(_))))
+            .count();
+        if let (Some(start_time), true) = (
+            parallel_start_time,
+            runnable_count > 1 && !kassiber_net::is_taped(),
+        ) {
+            // Prefetch up to 6 wallets concurrently per wave. Database
+            // authority, permission checks, and silent-progress emissions stay
+            // on the caller thread before/after each wave; each worker enforces
+            // its own cancellation, consent, and offline gate.
+            const MAX_CONCURRENT_WALLETS: usize = 6;
+            let pairs: Vec<_> = self.selected.iter().zip(&proof.grants).collect();
+            for wave in pairs.chunks(MAX_CONCURRENT_WALLETS) {
+                cancel.check(deadline)?;
+                self.validate(conn, backend, None)?;
+                enum Slot<'a> {
+                    Ready(&'a Fetch, &'a FetchConsent),
+                    Done(Result<Option<Json>>),
                 }
-                Ok(None) => Ok(None),
-                Err(e) => Err(e.clone()),
-            };
-            prepared.push(result);
+                let mut slots = Vec::with_capacity(wave.len());
+                for &(wallet, grant) in wave {
+                    let slot = match &wallet.fetch {
+                        Ok(Some(action)) => {
+                            let grant = grant.as_ref().expect("matching service grant");
+                            match action.check_permission(gate, Some(grant)) {
+                                Ok(()) => {
+                                    Fetch::emit_silent_progress(action);
+                                    Slot::Ready(action, grant)
+                                }
+                                Err(err) => Slot::Done(Err(err)),
+                            }
+                        }
+                        Ok(None) => Slot::Done(Ok(None)),
+                        Err(e) => Slot::Done(Err(e.clone())),
+                    };
+                    slots.push(slot);
+                }
+                let wave_results: Vec<Result<Option<Json>>> = std::thread::scope(|threads| {
+                    enum Pending<'scope> {
+                        Worker(std::thread::ScopedJoinHandle<'scope, Result<Option<Json>>>),
+                        Done(Result<Option<Json>>),
+                    }
+                    let pending: Vec<Pending<'_>> = slots
+                        .into_iter()
+                        .map(|slot| match slot {
+                            Slot::Ready(action, grant) => {
+                                Pending::Worker(threads.spawn(move || {
+                                    action
+                                        .run(
+                                            gate,
+                                            action.scope(),
+                                            Some(grant),
+                                            deadline,
+                                            cancel,
+                                            start_time,
+                                        )
+                                        .map(Some)
+                                }))
+                            }
+                            Slot::Done(res) => Pending::Done(res),
+                        })
+                        .collect();
+                    pending
+                        .into_iter()
+                        .map(|item| match item {
+                            Pending::Worker(handle) => handle
+                                .join()
+                                .unwrap_or_else(|p| std::panic::resume_unwind(p)),
+                            Pending::Done(res) => res,
+                        })
+                        .collect()
+                });
+                prepared.extend(wave_results);
+                self.validate(conn, backend, None)?;
+            }
+        } else {
+            for (wallet, grant) in self.selected.iter().zip(&proof.grants) {
+                cancel.check(deadline)?;
+                self.validate(conn, backend, None)?;
+                let result = match &wallet.fetch {
+                    Ok(Some(action)) => {
+                        let grant = grant.as_ref().expect("matching service grant");
+                        action
+                            .check_permission(gate, Some(grant))
+                            .and_then(|()| fetch_with(action, grant))
+                            .map(Some)
+                    }
+                    Ok(None) => Ok(None),
+                    Err(e) => Err(e.clone()),
+                };
+                prepared.push(result);
+            }
         }
         // `_prepare_negative_balance_repairs`, after every wallet's fetch.
         for ((wallet, grant), result) in self.selected.iter().zip(&proof.grants).zip(&mut prepared)

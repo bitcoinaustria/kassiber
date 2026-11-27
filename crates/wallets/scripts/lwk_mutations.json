@@ -314,8 +314,8 @@
   {
     "id": "lwk-fetch-revalidate",
     "file": "crates/wallets/src/fetch.rs",
-    "find": "&& a.values == b.values",
-    "replace": "",
+    "find": "if values != *expected_values {",
+    "replace": "if false && values != *expected_values {",
     "expect_failing": [
       "fetch_liquid_loads_versioned_values_and_revalidates_them"
     ],

@@ -1,5 +1,5 @@
 use super::*;
-use kassiber_net::{Gate, HttpOptions, HttpRequest, HttpResponse, HttpUrl};
+use kassiber_net::{Gate, HttpOptions, HttpPool, HttpRequest, HttpResponse, HttpUrl};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -24,6 +24,9 @@ pub struct HttpClient {
     pub(crate) version: String,
     pub(crate) withheld: Vec<String>,
     pub(crate) met: Mutex<Met>,
+    pub(crate) pool: Arc<HttpPool>,
+    auth_header: Option<String>,
+    limiter: Option<Arc<Limiter>>,
 }
 /// What this client's exchange reads met.
 #[derive(Default)]
@@ -95,13 +98,33 @@ impl HttpClient {
         })
     }
     pub fn new(backend: Backend, gate: Gate, version: &str) -> Self {
+        let auth_header = config::value(&backend.config, &["auth_header"])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .or_else(|| {
+                config::value(&backend.config, &["token"])
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| format!("Bearer {s}"))
+            });
+        let limiter = host_limiter(&backend.url).ok();
         Self {
             backend,
             gate,
             version: version.into(),
             withheld: vec![],
             met: Mutex::default(),
+            pool: Arc::new(HttpPool::new()),
+            auth_header,
+            limiter,
         }
+    }
+    /// Reuse a caller-scoped keep-alive pool across phases of the same wallet
+    /// fetch action. Never share across wallets, books, or consents.
+    pub fn with_pool(mut self, pool: Arc<HttpPool>) -> Self {
+        self.pool = pool;
+        self
     }
     /// The literal credentials this client's requests carry. An error body
     /// that echoes one shows `<redacted>`, before it is truncated.
@@ -137,7 +160,17 @@ impl HttpClient {
     /// Optional cache anchor, read only under the caller's exact sync grant.
     /// A missing or malformed tip disables reuse; it never means an empty chain.
     pub fn esplora_tip_hash(&self, consent: Option<&Consent>, deadline: Instant) -> Option<String> {
-        let text = self.get_text("blocks/tip/hash", consent, deadline).ok()?;
+        self.esplora_tip_hash_checked(consent, deadline, &|| Ok(()))
+    }
+    pub fn esplora_tip_hash_checked(
+        &self,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Option<String> {
+        let text = self
+            .get_text_checked("blocks/tip/hash", consent, deadline, check)
+            .ok()?;
         let text = kassiber_pytext::strip(&text).to_ascii_lowercase();
         (text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())).then_some(text)
     }
@@ -198,7 +231,16 @@ impl HttpClient {
         consent: Option<&Consent>,
         deadline: Instant,
     ) -> Result<String> {
-        let response = self.get(path, "text/plain", consent, deadline)?;
+        self.get_text_checked(path, consent, deadline, &|| Ok(()))
+    }
+    pub fn get_text_checked(
+        &self,
+        path: &str,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<String> {
+        let response = self.get_checked(path, "text/plain", consent, deadline, check)?;
         String::from_utf8(response.body).map_err(|_| app("Backend returned invalid UTF-8"))
     }
     fn get(
@@ -231,19 +273,9 @@ impl HttpClient {
                     .map_err(|e| e.app_error())?
                     .header("User-Agent", &format!("kassiber/{}", self.version))
                     .map_err(|e| e.app_error())?;
-                let auth = config::value(&self.backend.config, &["auth_header"])
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_owned)
-                    .or_else(|| {
-                        config::value(&self.backend.config, &["token"])
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .map(|s| format!("Bearer {s}"))
-                    });
-                if let Some(auth) = auth {
+                if let Some(auth) = &self.auth_header {
                     request = request
-                        .header("Authorization", &auth)
+                        .header("Authorization", auth)
                         .map_err(|e| e.app_error())?;
                 }
                 Ok(request)
@@ -269,13 +301,24 @@ impl HttpClient {
         deadline: Instant,
         cap: usize,
     ) -> Result<HttpResponse> {
+        self.send_checked(request, consent, deadline, cap, &|| Ok(()))
+    }
+    fn send_checked(
+        &self,
+        request: HttpRequest,
+        consent: Option<&Consent>,
+        deadline: Instant,
+        cap: usize,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<HttpResponse> {
         let route = self
             .gate
             .authorize(self.backend.request.clone(), consent.cloned())
             .map_err(|e| e.app_error())?;
         remaining(deadline)?;
+        let refusal = std::cell::Cell::new(None);
         request
-            .send(
+            .send_pooled_checked(
                 route,
                 HttpOptions {
                     timeout: self.backend.timeout,
@@ -283,8 +326,15 @@ impl HttpClient {
                     max_response_bytes: cap,
                     ..Default::default()
                 },
+                &self.pool,
+                &|| {
+                    check().map_err(|error| {
+                        refusal.set(Some(error));
+                        kassiber_net::Error::ConsentRevoked
+                    })
+                },
             )
-            .map_err(|e| e.app_error())
+            .map_err(|e| refusal.take().unwrap_or_else(|| e.app_error()))
     }
     pub(crate) fn retry(
         &self,
@@ -298,7 +348,7 @@ impl HttpClient {
         self.retry_checked(url, consent, deadline, policy, build, cap, &|| Ok(()))
     }
     #[allow(clippy::too_many_arguments)]
-    fn retry_checked(
+    pub(crate) fn retry_checked(
         &self,
         url: &str,
         consent: Option<&Consent>,
@@ -313,38 +363,48 @@ impl HttpClient {
         self.gate
             .authorize(self.backend.request.clone(), consent.cloned())
             .map_err(|e| e.app_error())?;
-        let limiter = host_limiter(url)?;
+        let limiter = match &self.limiter {
+            Some(cached) if url.starts_with(&self.backend.url) => cached.clone(),
+            _ => host_limiter(url)?,
+        };
         let mut cumulative = Duration::ZERO;
         for attempt in 0..3 {
             check()?;
-            let slot = limiter.acquire(deadline)?;
+            let slot = limiter.acquire(deadline, check)?;
             check()?;
             let request = build()?;
-            let headers = request.headers().to_vec();
-            let credentials = self.credentials(url, &headers);
             let exchange = match policy {
                 StatusPolicy::Exchange(accepted) => Some(accepted),
                 _ => None,
             };
+            let mut cached_credentials = None;
             if exchange.is_some() {
+                let credentials = self.credentials(url, request.headers());
                 let mut met = self.met.lock().unwrap_or_else(|e| e.into_inner());
                 for value in &credentials {
                     if !value.is_empty() && !met.seen.contains(value) {
                         met.seen.push(value.clone());
                     }
                 }
+                cached_credentials = Some(credentials);
             }
-            let mut response = self.send(request, consent, deadline, cap)?;
+            let headers_for_error = if cached_credentials.is_none() {
+                Some(request.headers().to_vec())
+            } else {
+                None
+            };
+            let mut response = self.send_checked(request, consent, deadline, cap, check)?;
             drop(slot);
             if !matches!(response.status, 429 | 503) {
                 if let Some(accepted) = exchange {
+                    let credentials = cached_credentials.as_deref().unwrap_or(&[]);
                     if (200..300).contains(&response.status) {
-                        if echoes(&response.body, &credentials) {
+                        if echoes(&response.body, credentials) {
                             self.met.lock().unwrap_or_else(|e| e.into_inner()).echoed = true;
                         }
                         return Ok(response);
                     }
-                    let withheld = kassiber_credentials::credential_forms(&credentials);
+                    let withheld = kassiber_credentials::credential_forms(credentials);
                     response.body = scrub_error_body(&response.body, &withheld);
                     if accepted.contains(&response.status) {
                         return Ok(response);
@@ -356,7 +416,13 @@ impl HttpClient {
                 {
                     return Ok(response);
                 }
-                let withheld = kassiber_credentials::credential_forms(&credentials);
+                let withheld = if let Some(credentials) = cached_credentials {
+                    kassiber_credentials::credential_forms(&credentials)
+                } else {
+                    let headers = headers_for_error.unwrap_or_default();
+                    let credentials = self.credentials(url, &headers);
+                    kassiber_credentials::credential_forms(&credentials)
+                };
                 // The body is the server's text: withhold every credential
                 // the request carried, and the client's own (an exchange key
                 // and secret), before the cut, as Python does.
@@ -380,6 +446,9 @@ impl HttpClient {
                     % 500_001;
                 Duration::from_micros(500_000 * (1 << attempt) + jitter)
             });
+            if response.status == 429 {
+                limiter.note_cooldown(delay.min(Duration::from_secs(5)));
+            }
             if attempt == 2 || cumulative.saturating_add(delay) > Duration::from_secs(20) {
                 let message = if response.status == 429 {
                     format!(
@@ -693,29 +762,71 @@ mod tests {
     }
 }
 #[derive(Default)]
+struct LimiterState {
+    active: usize,
+    cooldown_until: Option<Instant>,
+}
+#[derive(Default)]
 struct Limiter {
-    active: Mutex<usize>,
+    state: Mutex<LimiterState>,
     wake: Condvar,
 }
 struct Slot(Arc<Limiter>);
 impl Limiter {
-    fn acquire(self: &Arc<Self>, deadline: Instant) -> Result<Slot> {
-        let mut active = self.active.lock().unwrap();
-        while *active >= 8 {
-            active = self
+    fn note_cooldown(&self, duration: Duration) {
+        if duration.is_zero() {
+            return;
+        }
+        let target = Instant::now() + duration;
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.cooldown_until = Some(match state.cooldown_until {
+            Some(existing) if existing > target => existing,
+            _ => target,
+        });
+    }
+    fn acquire(
+        self: &Arc<Self>,
+        deadline: Instant,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<Slot> {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            drop(state);
+            check()?;
+            let budget = remaining(deadline)?;
+            state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            let cooldown_wait = state
+                .cooldown_until
+                .and_then(|until| until.checked_duration_since(Instant::now()));
+            if let Some(wait) = cooldown_wait {
+                let slice = wait.min(budget).min(Duration::from_millis(100));
+                state = self
+                    .wake
+                    .wait_timeout(state, slice)
+                    .unwrap_or_else(|e| e.into_inner())
+                    .0;
+                continue;
+            }
+            if state.active < 8 {
+                state.active += 1;
+                return Ok(Slot(self.clone()));
+            }
+            let slice = budget.min(Duration::from_millis(100));
+            state = self
                 .wake
-                .wait_timeout(active, remaining(deadline)?)
-                .unwrap()
+                .wait_timeout(state, slice)
+                .unwrap_or_else(|e| e.into_inner())
                 .0;
         }
-        remaining(deadline)?;
-        *active += 1;
-        Ok(Slot(self.clone()))
     }
 }
 impl Drop for Slot {
     fn drop(&mut self) {
-        *self.0.active.lock().unwrap() -= 1;
+        self.0
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .active -= 1;
         self.0.wake.notify_one();
     }
 }

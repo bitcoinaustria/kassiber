@@ -21,7 +21,7 @@ mod jobs;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        mpsc, Arc, Mutex,
     },
     time::Instant,
 };
@@ -418,6 +418,44 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
         })
     }
 
+    fn check_source_state(
+        &mut self,
+        conn: &Connection,
+        id: &str,
+        selected: &Source,
+        fetch: &Fetch,
+        last_db_stamp: &mut Option<(i64, u64)>,
+    ) -> Result<()> {
+        self.cancel.check(self.deadline)?;
+        self.proof.check()?;
+        let data_version = conn
+            .prepare_cached("PRAGMA data_version")
+            .and_then(|mut statement| statement.query_row([], |row| row.get(0)))
+            .map_err(crate::database_error)?;
+        let stamp = (data_version, conn.total_changes());
+        if *last_db_stamp != Some(stamp) {
+            check(
+                conn,
+                &self.context,
+                self.proof,
+                self.cancel,
+                self.deadline,
+                id,
+            )?;
+            check_wallet_row(conn, selected)?;
+            fetch.check_network(conn, &or_text(field(&selected.wallet, "kind")))?;
+            self.proof.permitted(conn, &selected.profile)?;
+            *last_db_stamp = Some(stamp);
+        }
+        if (self.backend)(conn, &selected.backend_name) != selected.backend {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet sync backend changed",
+            ));
+        }
+        Ok(())
+    }
+
     /// Run `fetch` (the job's own or its widened repair) under the batch's
     /// checks. Between requests they fence cancellation, consent, the job,
     /// the book, the wallet row, its backend and the book's network scope;
@@ -435,32 +473,29 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
         grant: &FetchConsent,
         emit: &mut dyn FnMut(&Value) -> Result<()>,
     ) -> Result<Json> {
-        let wallet_id = or_text(field(&selected.wallet, "id"));
         let label = field(&selected.wallet, "label");
         let resolver = std::cell::RefCell::new(&mut self.backend);
+        let last_db_stamp: std::cell::Cell<Option<(i64, i64)>> = std::cell::Cell::new(None);
         let check_batch = || {
-            check(
-                conn,
-                &self.context,
-                self.proof,
-                self.cancel,
-                self.deadline,
-                id,
-            )?;
-            let current = first(
-                conn,
-                "SELECT kind,config_json FROM wallets WHERE id=? AND profile_id=?",
-                [&wallet_id, &selected.profile],
-            )?;
-            if current.as_ref().is_none_or(|wallet| {
-                ["kind", "config_json"]
-                    .iter()
-                    .any(|key| field(wallet, key) != field(&selected.wallet, key))
-            }) {
-                return Err(AppError::new(
-                    "stale_context",
-                    "Wallet sync selection changed",
-                ));
+            self.cancel.check(self.deadline)?;
+            self.proof.check()?;
+            let data_version: i64 = conn
+                .query_row("PRAGMA data_version", [], |r| r.get(0))
+                .map_err(crate::database_error)?;
+            let stamp = (data_version, conn.total_changes() as i64);
+            if last_db_stamp.get() != Some(stamp) {
+                check(
+                    conn,
+                    &self.context,
+                    self.proof,
+                    self.cancel,
+                    self.deadline,
+                    id,
+                )?;
+                check_wallet_row(conn, selected)?;
+                fetch.check_network(conn, &or_text(field(&selected.wallet, "kind")))?;
+                self.proof.permitted(conn, &selected.profile)?;
+                last_db_stamp.set(Some(stamp));
             }
             if resolver.borrow_mut()(conn, &selected.backend_name) != selected.backend {
                 return Err(AppError::new(
@@ -468,8 +503,7 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
                     "Wallet sync backend changed",
                 ));
             }
-            fetch.check_network(conn, &or_text(field(&selected.wallet, "kind")))?;
-            self.proof.permitted(conn, &selected.profile)
+            Ok(())
         };
         let control = Checked {
             cancel: self.cancel,
@@ -482,13 +516,74 @@ impl<'a, B: FnMut(&Connection, &str) -> Result<Json>> Native<'a, B> {
             self.deadline,
             &control,
             self.start_time,
-            &mut |event| {
-                let mut event = kassiber_pytext::loads(&event.to_string())
-                    .map_err(|_| AppError::new("internal_error", "Invalid wallet progress JSON"))?;
-                put(&mut event, "wallet", label.clone());
-                emit(&event)
-            },
+            &mut |event| emit_wallet_progress(&event, label, emit),
         )
+    }
+}
+
+fn check_wallet_row(conn: &Connection, selected: &Source) -> Result<()> {
+    let wallet_id = or_text(field(&selected.wallet, "id"));
+    let current = first(
+        conn,
+        "SELECT kind,config_json FROM wallets WHERE id=? AND profile_id=?",
+        [&wallet_id, &selected.profile],
+    )?;
+    if current.as_ref().is_none_or(|wallet| {
+        ["kind", "config_json"]
+            .iter()
+            .any(|key| field(wallet, key) != field(&selected.wallet, key))
+    }) {
+        return Err(AppError::new(
+            "stale_context",
+            "Wallet sync selection changed",
+        ));
+    }
+    Ok(())
+}
+
+fn emit_wallet_progress(
+    event: &Json,
+    label: &Value,
+    emit: &mut dyn FnMut(&Value) -> Result<()>,
+) -> Result<()> {
+    let mut event = kassiber_pytext::loads(&event.to_string())
+        .map_err(|_| AppError::new("internal_error", "Invalid wallet progress JSON"))?;
+    put(&mut event, "wallet", label.clone());
+    emit(&event)
+}
+
+enum FetchMessage {
+    Check,
+    Progress(Json),
+}
+
+struct ConcurrentControl<'a> {
+    cancel: &'a Cancellation,
+    job: usize,
+    coordinator: mpsc::Sender<(usize, FetchMessage, mpsc::SyncSender<Result<()>>)>,
+}
+
+impl ConcurrentControl<'_> {
+    fn request(&self, message: FetchMessage, deadline: Instant) -> Result<()> {
+        self.cancel.check(deadline)?;
+        let stopped = || AppError::new("cancelled", "Freshness fetch coordinator stopped");
+        let (reply, result) = mpsc::sync_channel(1);
+        self.coordinator
+            .send((self.job, message, reply))
+            .map_err(|_| stopped())?;
+        result
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .map_err(|_| stopped())??;
+        self.cancel.check(deadline)
+    }
+}
+
+impl crate::scan::Control for ConcurrentControl<'_> {
+    fn check(&self, deadline: Instant) -> Result<()> {
+        self.request(FetchMessage::Check, deadline)
+    }
+    fn parallel(&self) -> Option<&(dyn crate::scan::Control + Sync)> {
+        Some(self)
     }
 }
 
@@ -596,12 +691,140 @@ impl<B: FnMut(&Connection, &str) -> Result<Json>> Handler for Native<'_, B> {
                 ));
             }
         }
-        let mut fetched = Vec::new();
-        for (id, result) in discovered {
-            fetched.push((
-                id,
-                result.and_then(|found| self.fetch(conn, found, observer)),
-            ));
+        let ok_count = discovered.iter().filter(|(_, r)| r.is_ok()).count();
+        let mut fetched: Vec<(String, Result<Prepared>)> = Vec::with_capacity(discovered.len());
+        if ok_count <= 1 || kassiber_net::is_taped() {
+            for (id, result) in discovered {
+                fetched.push((
+                    id,
+                    result.and_then(|found| self.fetch(conn, found, observer)),
+                ));
+            }
+        } else {
+            // Prefetch up to 6 wallets per wave. Workers synchronously ask the
+            // SQLite-owning thread to check each job's authority between requests.
+            const MAX_CONCURRENT_WALLETS: usize = 6;
+            let mut slots: Vec<Option<(String, Result<Prepared>)>> =
+                (0..discovered.len()).map(|_| None).collect();
+            let mut ready: Vec<(usize, String, Discovered)> = Vec::new();
+            for (idx, (id, result)) in discovered.into_iter().enumerate() {
+                match result {
+                    Ok(found) => ready.push((idx, id, found)),
+                    Err(err) => slots[idx] = Some((id, Err(err))),
+                }
+            }
+            let mut iter = ready.into_iter();
+            loop {
+                let wave: Vec<(usize, String, Discovered)> =
+                    iter.by_ref().take(MAX_CONCURRENT_WALLETS).collect();
+                if wave.is_empty() {
+                    break;
+                }
+                let mut runnable: Vec<(usize, String, Discovered)> = Vec::new();
+                for (idx, id, found) in wave {
+                    match self.check_source_state(
+                        conn,
+                        &found.id,
+                        &found.selected,
+                        &found.action,
+                        &mut None,
+                    ) {
+                        Ok(()) => runnable.push((idx, id, found)),
+                        Err(err) => slots[idx] = Some((id, Err(err))),
+                    }
+                }
+                if runnable.is_empty() {
+                    continue;
+                }
+                let gate = self.gate;
+                let cancel = self.cancel;
+                let deadline = self.deadline;
+                let start_time = self.start_time;
+                let wave_results = std::thread::scope(|threads| {
+                    let (coordinator, requests) = mpsc::channel();
+                    let handles: Vec<_> = runnable
+                        .iter()
+                        .enumerate()
+                        .map(|(job, (_, _, found))| {
+                            let coordinator = coordinator.clone();
+                            threads.spawn(move || {
+                                let control = ConcurrentControl {
+                                    cancel,
+                                    job,
+                                    coordinator,
+                                };
+                                found.action.run_with_progress(
+                                    gate,
+                                    found.action.scope(),
+                                    Some(&found.grant),
+                                    deadline,
+                                    &control,
+                                    start_time,
+                                    &mut |event| {
+                                        control.request(FetchMessage::Progress(event), deadline)
+                                    },
+                                )
+                            })
+                        })
+                        .collect();
+                    drop(coordinator);
+                    let mut stamps = vec![None; runnable.len()];
+                    let mut observer_error: Option<AppError> = None;
+                    for (job, message, reply) in requests {
+                        let found = &runnable[job].2;
+                        let checked = if let Some(error) = &observer_error {
+                            Err(error.clone())
+                        } else {
+                            match message {
+                                FetchMessage::Check => self.check_source_state(
+                                    conn,
+                                    &found.id,
+                                    &found.selected,
+                                    &found.action,
+                                    &mut stamps[job],
+                                ),
+                                FetchMessage::Progress(event) => {
+                                    let label = field(&found.selected.wallet, "label");
+                                    emit_wallet_progress(&event, label, observer).inspect_err(
+                                        |error| {
+                                            observer_error = Some(error.clone());
+                                        },
+                                    )
+                                }
+                            }
+                        };
+                        let _ = reply.send(checked);
+                    }
+                    let results = handles
+                        .into_iter()
+                        .map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)))
+                        .collect::<Vec<_>>();
+                    observer_error.map_or(Ok(results), Err)
+                })?;
+                for ((idx, id, found), res) in runnable.into_iter().zip(wave_results) {
+                    let outcome = res.and_then(|fetch| {
+                        self.check_source_state(
+                            conn,
+                            &found.id,
+                            &found.selected,
+                            &found.action,
+                            &mut None,
+                        )?;
+                        Ok(Prepared {
+                            id: found.id,
+                            selected: found.selected,
+                            action: found.action,
+                            grant: found.grant,
+                            fetch,
+                            graph: found.graph,
+                        })
+                    });
+                    slots[idx] = Some((id, outcome));
+                }
+            }
+            for slot in slots {
+                fetched.push(slot.expect("every discovered job filled"));
+            }
         }
         for (id, result) in fetched {
             let result = result.and_then(|prepared| self.repair(conn, prepared, observer));

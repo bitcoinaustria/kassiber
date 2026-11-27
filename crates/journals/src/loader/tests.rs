@@ -270,16 +270,17 @@ fn native_loader_revision_queries_keep_sqlite_binding_types() {
         .find(|case| text(get(case, "name")) == "structural-columns")
         .unwrap();
     let mut sql = text(get(case, "sql"));
-    for column in [
-        "id",
-        "supersedes_component_id",
-        "superseded_by_component_id",
-    ] {
+    for column in ["supersedes_component_id", "superseded_by_component_id"] {
         sql = sql.replace(&format!("\"{column}\" TEXT"), &format!("\"{column}\""));
     }
-    for number in ["7", "7.0", "1.5", "9007199254740993", "1e999", "-1e999"] {
+    let no_id_affinity = sql.replace("\"id\" TEXT", "\"id\"");
+    let numbers = ["7", "7.0", "1.5", "9007199254740993", "1e999", "-1e999"];
+    for (sql, number) in [&sql, &no_id_affinity]
+        .into_iter()
+        .flat_map(|sql| numbers.map(|number| (sql, number)))
+    {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(&sql).unwrap();
+        conn.execute_batch(sql).unwrap();
         conn.execute_batch(&format!("BEGIN IMMEDIATE;
             UPDATE custody_components SET supersedes_component_id=NULL,superseded_by_component_id=NULL;
             UPDATE custody_components SET id={number} WHERE state='superseded';

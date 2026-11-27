@@ -20,6 +20,14 @@ pub fn preference_path(context: &Context) -> Result<PathBuf> {
         .join("config/offline-mode.json"))
 }
 
+/// Read the settings file afresh using the same path resolution as `execute`.
+/// An unresolved path returns `None`, which network gates treat as unavailable.
+pub fn state_from_env() -> Option<bool> {
+    let context = Context::from_env().ok()?;
+    let path = preference_path(&context).ok()?;
+    Some(enabled(&path))
+}
+
 pub fn enabled(path: &Path) -> bool {
     // pathlib treats invalid names and a missing/non-directory/looping parent as
     // absent. A final dangling symlink is still present and fails closed below.

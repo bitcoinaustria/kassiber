@@ -5,7 +5,10 @@
 //! once-only consent bound to that action, like Python's
 //! `detect_active_script_types`. Every backend or probe failure falls back to
 //! a manual `p2wpkh` choice with the failure as the reason.
-use crate::{descriptors as d, material, scan::script_hash};
+use crate::{
+    descriptors as d, material,
+    scan::{esplora_query_hash, script_hash},
+};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_net::{Consent, Gate};
@@ -181,7 +184,13 @@ impl Detection {
         let hashes = self
             .scripts
             .iter()
-            .map(|(_, script)| script_hash(script))
+            .map(|(_, script)| {
+                if self.electrum {
+                    script_hash(script)
+                } else {
+                    esplora_query_hash(script)
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         let histories = if self.electrum {
             let mut client = ElectrumClient::connect(
@@ -203,8 +212,8 @@ impl Detection {
                 .collect::<Vec<_>>()
         } else {
             let client = HttpClient::new(self.backend.clone(), gate, env!("CARGO_PKG_VERSION"));
-            let mut used = vec![];
-            for hash in &hashes {
+            let workers = self.backend.batch_size().clamp(1, 8);
+            let probe = |hash: &String| -> Result<bool> {
                 let stats = client.get_json(
                     &format!("scripthash/{hash}"),
                     Some(&grant.transport),
@@ -220,12 +229,29 @@ impl Detection {
                         Ok(kassiber_pyjson::BigInt::default())
                     }
                 };
-                used.push(
-                    count("chain_stats")? + count("mempool_stats")?
-                        > kassiber_pyjson::BigInt::default(),
-                );
+                Ok(count("chain_stats")? + count("mempool_stats")?
+                    > kassiber_pyjson::BigInt::default())
+            };
+            if workers > 1 && hashes.len() > 1 {
+                let mut used = Vec::with_capacity(hashes.len());
+                for chunk in hashes.chunks(workers) {
+                    let results: Vec<bool> = std::thread::scope(|threads| {
+                        let handles: Vec<_> = chunk
+                            .iter()
+                            .map(|hash| threads.spawn(move || probe(hash)))
+                            .collect();
+                        let joined: Vec<Result<bool>> = handles
+                            .into_iter()
+                            .map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)))
+                            .collect();
+                        joined.into_iter().collect::<Result<Vec<_>>>()
+                    })?;
+                    used.extend(results);
+                }
+                used
+            } else {
+                hashes.iter().map(probe).collect::<Result<Vec<_>>>()?
             }
-            used
         };
         let mut detected = vec![];
         let mut active = vec![];

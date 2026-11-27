@@ -42,8 +42,8 @@
   {
     "id": "JL-active-components",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "state='active'",
-    "replace": "state='superseded'",
+    "find": "WHERE profile_id=? AND state='active'",
+    "replace": "WHERE profile_id=? AND state='superseded'",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -52,8 +52,8 @@
   {
     "id": "JL-leg-order",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "custody_component_legs WHERE component_id=? ORDER BY ordinal,id",
-    "replace": "custody_component_legs WHERE component_id=? ORDER BY ordinal DESC,id",
+    "find": "ORDER BY l.ordinal,l.id",
+    "replace": "ORDER BY l.ordinal DESC,l.id",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -62,8 +62,8 @@
   {
     "id": "JL-anchor-lookup",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "WHERE t.id=?\",[&id],true",
-    "replace": "WHERE t.id=? AND t.excluded=0\",[&id],true",
+    "find": "WHERE t.id IN ({placeholders})\"",
+    "replace": "WHERE t.id IN ({placeholders}) AND t.excluded=0\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -162,8 +162,8 @@
   {
     "id": "JL-inventory-account",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "match_facts(&wallet,\"\",&chain,&network,\"inventory\")",
-    "replace": "match_facts(&wallet,\"wrong\",&chain,&network,\"inventory\")",
+    "find": "match_facts(wallet,\"\",&chain,&network,\"inventory\")",
+    "replace": "match_facts(wallet,\"wrong\",&chain,&network,\"inventory\")",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -782,8 +782,8 @@
   {
     "id": "JL-owned-empty-inventory-label",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "set(&mut wallet,\"label\",Value::from(wallet_id.clone()));",
-    "replace": "set(&mut wallet,\"label\",Value::from(\"\"));",
+    "find": "set(wallet, \"label\", Value::from(wallet_id));",
+    "replace": "set(wallet, \"label\", Value::from(\"\"));",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2412,8 +2412,8 @@
   {
     "id": "JL-anchor-identity",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "anchor_ids.insert(string(leg,key));",
-    "replace": "let _ = (leg,key);",
+    "find": "anchor_ids.insert(string(leg, key));",
+    "replace": "let _ = (leg, key);",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2422,8 +2422,8 @@
   {
     "id": "JL-anchor-wallet",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "wallet_ids.insert(string(leg,\"wallet_id\"));",
-    "replace": "wallet_ids.insert(string(leg,\"wallet_id\")); wallet_ids.clear();",
+    "find": "wallet_ids.insert(string(leg, \"wallet_id\"));",
+    "replace": "wallet_ids.insert(string(leg, \"wallet_id\")); wallet_ids.clear();",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2712,8 +2712,8 @@
   {
     "id": "JL-sql-direct-scope-04",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id\"",
-    "replace": "\"SELECT * FROM custody_component_legs WHERE component_id<>? ORDER BY ordinal,id\"",
+    "find": "\"SELECT l.* FROM custody_component_legs l JOIN custody_components c ON c.id=l.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY l.ordinal,l.id\"",
+    "replace": "\"SELECT l.* FROM custody_component_legs l JOIN custody_components c ON c.id=l.component_id WHERE c.profile_id<>? AND c.state='active' ORDER BY l.ordinal,l.id\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2722,8 +2722,8 @@
   {
     "id": "JL-sql-direct-scope-05",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id\"",
-    "replace": "\"SELECT * FROM custody_component_allocations WHERE component_id<>? ORDER BY ordinal,id\"",
+    "find": "\"SELECT a.* FROM custody_component_allocations a JOIN custody_components c ON c.id=a.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY a.ordinal,a.id\"",
+    "replace": "\"SELECT a.* FROM custody_component_allocations a JOIN custody_components c ON c.id=a.component_id WHERE c.profile_id<>? AND c.state='active' ORDER BY a.ordinal,a.id\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2732,8 +2732,8 @@
   {
     "id": "JL-sql-direct-scope-06",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT * FROM custody_component_economic_terms WHERE component_id=? ORDER BY ordinal,id\"",
-    "replace": "\"SELECT * FROM custody_component_economic_terms WHERE component_id<>? ORDER BY ordinal,id\"",
+    "find": "\"SELECT t.* FROM custody_component_economic_terms t JOIN custody_components c ON c.id=t.component_id WHERE c.profile_id=? AND c.state='active' ORDER BY t.ordinal,t.id\"",
+    "replace": "\"SELECT t.* FROM custody_component_economic_terms t JOIN custody_components c ON c.id=t.component_id WHERE c.profile_id<>? AND c.state='active' ORDER BY t.ordinal,t.id\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2742,8 +2742,8 @@
   {
     "id": "JL-sql-direct-scope-07",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT * FROM custody_component_evidence_commitments WHERE component_id=? AND profile_id=? ORDER BY ordinal,id\"",
-    "replace": "\"SELECT * FROM custody_component_evidence_commitments WHERE component_id<>? AND profile_id=? ORDER BY ordinal,id\"",
+    "find": "\"SELECT e.* FROM custody_component_evidence_commitments e JOIN custody_components c ON c.id=e.component_id WHERE c.profile_id=? AND c.state='active' AND e.profile_id=? ORDER BY e.ordinal,e.id\"",
+    "replace": "\"SELECT e.* FROM custody_component_evidence_commitments e JOIN custody_components c ON c.id=e.component_id WHERE c.profile_id<>? AND c.state='active' AND e.profile_id=? ORDER BY e.ordinal,e.id\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2752,8 +2752,8 @@
   {
     "id": "JL-sql-direct-scope-08",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id=?\"",
-    "replace": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id<>?\"",
+    "find": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id IN ({placeholders})\"",
+    "replace": "\"SELECT t.*,w.kind AS wallet_kind,w.config_json,observation.authority_version AS observation_authority_version,observation.graph_hash AS observation_graph_hash,observation.quantity_hash AS observation_quantity_hash,observation.fee_attribution AS observation_fee_attribution,observation.application_revision AS observation_application_revision FROM transactions t JOIN wallets w ON w.id=t.wallet_id LEFT JOIN chain_observation_provenance observation ON observation.transaction_id=t.id WHERE t.id NOT IN ({placeholders})\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2762,8 +2762,8 @@
   {
     "id": "JL-sql-direct-scope-09",
     "file": "crates/journals/src/loader/direct.rs",
-    "find": "\"SELECT id,kind,config_json FROM wallets WHERE id=?\"",
-    "replace": "\"SELECT id,kind,config_json FROM wallets WHERE id<>?\"",
+    "find": "\"SELECT id,kind,config_json FROM wallets WHERE id IN ({placeholders})\"",
+    "replace": "\"SELECT id,kind,config_json FROM wallets WHERE id NOT IN ({placeholders})\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2942,8 +2942,8 @@
   {
     "id": "JL-sql-ownership-scope-04",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id=? AND status='retired' ORDER BY created_at ASC,id ASC\"",
-    "replace": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id<>? AND status='retired' ORDER BY created_at ASC,id ASC\"",
+    "find": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE profile_id=? AND wallet_id=? AND status='retired' ORDER BY created_at ASC,id ASC\"",
+    "replace": "\"SELECT private_material_json FROM wallet_policy_epochs WHERE profile_id=? AND wallet_id<>? AND status='retired' ORDER BY created_at ASC,id ASC\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],
@@ -2952,8 +2952,8 @@
   {
     "id": "JL-sql-ownership-scope-05",
     "file": "crates/journals/src/loader/ownership.rs",
-    "find": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id=? AND external_id IS NOT NULL AND raw_json IS NOT NULL\"",
-    "replace": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id<>? AND external_id IS NOT NULL AND raw_json IS NOT NULL\"",
+    "find": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id=? AND external_id IS NOT NULL AND raw_json IS NOT NULL AND substr(ltrim(raw_json, ' ' || char(9) || char(10) || char(13)), 1, 1)='['\"",
+    "replace": "\"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id<>? AND external_id IS NOT NULL AND raw_json IS NOT NULL AND substr(ltrim(raw_json, ' ' || char(9) || char(10) || char(13)), 1, 1)='['\"",
     "expect_failing": [
       "native_loader_matches_python_database_bytes"
     ],

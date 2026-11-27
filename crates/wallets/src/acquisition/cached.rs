@@ -86,9 +86,15 @@ fn esplora_block_hash(
     height: u64,
     consent: &Consent,
     deadline: Instant,
+    cancel: &dyn Control,
 ) -> Option<String> {
     let text = client
-        .get_text(&format!("block-height/{height}"), Some(consent), deadline)
+        .get_text_checked(
+            &format!("block-height/{height}"),
+            Some(consent),
+            deadline,
+            &|| cancel.check(deadline),
+        )
         .ok()?;
     let text = kassiber_pytext::strip(&text).to_ascii_lowercase();
     (text.len() == 64 && text.bytes().all(|b| b.is_ascii_hexdigit())).then_some(text)
@@ -156,6 +162,7 @@ fn finish_members(
     )
 }
 impl Acquisition {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn cached_esplora(
         &self,
         gate: &Gate,
@@ -163,11 +170,16 @@ impl Acquisition {
         deadline: Instant,
         cancel: &dyn Control,
         c: &CacheInput,
+        pool: Option<Arc<kassiber_net::HttpPool>>,
         history_ready: &mut dyn FnMut(&Value) -> Result<()>,
     ) -> Result<Value> {
-        let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
+        let mut client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
+        if let Some(pool) = pool {
+            client = client.with_pool(pool);
+        }
         cancel.check(deadline)?;
-        let mut tip_hash = client.esplora_tip_hash(Some(consent), deadline);
+        let mut tip_hash =
+            client.esplora_tip_hash_checked(Some(consent), deadline, &|| cancel.check(deadline));
         let mut same_tip = tip_hash
             .as_ref()
             .is_some_and(|tip| c.checkpoint["esplora_tip_hash"] == *tip);
@@ -179,17 +191,20 @@ impl Acquisition {
         if tip_hash.is_some() && tip_height.is_none() {
             cancel.check(deadline)?;
             let observed = client
-                .get_text("blocks/tip/height", Some(consent), deadline)
+                .get_text_checked("blocks/tip/height", Some(consent), deadline, &|| {
+                    cancel.check(deadline)
+                })
                 .ok()
                 .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
                 .and_then(|n| anchor_height(&integer_json(n)));
             if let Some(observed) = observed {
                 cancel.check(deadline)?;
-                if esplora_block_hash(&client, observed, consent, deadline) == tip_hash {
+                if esplora_block_hash(&client, observed, consent, deadline, cancel) == tip_hash {
                     tip_height = Some(observed);
                     if let Some(previous) = previous_height.filter(|p| observed > *p) {
                         cancel.check(deadline)?;
-                        let previous = esplora_block_hash(&client, previous, consent, deadline);
+                        let previous =
+                            esplora_block_hash(&client, previous, consent, deadline, cancel);
                         same_tip =
                             previous.is_some_and(|hash| c.checkpoint["esplora_tip_hash"] == *hash);
                     }
@@ -197,9 +212,14 @@ impl Acquisition {
             }
         }
         // Older checkpoints can hold confirmations above their recorded anchor.
-        let same_tip = same_tip && anchor_version(&c.checkpoint, 2.0);
+        let current_hashes = cache::esplora_hashes_current(&c.checkpoint);
+        let same_tip = same_tip && current_hashes && anchor_version(&c.checkpoint, 2.0);
         let key = cache::esplora_key(&c.config, &identity(self, c));
-        let prior = cache::memberships(&c.checkpoint["esplora_history_memberships"], &key);
+        let prior = if current_hashes {
+            cache::memberships(&c.checkpoint["esplora_history_memberships"], &key)
+        } else {
+            BTreeMap::new()
+        };
         let mut cp = checkpoint(&c.checkpoint);
         let mut scripts = vec![];
         let mut transactions = Map::new();
@@ -217,15 +237,37 @@ impl Acquisition {
             }
             Ok(())
         };
-        let mut observations = vec![];
-        for (index, target) in self.targets.iter().enumerate() {
+        let hashes: Vec<String> = self
+            .targets
+            .iter()
+            .map(|target| esplora_query_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?))
+            .collect::<Result<_>>()?;
+        let mut observations = Vec::with_capacity(total);
+        for (chunk_idx, chunk) in self
+            .targets
+            .iter()
+            .zip(&hashes)
+            .collect::<Vec<_>>()
+            .chunks(workers)
+            .enumerate()
+        {
             cancel.check(deadline)?;
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
-            let before = client.get_json(&format!("scripthash/{hash}"), Some(consent), deadline)?;
-            observations.push((target, hash, before));
+            let batch_results =
+                crate::scan::fetch_group(chunk, cancel, |&(target, hash), control| {
+                    let before = client.get_json_checked(
+                        &format!("scripthash/{hash}"),
+                        Some(consent),
+                        deadline,
+                        &|| control.check(deadline),
+                    )?;
+                    Ok((target, hash.clone(), before))
+                })?;
+            observations.extend(batch_results);
+            let index = ((chunk_idx + 1) * workers).min(total) - 1;
             fetched(index + 1, total)?;
         }
         let mut changed = 0;
+        let mut changed_items: Vec<(usize, String)> = Vec::new();
         for (index, (target, hash, before)) in observations.into_iter().enumerate() {
             cancel.check(deadline)?;
             let fingerprint = cache::stats_fingerprint(&before);
@@ -243,6 +285,7 @@ impl Acquisition {
             if reused {
                 members.insert(hash.clone(), prior[&hash].clone());
             } else {
+                changed_items.push((index, hash.clone()));
                 changed += 1;
             }
             scripts.push(json!({"target":target,"before":before,"reused":reused}));
@@ -253,17 +296,19 @@ impl Acquisition {
                 )?;
             }
         }
-        let mut histories = vec![];
-        for script in scripts.iter().filter(|s| s["reused"] != true) {
+        let mut histories = Vec::with_capacity(changed_items.len());
+        for chunk in changed_items.chunks(workers) {
             cancel.check(deadline)?;
-            let target = &script["target"];
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
-            let path = format!("scripthash/{hash}");
-            let history =
-                esplora_history(&client, &path, self.max_pages, consent, deadline, cancel)?;
-            cancel.check(deadline)?;
-            let after = client.get_json(&path, Some(consent), deadline)?;
-            histories.push((hash, history, after));
+            let batch_results = crate::scan::fetch_group(chunk, cancel, |(_, hash), control| {
+                let path = format!("scripthash/{hash}");
+                let history =
+                    esplora_history(&client, &path, self.max_pages, consent, deadline, control)?;
+                let after = client.get_json_checked(&path, Some(consent), deadline, &|| {
+                    control.check(deadline)
+                })?;
+                Ok((hash.clone(), history, after))
+            })?;
+            histories.extend(batch_results);
             fetched(histories.len(), changed)?;
         }
         for (index, (script, (hash, history, after))) in scripts
@@ -318,7 +363,7 @@ impl Acquisition {
                 let mut observed = BTreeMap::new();
                 for h in heights {
                     cancel.check(deadline)?;
-                    observed.insert(h, esplora_block_hash(&client, h, consent, deadline));
+                    observed.insert(h, esplora_block_hash(&client, h, consent, deadline, cancel));
                 }
                 let on_chain = raced.iter().all(|status| {
                     let h = anchor_height(&status["block_height"]).expect("raced height");
@@ -327,7 +372,7 @@ impl Acquisition {
                         .is_some_and(|hash| status["block_hash"] == *hash)
                 });
                 cancel.check(deadline)?;
-                let initial = esplora_block_hash(&client, height, consent, deadline);
+                let initial = esplora_block_hash(&client, height, consent, deadline, cancel);
                 if on_chain && initial.is_some() && initial == tip_hash {
                     let (highest, hash) = observed.pop_last().expect("raced heights");
                     tip_height = Some(highest);
@@ -342,15 +387,31 @@ impl Acquisition {
         // input's previous transaction from `tx/<txid>/hex`.
         let liquid = self.chain == "liquid";
         let mut raw_transactions = Map::new();
-        let hex = |id: &str, into: &mut Map<String, Value>| -> Result<()> {
-            if into.contains_key(id) {
-                return Ok(());
+        let fetch_hex_batch = |ids: &[String], into: &mut Map<String, Value>| -> Result<()> {
+            let mut missing = Vec::new();
+            let mut seen = BTreeSet::new();
+            for id in ids {
+                if !into.contains_key(id.as_str()) && seen.insert(id.as_str()) {
+                    missing.push(id.clone());
+                }
             }
-            cancel.check(deadline)?;
-            let text = client.get_text(&format!("tx/{id}/hex"), Some(consent), deadline)?;
-            let text = kassiber_pytext::strip(&text).to_owned();
-            liquid_transaction(&text, id)?;
-            into.insert(id.to_owned(), json!({"raw_hex": text}));
+            for chunk in missing.chunks(workers) {
+                cancel.check(deadline)?;
+                let fetched = crate::scan::fetch_group(chunk, cancel, |id, control| {
+                    let text = client.get_text_checked(
+                        &format!("tx/{id}/hex"),
+                        Some(consent),
+                        deadline,
+                        &|| control.check(deadline),
+                    )?;
+                    let text = kassiber_pytext::strip(&text).to_owned();
+                    liquid_transaction(&text, id)?;
+                    Ok((id.clone(), text))
+                })?;
+                for (id, text) in fetched {
+                    into.insert(id, json!({"raw_hex": text}));
+                }
+            }
             Ok(())
         };
         if liquid {
@@ -359,14 +420,13 @@ impl Acquisition {
                 .map(|(id, tx)| (tx["status"]["block_time"].as_i64().unwrap_or(0), id))
                 .collect();
             ordered.sort();
+            let history_ids: Vec<String> = ordered.iter().map(|(_, id)| (*id).clone()).collect();
+            fetch_hex_batch(&history_ids, &mut raw_transactions)?;
+            let mut parent_ids = Vec::new();
             for (_, id) in &ordered {
-                hex(id, &mut raw_transactions)?;
+                parent_ids.extend(liquid_parents(&raw_transactions[id.as_str()])?);
             }
-            for (_, id) in &ordered {
-                for parent in liquid_parents(&raw_transactions[id.as_str()])? {
-                    hex(&parent, &mut raw_transactions)?;
-                }
-            }
+            fetch_hex_batch(&parent_ids, &mut raw_transactions)?;
         }
         cancel.check(deadline)?;
         history_ready(&json!({"transactions":transactions}))?;
@@ -379,34 +439,47 @@ impl Acquisition {
         if !skipped {
             cancel.check(deadline)?;
             depth_height = client
-                .get_text("blocks/tip/height", Some(consent), deadline)
+                .get_text_checked("blocks/tip/height", Some(consent), deadline, &|| {
+                    cancel.check(deadline)
+                })
                 .ok()
                 .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
                 .and_then(|n| i64::try_from(n).ok());
             let mut utxos_seen = 0;
-            for (index, script) in scripts.iter_mut().enumerate() {
+            for (chunk_idx, (script_chunk, hash_chunk)) in scripts
+                .chunks_mut(workers)
+                .zip(hashes.chunks(workers))
+                .enumerate()
+            {
                 cancel.check(deadline)?;
-                let h = script_hash(
-                    script["target"]["script_pubkey"]
-                        .as_str()
-                        .ok_or_else(invalid)?,
-                )?;
-                script["utxos"] =
-                    client.get_json(&format!("scripthash/{h}/utxo"), Some(consent), deadline)?;
-                utxos_seen += script["utxos"].as_array().map_or(0, Vec::len);
-                if liquid {
-                    // Each Liquid output decodes its transaction.
-                    for utxo in script["utxos"].as_array().into_iter().flatten() {
-                        hex(
-                            utxo["txid"].as_str().ok_or_else(invalid)?,
-                            &mut raw_transactions,
-                        )?;
+                let utxo_batch = crate::scan::fetch_group(hash_chunk, cancel, |hash, control| {
+                    client.get_json_checked(
+                        &format!("scripthash/{hash}/utxo"),
+                        Some(consent),
+                        deadline,
+                        &|| control.check(deadline),
+                    )
+                })?;
+                let mut liquid_utxo_ids = Vec::new();
+                for (script, utxos) in script_chunk.iter_mut().zip(utxo_batch) {
+                    script["utxos"] = utxos;
+                    utxos_seen += script["utxos"].as_array().map_or(0, Vec::len);
+                    if liquid {
+                        // Each Liquid output decodes its transaction.
+                        for utxo in script["utxos"].as_array().into_iter().flatten() {
+                            liquid_utxo_ids
+                                .push(utxo["txid"].as_str().ok_or_else(invalid)?.to_owned());
+                        }
                     }
                 }
-                if (index + 1).is_multiple_of(workers) || index + 1 == total {
+                if !liquid_utxo_ids.is_empty() {
+                    fetch_hex_batch(&liquid_utxo_ids, &mut raw_transactions)?;
+                }
+                let processed = ((chunk_idx + 1) * workers).min(total);
+                if processed.is_multiple_of(workers) || processed == total {
                     report(
-                        json!({"phase":"backend_fetch","targets_checked":index+1,"target_count":total,
-                        "utxos_seen":utxos_seen,"processed":index+1,"total":total}),
+                        json!({"phase":"backend_fetch","targets_checked":processed,"target_count":total,
+                        "utxos_seen":utxos_seen,"processed":processed,"total":total}),
                     )?;
                 }
             }
@@ -416,6 +489,9 @@ impl Acquisition {
         cp["compatibility_history_anchor_version"] = json!(2);
         cp["esplora_tip_height"] = json!(tip_height);
         cp["esplora_scripthashes"] = Value::Object(stats);
+        if !kassiber_net::uses_legacy_tape() {
+            cp["esplora_scripthash_order"] = json!(cache::ESPLORA_HASH_ORDER);
+        }
         let (membership, retracted, complete) = finish_members(&prior, members, &key);
         cp["esplora_history_memberships"] = membership;
         cancel.check(deadline)?;
@@ -431,8 +507,13 @@ impl Acquisition {
         cancel: &dyn Control,
         c: &CacheInput,
     ) -> Result<Value> {
-        let mut client =
-            ElectrumClient::connect(self.backend.clone(), gate, Some(consent.clone()), deadline)?;
+        let mut client = ElectrumClient::connect_checked(
+            self.backend.clone(),
+            gate,
+            Some(consent.clone()),
+            deadline,
+            &|| cancel.check(deadline),
+        )?;
         cancel.check(deadline)?;
         let (mut tip_fingerprint, tip_anchor) = client.tip_anchor(deadline);
         let mut tip_height = tip_anchor.map(u64::from);
@@ -513,6 +594,11 @@ impl Acquisition {
             deadline,
             cancel,
         )?;
+        let mut hash_indices: std::collections::HashMap<&str, Vec<usize>> =
+            std::collections::HashMap::with_capacity(hashes.len());
+        for (index, hash) in hashes.iter().enumerate() {
+            hash_indices.entry(hash.as_str()).or_default().push(index);
+        }
         let mut txids = BTreeMap::new();
         let mut dirty = BTreeSet::new();
         for (position, (h, history)) in changed_hashes.iter().zip(fetched).enumerate() {
@@ -539,8 +625,8 @@ impl Acquisition {
                     entry,
                 );
             }
-            for (index, hash) in hashes.iter().enumerate() {
-                if hash == h {
+            if let Some(indices) = hash_indices.get(h.as_str()) {
+                for &index in indices {
                     scripts[index]["history"] = history.clone();
                 }
             }
@@ -619,12 +705,41 @@ impl Acquisition {
         let mut hits = 0;
         // The exact header that supplied each timestamp fetched in this run.
         let mut fingerprints: BTreeMap<u64, Option<String>> = BTreeMap::new();
+        let mut missing_heights = Vec::new();
         for h in heights {
             let k = h.to_string();
             if headers.contains_key(&k) {
                 hits += 1;
             } else {
-                let raw = client.call("blockchain.block.header", Some(&json!([h])), deadline)?;
+                missing_heights.push((h, k));
+            }
+        }
+        let replaying = kassiber_net::uses_legacy_tape();
+        if !missing_heights.is_empty() {
+            let raw_headers = if replaying || missing_heights.len() == 1 {
+                let mut out = Vec::with_capacity(missing_heights.len());
+                for &(h, _) in &missing_heights {
+                    cancel.check(deadline)?;
+                    out.push(client.call(
+                        "blockchain.block.header",
+                        Some(&json!([h])),
+                        deadline,
+                    )?);
+                }
+                out
+            } else {
+                calls(
+                    &mut client,
+                    "blockchain.block.header",
+                    &missing_heights
+                        .iter()
+                        .map(|(h, _)| json!([h]))
+                        .collect::<Vec<_>>(),
+                    deadline,
+                    cancel,
+                )?
+            };
+            for ((h, k), raw) in missing_heights.into_iter().zip(raw_headers) {
                 headers.insert(
                     k,
                     json!(header_timestamp(raw.as_str().ok_or_else(invalid)?)?),
@@ -671,11 +786,12 @@ impl Acquisition {
         if !skipped {
             drop(client);
             cancel.check(deadline)?;
-            let mut client = ElectrumClient::connect(
+            let mut client = ElectrumClient::connect_checked(
                 self.backend.clone(),
                 gate,
                 Some(consent.clone()),
                 deadline,
+                &|| cancel.check(deadline),
             )?;
             depth_height = client
                 .call("blockchain.headers.subscribe", Some(&json!([])), deadline)
@@ -710,6 +826,8 @@ impl Acquisition {
             }
             // `compatibility_electrum_utxos_for_wallet` decodes each Liquid
             // output's transaction, fetched once over this connection.
+            let mut seen = BTreeSet::new();
+            let mut missing_liquid = Vec::new();
             for txid in utxos
                 .iter()
                 .flat_map(|unspent| unspent.as_array().into_iter().flatten())
@@ -717,11 +835,20 @@ impl Acquisition {
                 .map(|utxo| utxo["tx_hash"].as_str().ok_or_else(invalid))
                 .collect::<Result<Vec<_>>>()?
             {
-                if !utxo_transactions.contains_key(txid) {
-                    cancel.check(deadline)?;
+                if !utxo_transactions.contains_key(txid) && seen.insert(txid) {
+                    missing_liquid.push(txid.to_owned());
+                }
+            }
+            if !missing_liquid.is_empty() {
+                cancel.check(deadline)?;
+                if replaying {
+                    for id in missing_liquid {
+                        fetch_liquid(&mut client, &[id], &mut utxo_transactions, deadline, cancel)?;
+                    }
+                } else {
                     fetch_liquid(
                         &mut client,
-                        &[txid.to_owned()],
+                        &missing_liquid,
                         &mut utxo_transactions,
                         deadline,
                         cancel,
@@ -905,7 +1032,7 @@ mod tests {
         )
         .unwrap();
         let first = run(&a).unwrap();
-        let hash = script_hash("51").unwrap();
+        let hash = esplora_query_hash("51").unwrap();
         let checkpoint = &first["freshness_checkpoint"];
         assert_eq!(
             checkpoint["esplora_history_memberships"]["scripts"][&hash]["complete"],

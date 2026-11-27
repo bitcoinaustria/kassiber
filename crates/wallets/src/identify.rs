@@ -622,9 +622,9 @@ fn build_index(
         let mut configs = vec![(config, false)];
         for row in rows(
             conn,
-            "SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id = ? AND status = 'retired' \
+            "SELECT private_material_json FROM wallet_policy_epochs WHERE profile_id = ? AND wallet_id = ? AND status = 'retired' \
              ORDER BY created_at ASC, id ASC",
-            &[&wallet.id],
+            &[profile_id, wallet.id.as_str()],
         )? {
             let historic = match &row[0] {
                 Value::Str(text) => text.as_str().and_then(|t| kassiber_pytext::loads(t).ok()),
@@ -756,7 +756,8 @@ fn seed_transaction_outpoints(
     for row in rows(
         conn,
         "SELECT external_id, wallet_id, raw_json FROM transactions \
-         WHERE profile_id = ? AND external_id IS NOT NULL AND raw_json IS NOT NULL",
+         WHERE profile_id = ? AND external_id IS NOT NULL AND raw_json IS NOT NULL \
+         AND substr(ltrim(raw_json, ' ' || char(9) || char(10) || char(13)), 1, 1) = '['",
         &[profile_id],
     )? {
         let txid = kassiber_pytext::strip(&or_text(&row[0])).to_lowercase();

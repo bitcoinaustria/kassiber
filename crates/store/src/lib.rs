@@ -1065,7 +1065,7 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
         .retryable(true)
         .details(json!({"required_journal_mode":journal,"actual_journal_mode":actual})));
     }
-    conn.execute_batch(&format!("PRAGMA synchronous = {synchronous}; PRAGMA temp_store = MEMORY; PRAGMA cache_size = -16000; PRAGMA foreign_keys = ON;")).map_err(map_sqlite_error)?;
+    conn.execute_batch(&format!("PRAGMA synchronous = {synchronous}; PRAGMA temp_store = MEMORY; PRAGMA cache_size = -65536; PRAGMA foreign_keys = ON;")).map_err(map_sqlite_error)?;
     conn.execute_batch(if encrypted {
         "PRAGMA mmap_size = 0;"
     } else {

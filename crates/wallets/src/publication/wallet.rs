@@ -556,22 +556,23 @@ pub(crate) fn refresh_confirmations(
     source: &OutputSource<'_>,
     height: i64,
 ) -> Result<()> {
-    conn.execute(
+    conn.prepare_cached(
         "UPDATE wallet_utxos SET confirmations = ?1 - block_height + 1
          WHERE profile_id = ?2 AND wallet_id = ?3
            AND backend_name = ?4 AND backend_kind = ?5 AND chain = ?6 AND network = ?7
            AND spent_at IS NULL AND confirmation_status = 'confirmed'
            AND block_height > 0 AND block_height <= ?1",
-        kassiber_store::rusqlite::params![
-            height,
-            source.profile_id,
-            source.wallet_id,
-            source.backend_name,
-            source.backend_kind,
-            source.chain,
-            source.network,
-        ],
     )
+    .map_err(database_error)?
+    .execute(kassiber_store::rusqlite::params![
+        height,
+        source.profile_id,
+        source.wallet_id,
+        source.backend_name,
+        source.backend_kind,
+        source.chain,
+        source.network,
+    ])
     .map_err(database_error)?;
     Ok(())
 }
@@ -588,7 +589,9 @@ pub(crate) fn negative_balance_events(
 ) -> Result<Vec<Value>> {
     let found = rows(
         conn,
-        "SELECT id, external_id, occurred_at, confirmed_at, raw_json, direction, asset, amount, fee, created_at
+        "SELECT id, external_id, occurred_at, confirmed_at,
+                CASE WHEN confirmed_at IS NULL OR confirmed_at = '' THEN raw_json END AS raw_json,
+                direction, asset, amount, fee, created_at
          FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0",
         [profile_id, wallet_id],
     )?;
@@ -609,7 +612,9 @@ pub(crate) fn prospective_negative_events(
 ) -> Result<Vec<Value>> {
     let mut stored = rows(
         conn,
-        "SELECT id, external_id, occurred_at, confirmed_at, raw_json, direction, asset, amount, fee, created_at
+        "SELECT id, external_id, occurred_at, confirmed_at,
+                CASE WHEN confirmed_at IS NULL OR confirmed_at = '' THEN raw_json END AS raw_json,
+                direction, asset, amount, fee, created_at
          FROM transactions WHERE profile_id = ? AND wallet_id = ? AND excluded = 0",
         [profile_id, wallet_id],
     )?;
@@ -620,7 +625,7 @@ pub(crate) fn prospective_negative_events(
             String::new()
         }
     };
-    let mut retracted = Vec::new();
+    let mut retracted = std::collections::HashSet::new();
     let meta = &fetch["adapter_meta"];
     for list in [
         &meta["bitcoinrpc_retracted_txids"],
@@ -635,7 +640,7 @@ pub(crate) fn prospective_negative_events(
         for value in list.as_array().into_iter().flatten() {
             let value = key(&py(value)?);
             if !value.is_empty() {
-                retracted.push(value);
+                retracted.insert(value);
             }
         }
     }

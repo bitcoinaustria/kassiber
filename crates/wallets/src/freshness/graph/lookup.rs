@@ -35,6 +35,9 @@ pub(super) struct Lookup<'a> {
     pub remaining: usize,
     pub requested: usize,
     pub refused: bool,
+    pub electrum: Option<ElectrumClient>,
+    pub http: Option<HttpClient>,
+    pub core: Option<CoreClient>,
 }
 
 fn invalid() -> AppError {
@@ -124,19 +127,22 @@ impl Lookup<'_> {
         let deadline = Instant::now() + Duration::from_secs(10);
         let raw = match self.route {
             Route::Electrum => {
-                let mut client = ElectrumClient::connect(
-                    self.backend.clone(),
-                    self.gate,
-                    Some(self.consent.clone()),
-                    deadline,
-                )?;
+                let mut client = match self.electrum.take() {
+                    Some(client) => client,
+                    None => ElectrumClient::connect(
+                        self.backend.clone(),
+                        self.gate,
+                        Some(self.consent.clone()),
+                        deadline,
+                    )?,
+                };
                 (self.check)()?;
                 let raw =
                     client.call("blockchain.transaction.get", Some(&json!([id])), deadline)?;
                 (self.check)()?;
                 let mut raw = decode(&raw, id)?;
                 let check = self.check;
-                self.attach(&mut raw, now, deadline, &mut |missing| {
+                let attached = self.attach(&mut raw, now, deadline, &mut |missing| {
                     let mut fetched = Vec::new();
                     for ids in missing.chunks(client.batch_size()) {
                         check()?;
@@ -151,11 +157,17 @@ impl Lookup<'_> {
                         }
                     }
                     Ok(fetched)
-                })?;
+                });
+                if attached.is_ok() && !kassiber_net::is_taped() {
+                    self.electrum = Some(client);
+                }
+                attached?;
                 raw
             }
             Route::Esplora => {
-                let client = HttpClient::new(self.backend.clone(), self.gate.clone(), self.version);
+                let client = self.http.get_or_insert_with(|| {
+                    HttpClient::new(self.backend.clone(), self.gate.clone(), self.version)
+                });
                 client.get_json_checked(
                     &format!("tx/{id}"),
                     Some(&self.consent),
@@ -164,7 +176,9 @@ impl Lookup<'_> {
                 )?
             }
             Route::Core => {
-                let client = CoreClient::new(self.backend.clone(), self.gate.clone(), self.version);
+                let client = self.core.take().unwrap_or_else(|| {
+                    CoreClient::new(self.backend.clone(), self.gate.clone(), self.version)
+                });
                 let consent = self.consent.clone();
                 let call = |txid: &str| {
                     client.call(
@@ -175,7 +189,14 @@ impl Lookup<'_> {
                         deadline,
                     )
                 };
-                let decoded = call(id)?;
+                let decoded = match call(id) {
+                    Ok(decoded) => decoded,
+                    Err(err) => {
+                        self.core = Some(client);
+                        return Err(err);
+                    }
+                };
+                self.core = Some(client);
                 (self.check)()?;
                 if !decoded.is_object() {
                     return Err(AppError::new(
@@ -184,32 +205,43 @@ impl Lookup<'_> {
                     ));
                 }
                 let mut raw = core_graph(&decoded);
+                let client = self.core.take().expect("core client");
                 let check = self.check;
+                let call = |txid: &str| {
+                    client.call(
+                        "getrawtransaction",
+                        Some(&json!([txid, true])),
+                        None,
+                        Some(&consent),
+                        deadline,
+                    )
+                };
                 // A pruned or missing parent (`-5`) does not make the others
                 // useless; any other failure stops asking the backend.
-                self.attach(&mut raw, now, deadline, &mut |missing| {
-                    let mut fetched = Vec::new();
-                    for id in missing {
-                        check()?;
-                        if Instant::now() >= deadline {
-                            break;
-                        }
-                        match call(id) {
-                            Ok(previous) if previous.is_object() => {
-                                fetched.push((id.clone(), core_graph(&previous)))
+                let attached =
+                    self.attach(&mut raw, now, deadline, &mut |missing| {
+                        let mut fetched = Vec::new();
+                        for id in missing {
+                            check()?;
+                            if Instant::now() >= deadline {
+                                break;
                             }
-                            Ok(_) => {}
-                            Err(error)
-                                if error
-                                    .details
-                                    .as_ref()
-                                    .and_then(|d| kassiber_envelope::get(d, "rpc_error_code"))
-                                    == Some(&kassiber_pyjson::Value::Int((-5).into())) => {}
-                            Err(_) => break,
+                            match call(id) {
+                                Ok(previous) if previous.is_object() => {
+                                    fetched.push((id.clone(), core_graph(&previous)))
+                                }
+                                Ok(_) => {}
+                                Err(error)
+                                    if error.details.as_ref().and_then(|d| {
+                                        kassiber_envelope::get(d, "rpc_error_code")
+                                    }) == Some(&kassiber_pyjson::Value::Int((-5).into())) => {}
+                                Err(_) => break,
+                            }
                         }
-                    }
-                    Ok(fetched)
-                })?;
+                        Ok(fetched)
+                    });
+                self.core = Some(client);
+                attached?;
                 raw
             }
         };

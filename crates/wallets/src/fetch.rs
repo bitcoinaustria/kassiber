@@ -41,8 +41,8 @@ impl Control for ProgressControl<'_> {
     fn check(&self, deadline: Instant) -> Result<()> {
         self.control.check(deadline)
     }
-    fn cancellation(&self) -> &Cancellation {
-        self.control.cancellation()
+    fn parallel(&self) -> Option<&(dyn Control + Sync)> {
+        self.control.parallel()
     }
     fn progress(&self, event: Value) -> Result<()> {
         (self.progress.borrow_mut())(event)
@@ -563,7 +563,7 @@ impl Fetch {
         // `_apply_source_overlap_preflight` with the operation's index.
         let dropped = match preflight {
             Preflight::Index => overlap.dropped(&targets, &plan.chain, &plan.network, true),
-            Preflight::Skipped | Preflight::Prepared(_) => Default::default(),
+            Preflight::Skipped => Default::default(),
         };
         let kept = source_overlap::keep(&targets, &dropped);
         if preflight == Preflight::Skipped || (kept.is_empty() && !targets.is_empty()) {
@@ -637,12 +637,6 @@ impl Fetch {
         // which re-filters after online discovery.
         if !dropped.is_empty() && reason.is_empty() {
             reason = "source_overlap_partial_descriptor";
-        }
-        // Revalidation keeps the route the ownership index chose.
-        if let Preflight::Prepared(prepared) = preflight {
-            if reason.is_empty() {
-                reason = prepared;
-            }
         }
         let liquid_observers = if liquid && reason.is_empty() {
             Some(liquid_observers(
@@ -855,35 +849,93 @@ impl Fetch {
     }
 
     pub(crate) fn revalidate(&self, conn: &Connection) -> Result<()> {
-        let current = Self::prepare(
+        if !conn.is_autocommit() {
+            return Err(AppError::new(
+                "observer_prepare_in_transaction",
+                "Observer network preparation must finish before the wallet transaction begins",
+            ));
+        }
+        let wallet = first(
             conn,
-            &self.scope.profile_id,
-            &self.scope.wallet_id,
-            &self.given,
-            self.force_full,
-            &self.version,
-            if self.skip.is_some() {
-                Preflight::Skipped
-            } else {
-                Preflight::Prepared(self.reason)
-            },
-            Overrides {
-                gap: self.gap,
-                history: Some(self.history.clone()),
-                ..Overrides::default()
-            },
-        )?;
-        let same = current.scope == self.scope
-            && current.checkpoint == self.checkpoint
-            && current.skip == self.skip
-            && current.observers.len() == self.observers.len()
-            && current.observers.iter().zip(&self.observers).all(|(a, b)| {
-                a.identity == b.identity
-                    && a.epoch == b.epoch
-                    && a.prior == b.prior
-                    && a.current == b.current
-                    && a.values == b.values
-            });
+            "SELECT * FROM wallets WHERE id=? AND profile_id=?",
+            [&self.scope.wallet_id, &self.scope.profile_id],
+        )?
+        .ok_or_else(|| {
+            AppError::new(
+                "not_found",
+                "Sync wallet does not belong to the selected book",
+            )
+        })?;
+        require_supported(&wallet)?;
+        let captured_config = or_text(field(&wallet, "config_json"));
+        let kind = or_text(field(&wallet, "kind"));
+        let (routed, _) = network_scope(conn, &self.scope.profile_id, &kind, &captured_config)?;
+        let (_, environment) = network_scope(conn, &self.scope.profile_id, &kind, &routed)?;
+        let environment = encode(&environment)?;
+        let scope = Scope {
+            database_instance: conn.path().unwrap_or("").into(),
+            profile_id: self.scope.profile_id.clone(),
+            wallet_id: self.scope.wallet_id.clone(),
+            environment_id: environment.to_string(),
+            source_revision: captured_config,
+        };
+        let stored: Option<String> = conn
+            .query_row(
+                "SELECT checkpoint_json FROM freshness_source_states WHERE profile_id=? AND source_type='onchain_wallet' AND source_key=?",
+                [
+                    self.scope.profile_id.as_str(),
+                    &format!("onchain_wallet:{}", self.scope.wallet_id),
+                ],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(crate::database_error)?;
+        let mut checkpoint = stored
+            .and_then(|v| serde_json::from_str::<Value>(&v).ok())
+            .filter(Value::is_object)
+            .unwrap_or_else(|| json!({}));
+        if self.force_full {
+            checkpoint = crate::acquisition::full_scan_checkpoint(&checkpoint);
+        }
+        let mut same = scope == self.scope && checkpoint == self.checkpoint;
+        if same && !self.observers.is_empty() {
+            let workspace_id = encode(field(&wallet, "workspace_id"))?;
+            for obs in &self.observers {
+                if obs.identity["workspace_id"] != workspace_id {
+                    same = false;
+                    break;
+                }
+                let obs_id = text(&obs.identity["id"]);
+                let loaded =
+                    observer_state::load_state(conn, &identity(&obs.identity), self.force_full)?;
+                if loaded.expected_epoch != obs.epoch || loaded.prior != obs.prior {
+                    same = false;
+                    break;
+                }
+                if let Some(expected_current) = &obs.current {
+                    let current = observer_state::current_observed_txids(
+                        conn,
+                        &self.scope.wallet_id,
+                        obs_id,
+                    )?;
+                    if current != *expected_current {
+                        same = false;
+                        break;
+                    }
+                }
+                if let Some(expected_values) = &obs.values {
+                    let values = if self.force_full {
+                        BTreeMap::new()
+                    } else {
+                        observer_state::load_values(conn, obs_id)?
+                    };
+                    if values != *expected_values {
+                        same = false;
+                        break;
+                    }
+                }
+            }
+        }
         if !same {
             return Err(AppError::new(
                 "stale_context",
@@ -1210,30 +1262,38 @@ impl Fetch {
         cancel: &dyn Control,
         records: &mut Vec<Value>,
     ) -> Result<Compatible> {
-        let targets = if let Some(discovery) =
-            self.compatibility.as_ref().filter(|_| self.plan.is_some())
-        {
-            let grant = DiscoveryConsent::for_fetch(discovery, proof.transport()?);
-            let discovered = discovery.run(gate, scope, Some(&grant), deadline, cancel, |_| {})?;
-            let online = discovered["targets"]
-                .as_array()
-                .ok_or_else(|| fallback("discovery_targets"))?;
-            // Deeper online targets must not introduce an overlap the
-            // finite preflight horizon could not see.
-            let dropped = self
-                .overlap
-                .dropped(online, &self.chain, &self.network, false);
-            let targets = source_overlap::keep(online, &dropped);
-            if targets.is_empty() && !online.is_empty() {
-                cancel.check(deadline)?;
-                return Ok(Compatible::Skipped(self.skipped(online.len())));
-            }
-            // Discovery's `history_cache` is always empty, so the stored
-            // graphs are the whole cache Python merges.
-            targets
-        } else {
-            self.targets.clone()
-        };
+        let http_pool = Arc::new(kassiber_net::HttpPool::new());
+        let targets =
+            if let Some(discovery) = self.compatibility.as_ref().filter(|_| self.plan.is_some()) {
+                let grant = DiscoveryConsent::for_fetch(discovery, proof.transport()?);
+                let discovered = discovery.run_with_pool(
+                    gate,
+                    scope,
+                    Some(&grant),
+                    deadline,
+                    cancel,
+                    Some(http_pool.clone()),
+                    |_| {},
+                )?;
+                let online = discovered["targets"]
+                    .as_array()
+                    .ok_or_else(|| fallback("discovery_targets"))?;
+                // Deeper online targets must not introduce an overlap the
+                // finite preflight horizon could not see.
+                let dropped = self
+                    .overlap
+                    .dropped(online, &self.chain, &self.network, false);
+                let targets = source_overlap::keep(online, &dropped);
+                if targets.is_empty() && !online.is_empty() {
+                    cancel.check(deadline)?;
+                    return Ok(Compatible::Skipped(self.skipped(online.len())));
+                }
+                // Discovery's `history_cache` is always empty, so the stored
+                // graphs are the whole cache Python merges.
+                targets
+            } else {
+                self.targets.clone()
+            };
         let action = Acquisition::new_cached(
             scope.clone(),
             &self.backend,
@@ -1250,7 +1310,7 @@ impl Fetch {
             .collect();
         let backend = text(&self.backend["name"]);
         let liquid = self.chain == "liquid";
-        let acquired = action.run_with_history(gate, scope, Some(&grant), deadline, cancel, |_| {}, &mut |history| {
+        let acquired = action.run_with_history_and_pool(gate, scope, Some(&grant), deadline, cancel, Some(http_pool), |_| {}, &mut |history| {
             // Liquid records decode the raw transactions after acquisition.
             if liquid {
                 return Ok(());
@@ -1560,7 +1620,7 @@ struct Overrides {
 #[derive(Clone, Copy, PartialEq)]
 enum Preflight {
     Index,
-    Prepared(&'static str),
+    #[allow(dead_code)]
     Skipped,
 }
 
@@ -1642,7 +1702,7 @@ impl Fetch {
             .collect::<Result<Vec<_>>>()?;
         let dropped = match preflight {
             Preflight::Index => overlap.dropped(&targets, &chain, &network, true),
-            Preflight::Skipped | Preflight::Prepared(_) => Default::default(),
+            Preflight::Skipped => Default::default(),
         };
         let kept = source_overlap::keep(&targets, &dropped);
         let skip = (preflight == Preflight::Skipped || (kept.is_empty() && !targets.is_empty()))

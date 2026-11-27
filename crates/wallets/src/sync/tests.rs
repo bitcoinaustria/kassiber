@@ -1216,3 +1216,372 @@ fn sync_service_sourceless_selections_answer_python_skipped_rows() {
         assert!(rows(kind, config).is_none(), "{kind} {config}");
     }
 }
+
+#[test]
+fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_preserves_order() {
+    use bitcoin::hex::FromHex;
+    use kassiber_net::test_support::{FakeService, Reply};
+    use sha2::{Digest, Sha256};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    // Six distinct valid mainnet P2WPKH addresses, one per wallet.
+    let plan = crate::descriptors::load(&json!({
+        "chain": "bitcoin",
+        "network": "main",
+        "descriptor": "wpkh(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0/*)",
+    }))
+    .map_err(|e| e.into_app())
+    .unwrap()
+    .unwrap();
+    let targets = plan
+        .derive(Some(0), 0, 6)
+        .map_err(|e| e.into_app())
+        .unwrap();
+    assert_eq!(targets.len(), 6);
+
+    let tip_hash = "0000000000000000000123456789abcdef0123456789abcdef0123456789abcd";
+    let block_hash = "0000000000000000000fedcba9876543210fedcba9876543210fedcba9876543";
+    let mut tx_by_hash = std::collections::HashMap::<String, serde_json::Value>::new();
+    for (idx, target) in targets.iter().enumerate() {
+        let script_pubkey = target["script_pubkey"].as_str().unwrap();
+        let address = target["address"].as_str().unwrap();
+        let sh: String = Sha256::digest(Vec::<u8>::from_hex(script_pubkey).unwrap())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        let txid = format!("{:064x}", idx + 1);
+        let amount = 100_000 + (idx as u64) * 10_000;
+        let tx = json!({
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "size": 191,
+            "weight": 764,
+            "fee": 1000,
+            "status": {
+                "confirmed": true,
+                "block_height": 100,
+                "block_hash": block_hash,
+                "block_time": 1_700_000_000 + idx as u64 * 60,
+            },
+            "vin": [{
+                "txid": format!("{:064x}", idx + 100),
+                "vout": 0,
+                "is_coinbase": false,
+                "scriptsig": "",
+                "sequence": 4294967294u64,
+                "prevout": {
+                    "scriptpubkey": "00143333333333333333333333333333333333333333",
+                    "value": amount + 1000,
+                },
+            }],
+            "vout": [{
+                "scriptpubkey": script_pubkey,
+                "scriptpubkey_address": address,
+                "value": amount,
+            }],
+        });
+        tx_by_hash.insert(sh, tx);
+    }
+
+    let in_flight = AtomicUsize::new(0);
+    let peak_in_flight = Arc::new(AtomicUsize::new(0));
+    let first_hash = tx_by_hash
+        .iter()
+        .find(|(_, tx)| tx["vout"][0]["scriptpubkey"] == targets[0]["script_pubkey"])
+        .unwrap()
+        .0;
+    let first_script = format!("/scripthash/{first_hash}");
+    let cancel_book = Arc::new(Mutex::new(None::<std::path::PathBuf>));
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let requests_after_cancel = Arc::new(AtomicUsize::new(0));
+
+    let peak = peak_in_flight.clone();
+    let cancel_path = cancel_book.clone();
+    let did_cancel = cancelled.clone();
+    let after_cancel = requests_after_cancel.clone();
+    let server = FakeService::start_keep_alive(move |request| {
+        let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        peak.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(15));
+        let path = request.target.as_str();
+        if let Some(suffix) = path.strip_prefix(&first_script) {
+            if did_cancel.load(Ordering::SeqCst) {
+                after_cancel.fetch_add(1, Ordering::SeqCst);
+            } else if suffix == "/txs/chain" {
+                if let Some(book) = cancel_path.lock().unwrap().as_ref() {
+                    let control = Connection::open(book).unwrap();
+                    assert_eq!(control.execute(
+                        "UPDATE freshness_jobs SET cancel_requested=1 WHERE source_key='onchain_wallet:w1'",
+                        [],
+                    ).unwrap(), 1);
+                    did_cancel.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+        let reply = if path == "/blocks/tip/hash" {
+            Reply::raw(200, "text/plain", tip_hash.as_bytes())
+        } else if path == "/blocks/tip/height" {
+            Reply::raw(200, "text/plain", b"105")
+        } else if let Some(rest) = path.strip_prefix("/scripthash/") {
+            let response = if let Some(hash) = rest.strip_suffix("/txs/chain") {
+                json!(tx_by_hash.get(hash).into_iter().collect::<Vec<_>>())
+            } else if rest.ends_with("/txs/mempool") {
+                json!([])
+            } else if let Some(hash) = rest.strip_suffix("/utxo") {
+                let outputs: Vec<_> = tx_by_hash.get(hash).into_iter().map(|tx| json!({
+                    "txid": tx["txid"],
+                    "vout": 0,
+                    "value": tx["vout"][0]["value"],
+                    "status": tx["status"],
+                })).collect();
+                json!(outputs)
+            } else {
+                let count = usize::from(tx_by_hash.contains_key(rest));
+                json!({
+                    "chain_stats": {
+                        "funded_txo_count": count,
+                        "funded_txo_sum": count * 100_000,
+                        "spent_txo_count": 0,
+                        "spent_txo_sum": 0,
+                        "tx_count": count,
+                    },
+                    "mempool_stats": {
+                        "funded_txo_count": 0,
+                        "funded_txo_sum": 0,
+                        "spent_txo_count": 0,
+                        "spent_txo_sum": 0,
+                        "tx_count": 0,
+                    },
+                })
+            };
+            Reply::json(200, &response.to_string())
+        } else {
+            Reply::json(200, "{}")
+        };
+        in_flight.fetch_sub(1, Ordering::SeqCst);
+        reply
+    }).unwrap();
+    let port = server.port();
+
+    let case = sample();
+    let mut conn = book(&case);
+    conn.execute("DELETE FROM wallets", []).unwrap();
+    for (idx, target) in targets.iter().enumerate() {
+        let id = format!("w{}", idx + 1);
+        let label = format!("W{}", idx + 1);
+        let cfg = json!({
+            "chain": "bitcoin",
+            "network": "main",
+            "backend": "fixture",
+            "addresses": [target["address"].as_str().unwrap()],
+        })
+        .to_string();
+        conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+             VALUES(?, 'w', 'p', ?, 'addresses', ?, 'fixed')",
+            kassiber_store::rusqlite::params![id, label, cfg],
+        )
+        .unwrap();
+    }
+    let backend_cfg = json!({
+        "name": "fixture",
+        "kind": "esplora",
+        "chain": "bitcoin",
+        "network": "main",
+        "url": format!("http://127.0.0.1:{port}"),
+        "batch_size": 4,
+        "timeout": 5,
+    });
+    let req = Request {
+        profile_id: "p",
+        wallet: None,
+        all: true,
+        force_full: false,
+        version: "test",
+    };
+    let scratch = std::env::temp_dir().join(format!(
+        "kassiber-parallel-cancel-{}-{port}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&scratch).unwrap();
+    let path = scratch.join("book.sqlite3");
+    conn.execute_batch(
+        "INSERT INTO settings(key,value) VALUES ('context_workspace','w'),('context_profile','p')",
+    )
+    .unwrap();
+    conn.execute("VACUUM INTO ?1", [path.to_str().unwrap()])
+        .unwrap();
+
+    // 1. Initial sync of all 6 wallets concurrently.
+    let action = Sync::new(&conn, &req, |_, _| Ok(backend_cfg.clone())).unwrap();
+    let consent = SyncConsent::explicit_trigger(&action);
+    let results = action
+        .run(
+            &mut conn,
+            &online(),
+            Some(&consent),
+            &Cancellation::default(),
+            deadline(),
+            1_700_010_000,
+            &mut fixed(&case),
+            |_, _| Ok(backend_cfg.clone()),
+            None,
+        )
+        .unwrap();
+    let labels: Vec<String> = results
+        .iter()
+        .map(|row| py_str(get(row, "wallet").unwrap()))
+        .collect();
+    assert_eq!(labels, vec!["W1", "W2", "W3", "W4", "W5", "W6"]);
+    for row in &results {
+        assert_eq!(get(row, "status"), Some(&s("synced")), "{row:?}");
+    }
+    let tx_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM transactions WHERE profile_id='p' AND excluded=0",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(tx_count, 6, "every wallet transaction must be imported");
+    assert!(
+        peak_in_flight.load(Ordering::SeqCst) >= 2,
+        "multi-wallet Sync::run must fetch concurrently (peak={})",
+        peak_in_flight.load(Ordering::SeqCst)
+    );
+    let initial_requests = server.requests().len();
+    let initial_conns = server.connection_count();
+    assert!(
+        initial_conns < initial_requests,
+        "HTTP keep-alive pool must reuse sockets ({initial_conns} conns for {initial_requests} reqs)"
+    );
+
+    // 2. Incremental sync reuses complete membership checkpoints (far fewer requests).
+    let reqs_before_inc = server.requests().len();
+    let action2 = Sync::new(&conn, &req, |_, _| Ok(backend_cfg.clone())).unwrap();
+    let consent2 = SyncConsent::explicit_trigger(&action2);
+    let results2 = action2
+        .run(
+            &mut conn,
+            &online(),
+            Some(&consent2),
+            &Cancellation::default(),
+            deadline(),
+            1_700_010_060,
+            &mut fixed(&case),
+            |_, _| Ok(backend_cfg.clone()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(results2.len(), 6);
+    let inc_requests = server.requests().len() - reqs_before_inc;
+    assert!(
+        inc_requests < initial_requests,
+        "incremental sync ({inc_requests} reqs) must reuse checkpoints vs initial ({initial_requests} reqs)"
+    );
+
+    // 3. Offline gate enforces zero egress across all parallel wallet slots.
+    let reqs_before_offline = server.requests().len();
+    let action3 = Sync::new(&conn, &req, |_, _| Ok(backend_cfg.clone())).unwrap();
+    let consent3 = SyncConsent::explicit_trigger(&action3);
+    let offline_gate = Gate::new(|| Offline::Offline, Ledger::default());
+    let offline_results = action3
+        .run(
+            &mut conn,
+            &offline_gate,
+            Some(&consent3),
+            &Cancellation::default(),
+            deadline(),
+            1_700_010_120,
+            &mut fixed(&case),
+            |_, _| Ok(backend_cfg.clone()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(offline_results.len(), 6);
+    for row in &offline_results {
+        assert_eq!(get(row, "status"), Some(&s("error")));
+    }
+    assert_eq!(
+        server.requests().len(),
+        reqs_before_offline,
+        "offline mode must make zero network requests"
+    );
+
+    // Cancel a single queued job through another database connection while its
+    // first history response is in flight. The other five jobs must finish.
+    use crate::freshness::{execution, native, planning};
+    let mut conn = Connection::open(&path).unwrap();
+    let request = planning::Request {
+        scope: planning::Scope::ActiveProfile,
+        wallet: None,
+        rates: Some(false),
+        journals: Some(false),
+        force_full: false,
+        auto_pair: false,
+        wallets_sync: true,
+    };
+    let plan =
+        planning::Plan::new(&conn, &request, "test", |_, _| Ok(backend_cfg.clone())).unwrap();
+    let proof = native::Consent::explicit_trigger(&plan);
+    *cancel_book.lock().unwrap() = Some(path.clone());
+    peak_in_flight.store(0, Ordering::SeqCst);
+    let mut first_wallet_progress = false;
+    let outcome = plan
+        .execute_native(
+            &mut conn,
+            &execution::Options {
+                run: true,
+                limit: None,
+            },
+            &mut fixed(&case),
+            &mut |event| {
+                if get(event, "phase") == Some(&s("backend_fetch"))
+                    && get(event, "wallet") == Some(&s("W1"))
+                    && !cancelled.load(Ordering::SeqCst)
+                {
+                    first_wallet_progress = true;
+                }
+                Ok(())
+            },
+            &online(),
+            Some(&proof),
+            &Cancellation::default(),
+            deadline(),
+            1_700_010_180,
+            "test",
+            &kassiber_setup::backends::Config::load_with_env(
+                &scratch.join("backends.json"),
+                &Default::default(),
+            )
+            .unwrap(),
+            |_, _| Ok(backend_cfg.clone()),
+            None,
+        )
+        .unwrap();
+    assert!(cancelled.load(Ordering::SeqCst), "{outcome:?}");
+    assert!(
+        first_wallet_progress,
+        "fetch progress must arrive during the wave"
+    );
+    assert!(peak_in_flight.load(Ordering::SeqCst) >= 2);
+    assert_eq!(requests_after_cancel.load(Ordering::SeqCst), 0);
+    let mut query = conn.prepare("SELECT external_id FROM transactions WHERE profile_id='p' AND excluded=0 ORDER BY external_id").unwrap();
+    let imported: Vec<String> = query
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        imported,
+        (2..=6).map(|id| format!("{id:064x}")).collect::<Vec<_>>()
+    );
+
+    drop(server);
+    drop(query);
+    drop(conn);
+    std::fs::remove_file(&path).unwrap();
+    std::fs::remove_dir(&scratch).unwrap();
+}

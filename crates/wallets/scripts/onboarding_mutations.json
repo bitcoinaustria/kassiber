@@ -32,8 +32,8 @@
   {
     "id": "ID-retired-only",
     "file": "crates/wallets/src/identify.rs",
-    "find": "WHERE wallet_id = ? AND status = 'retired'",
-    "replace": "WHERE wallet_id = ? AND status <> 'missing'",
+    "find": "WHERE profile_id = ? AND wallet_id = ? AND status = 'retired'",
+    "replace": "WHERE profile_id = ? AND wallet_id = ? AND status <> 'missing'",
     "expect_failing": [
       "identify_scans_retired_policies_and_reports_bad_depths"
     ],

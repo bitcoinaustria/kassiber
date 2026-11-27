@@ -62,8 +62,8 @@
   {
     "id": "JP-time-bound",
     "file": "crates/journals/src/prebuild/pricing.rs",
-    "find": "kassiber_timestamp_us(timestamp)<=kassiber_timestamp_us(?)",
-    "replace": "timestamp<=?",
+    "find": "let idx = indexes.partition_point(|&(ts, _)| ts <= target_us);",
+    "replace": "let idx = indexes.partition_point(|&(ts, _)| ts < target_us);",
     "expect_failing": [
       "prebuild_pricing_timestamp_selection"
     ],

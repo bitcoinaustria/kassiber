@@ -9,10 +9,12 @@ use crate::bitcoin_records::{self, btc, sorted_json, UNKNOWN};
 use elements_miniscript::elements::{
     confidential, encode,
     hex::{FromHex, ToHex},
-    secp256k1_zkp::Secp256k1,
     Transaction, TxOut,
 };
 use serde_json::Map;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 fn invalid() -> AppError {
     AppError::new("protocol_error", "Invalid Liquid observation")
@@ -26,6 +28,7 @@ pub(super) struct Context<'a> {
     pub policy: &'a str,
     pub backend: &'a str,
     pub network: &'a str,
+    decoded: RefCell<HashMap<String, Rc<Transaction>>>,
 }
 
 impl<'a> Context<'a> {
@@ -48,7 +51,19 @@ impl<'a> Context<'a> {
             policy,
             backend,
             network,
+            decoded: RefCell::new(HashMap::new()),
         }
+    }
+
+    fn decode_cached(&self, raw: &Map<String, Value>, txid: &str) -> Result<Rc<Transaction>> {
+        if let Some(tx) = self.decoded.borrow().get(txid) {
+            return Ok(tx.clone());
+        }
+        let tx = Rc::new(decode(raw, txid)?);
+        self.decoded
+            .borrow_mut()
+            .insert(txid.to_owned(), tx.clone());
+        Ok(tx)
     }
 
     /// `liquid_output_amount_asset_id`: an owned blinded output unblinds with
@@ -80,10 +95,14 @@ impl<'a> Context<'a> {
             };
             let secret = self
                 .plan
-                .liquid_blinding_secret(index("branch_index")?, index("address_index")?)
+                .liquid_blinding_secret_for_script(
+                    index("branch_index")?,
+                    index("address_index")?,
+                    &output.script_pubkey,
+                )
                 .map_err(|_| failed())?;
             let secrets = output
-                .unblind(&Secp256k1::new(), secret)
+                .unblind(descriptors::elements_secp(), secret)
                 .map_err(|_| failed())?;
             return Ok((secrets.value, secrets.asset.to_string()));
         }
@@ -152,7 +171,7 @@ impl<'a> Context<'a> {
         for input in &tx.input {
             let previous = input.previous_output.txid.to_string();
             let index = input.previous_output.vout;
-            let parent = decode(raw, &previous)?;
+            let parent = self.decode_cached(raw, &previous)?;
             let output = parent.output.get(index as usize).ok_or_else(|| {
                 AppError::new(
                     "app_error",
@@ -252,7 +271,7 @@ impl<'a> Context<'a> {
         tip: Option<i64>,
     ) -> Result<Value> {
         let id = text(txid);
-        let tx = decode(raw, id)?;
+        let tx = self.decode_cached(raw, id)?;
         let index = crate::scan::integer(vout)
             .and_then(|n| usize::try_from(n).ok())
             .filter(|n| *n < tx.output.len())
@@ -328,7 +347,7 @@ pub(super) fn electrum_records(
             }
             None => explicit_time(history).unwrap_or_else(|| UNKNOWN.into()),
         };
-        let tx = decode(raw, txid)?;
+        let tx = context.decode_cached(raw, txid)?;
         let mut extra = Map::new();
         extra.insert("history".into(), history.clone());
         extra.insert("raw_hex".into(), raw[txid.as_str()]["raw_hex"].clone());
@@ -375,7 +394,7 @@ pub(super) fn esplora_records(
         let mut extra = Map::new();
         extra.insert("tx".into(), tx.clone());
         extra.insert("raw_hex".into(), raw[txid]["raw_hex"].clone());
-        let decoded = decode(raw, txid)?;
+        let decoded = context.decode_cached(raw, txid)?;
         let confirmed = bitcoin_records::timestamp(block_time)?;
         records.extend(context.records(txid, &occurred, &decoded, raw, extra, confirmed)?);
         if (index + 1).is_multiple_of(100) || index + 1 == total {
