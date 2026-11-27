@@ -737,7 +737,7 @@ fn bark_sync_provenance(conn: &Connection, profile_id: &str) -> Result<Vec<Value
             .get("source_mode")
             .and_then(J::as_str)
             .map(|s| s.trim().to_ascii_lowercase());
-        if source_mode.as_deref() == Some("payment_ledger") {
+        if matches!(source_mode.as_deref(), Some("payments" | "payment_ledger")) {
             continue;
         }
         let payment_method = cfg

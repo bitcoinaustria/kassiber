@@ -26,7 +26,7 @@ pub fn header(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>, c: &Con
     .collect::<Vec<_>>()
     .join(" ");
     let sub = [
-        Some(kind_label(&c.kind)),
+        Some(kind_label(c.display_kind())),
         Some(network.as_str()).filter(|x| !x.is_empty()),
     ]
     .into_iter()

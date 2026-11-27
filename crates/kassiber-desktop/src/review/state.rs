@@ -265,6 +265,9 @@ pub struct Bulk {
 pub struct Review {
     pub q: Quarantine,
     pub tr: Transfers,
+    pub commercial: Option<Vec<Value>>,
+    pub commercial_error: bool,
+    pub commercial_ticket: Option<crate::app::Ticket>,
     pub cards: HashMap<String, Card>,
     pub all_causes: bool,
     pub locked_gap: Option<String>,
@@ -392,6 +395,16 @@ pub fn mount(app: &mut App) {
     }
     load_suggest(app, None);
     load_first(app);
+    load_commercial(app);
+}
+
+pub fn load_commercial(app: &mut App) {
+    let ticket = app.send_ticket(
+        "ui.btcpay.provenance.links",
+        json!({"needs_review": true, "limit": 100}),
+        "review.commercial",
+    );
+    rv(app).commercial_ticket = Some(ticket);
 }
 
 fn load_suggest(app: &mut App, run: Option<u64>) {
@@ -653,6 +666,23 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
     match tag {
+        "review.commercial" => {
+            if !app
+                .review
+                .rv
+                .commercial_ticket
+                .as_ref()
+                .is_some_and(|ticket| ticket.answers(app))
+            {
+                return;
+            }
+            let rview = rv(app);
+            rview.commercial_ticket = None;
+            rview.commercial_error = r.error.is_some();
+            if r.error.is_none() {
+                rview.commercial = r.data["links"].as_array().cloned();
+            }
+        }
         "review.suggest" => {
             let Some((g, run)) = rv(app).tr.sq.pop_front() else {
                 return;

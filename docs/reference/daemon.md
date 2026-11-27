@@ -295,6 +295,13 @@ backend response shape. The payload never returns descriptors, xpubs, backend
 URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
 material.
 
+The wallet-scoped `ui.transactions.list` accepts
+`include_wallet_activity: true` to return up to 100 recent final Bark
+operations in `walletActivity`. They include zero-fee refreshes and do not
+change transaction counts, cursors, or balances. The AI projection provides
+the operation, amounts, and attribution state without the provider's notes
+or labels. The read uses stored data only.
+
 `ui.transactions.review_context` is the AI-oriented composite review packet.
 It accepts one transaction id/txid plus bounded include flags and joins the
 safe transaction row with the local graph, journal events, append-only edit

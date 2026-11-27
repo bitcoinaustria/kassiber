@@ -356,8 +356,9 @@ pub struct Item {
     pub btc: f64,
     pub value: f64,
     pub percent: f64,
-    /// The rail's logo; `Rail::None` for exchanges, files and the folded row.
+    /// The rail's logo when no source logo is available.
     pub rail: Rail,
+    pub btcpay: bool,
     /// The wallet the row opens; none for "Other sources".
     pub connection_id: Option<String>,
     pub last_sync_at: Option<String>,
@@ -472,6 +473,11 @@ pub fn build(s: &Snapshot, x: &Extras, view: &HoldingsView, now: (i32, u32)) -> 
             value: btc * rate,
             percent: percent_of(btc, book_total),
             rail,
+            btcpay: model::is_btcpay_source(
+                &c.kind,
+                c.sync_source.as_deref(),
+                c.sync_mode.as_deref(),
+            ),
             connection_id: Some(c.id.clone()),
             last_sync_at: c.last_sync_at.clone().filter(|s| !s.is_empty()),
             empty: c.balance <= 0.0,
@@ -518,6 +524,7 @@ pub fn build(s: &Snapshot, x: &Extras, view: &HoldingsView, now: (i32, u32)) -> 
             value: rest * rate,
             percent: percent_of(rest, book_total),
             rail: Rail::None,
+            btcpay: false,
             connection_id: None,
             last_sync_at: None,
             empty: false,
@@ -703,6 +710,48 @@ mod tests {
             status: "synced".into(),
             ..Connection::default()
         }
+    }
+
+    #[test]
+    fn holdings_use_btcpay_brand_for_the_source_and_keep_the_rail() {
+        let snapshot: Snapshot = serde_json::from_value(json!({
+            "connections": [
+                {
+                    "id": "bark", "kind": "custom", "label": "Bark store",
+                    "syncSource": "btcpay", "syncMode": "btcpay", "paymentMethodId": "BTC-ARK",
+                    "chain": "bitcoin", "balance": 1
+                },
+                {
+                    "id": "store-ln", "kind": "custom", "label": "Store Lightning payments",
+                    "syncSource": "btcpay", "syncMode": "btcpay", "paymentMethodId": "BTC-LN",
+                    "chain": "bitcoin", "balance": 1
+                },
+                {
+                    "id": "node", "kind": "lnd", "label": "Store LND",
+                    "syncSource": "", "syncMode": "not_configured", "paymentMethodId": null,
+                    "chain": "bitcoin", "balance": 1
+                }
+            ]
+        }))
+        .unwrap();
+        let holdings = build(
+            &snapshot,
+            &Extras::default(),
+            &HoldingsView::default(),
+            (2026, 11),
+        );
+        let item = |id| {
+            holdings
+                .items
+                .iter()
+                .find(|item| item.connection_id.as_deref() == Some(id))
+                .unwrap()
+        };
+        assert!(item("bark").btcpay);
+        assert!(item("store-ln").btcpay);
+        assert!(!item("node").btcpay);
+        assert_eq!(item("store-ln").rail, Rail::Lightning);
+        assert_eq!(item("node").rail, Rail::Lightning);
     }
 
     /// (connection id, its role, its other assets as (asset, amount)).

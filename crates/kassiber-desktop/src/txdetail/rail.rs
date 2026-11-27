@@ -705,6 +705,73 @@ fn compact(id: &str) -> String {
     }
 }
 
+fn invoice_summary(app: &App, tk: &Tk, o: &Open, i: usize, entry: &Value) -> El {
+    let link = &entry["link"];
+    let payment = &entry["payment"];
+    let invoice = &entry["invoice"];
+    let refund = s(payment, "record_type") == "payout";
+    let title = t(if refund {
+        "transactions:commercial.match.refund"
+    } else {
+        "transactions:commercial.paidInvoice"
+    });
+    let reference = opt_s(invoice, "order_id")
+        .map(|order| tr("transactions:commercial.match.order", &[("id", &order)]))
+        .unwrap_or_else(|| s(invoice, "invoice_id").to_owned());
+    let id = s(link, "id").to_owned();
+    let reviewed = s(link, "state") == "reviewed";
+    let manual = matches!(
+        o.draft.pricing_source_kind.as_deref(),
+        Some("manual_override" | "manual_rate_cache")
+    );
+    let currency = s(payment, "fiat_currency");
+    let source_price = !currency.is_empty()
+        && app
+            .snapshot()
+            .is_none_or(|book| book.fiat_currency().eq_ignore_ascii_case(currency))
+        && (!s(payment, "fiat_value_exact").is_empty()
+            || !s(payment, "fiat_rate_exact").is_empty());
+    let mut actions = row().gap(tk.r(0.375)).flex_wrap();
+    if !reviewed && source_price && !manual {
+        let id = id.clone();
+        actions = actions.child(
+            small_button(
+                tk,
+                format!("txd-com-price-{i}"),
+                None,
+                &t("transactions:commercial.match.useValue"),
+                false,
+                !o.busy.commercial,
+            )
+            .on_press(move |a: &mut App| super::actions::use_btcpay_value(a, &id)),
+        );
+    }
+    actions = actions.child(
+        small_button(
+            tk,
+            format!("txd-com-unlink-{i}"),
+            None,
+            &t("transactions:commercial.match.unlink"),
+            false,
+            !o.busy.commercial,
+        )
+        .on_press(move |a: &mut App| super::actions::commercial_review(a, &id, "rejected", None)),
+    );
+    col()
+        .w_full()
+        .gap(tk.r(0.25))
+        .child(
+            crate::ui::sensitive(
+                format!("{title} · {reference}"),
+                tk.tsm(500.0),
+                tk.fg,
+                app.prefs.hide_sensitive(),
+            )
+            .wrap(),
+        )
+        .child(actions)
+}
+
 /// Hidden entirely when the row has no BTCPay match.
 pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
     let data = o.commercial.as_ref()?;
@@ -712,7 +779,6 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
     if matches.is_empty() {
         return None;
     }
-    let _ = app;
     let mut c = inset(tk).key("txd-commercial").child(
         text(t("transactions:commercial.title"))
             .font(tk.txs(600.0))
@@ -734,7 +800,11 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
             3
         }
     });
-    if let Some(fr) = fresh.first() {
+    if let Some(fr) = fresh.first().filter(|fr| {
+        fr["never_synced"].as_bool() == Some(true)
+            || fr["stale"].as_bool() == Some(true)
+            || !fr["last_error_code"].is_null()
+    }) {
         let when = format::short_date(fr["last_success_at"].as_str());
         let (key, warn) = if fr["never_synced"].as_bool() == Some(true) {
             ("transactions:commercial.freshness.never", true)
@@ -757,6 +827,11 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
         let payment = m.get("payment").filter(|p| p.is_object());
         let payout = payment.is_some_and(|p| s(p, "record_type") == "payout");
         let reviewed = s(link_rec, "state") == "reviewed";
+        let match_status = s(link_rec, "match_status");
+        if match_status == "verified" || (reviewed && !payout && m["invoice"].is_object()) {
+            c = c.child(invoice_summary(app, tk, o, i, m));
+            continue;
+        }
         let pay_id = payment
             .and_then(|p| opt_s(p, "payment_id"))
             .or_else(|| opt_s(link_rec, "payment_id"))
@@ -859,37 +934,14 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
                     .child(text(lbl).font(tk.txs(500.0)).color(tk.fg)),
             );
         }
-        let mut badges = row().gap(tk.r(0.25)).flex_wrap();
-        if !reviewed && let Some(ls) = opt_s(link_rec, "state") {
-            badges = badges.child(muted_badge(
-                tk,
-                &t(&format!("transactions:commercial.linkState.{ls}")),
-            ));
+        if !reviewed {
+            rows = rows.child(
+                text(t(crate::review::invoice_match_reason(match_status)))
+                    .font(tk.txs(500.0))
+                    .color(tk.warn.text)
+                    .wrap(),
+            );
         }
-        if let Some(rs) = opt_s(link_rec, "reconciliation_state").filter(|x| x != "unreviewed") {
-            badges = badges.child(muted_badge(
-                tk,
-                &t(&format!("transactions:commercial.reconciliationState.{rs}")),
-            ));
-        }
-        if let Some(ck) = opt_s(link_rec, "commercial_kind") {
-            badges = badges.child(muted_badge(
-                tk,
-                &t(&format!("transactions:commercial.commercialKind.{ck}")),
-            ));
-        }
-        rows = rows.child(
-            row()
-                .w_full()
-                .gap(tk.r(0.5))
-                .child(
-                    text(t("transactions:commercial.reconciliation"))
-                        .font(tk.txs(400.0))
-                        .color(tk.muted_fg)
-                        .grow(1.0),
-                )
-                .child(badges),
-        );
         // Review actions.
         let link = s(link_rec, "id").to_owned();
         let busy = o.busy.commercial;
@@ -916,6 +968,33 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
                         .wrap(),
                 )
                 .child(row().child(b));
+        } else if matches!(match_status, "own_wallet" | "competing_match") {
+            let dismiss = small_button(
+                tk,
+                format!("txd-com-reject-{i}"),
+                None,
+                &t("transactions:commercial.review.reject"),
+                false,
+                !busy,
+            )
+            .on_press(move |a: &mut App| {
+                super::actions::commercial_review(a, &link, "rejected", None)
+            });
+            let mut actions = row().gap(tk.r(0.375)).child(dismiss);
+            if match_status == "own_wallet" {
+                actions = actions.child(
+                    small_button(
+                        tk,
+                        format!("txd-com-transfers-{i}"),
+                        None,
+                        &t("transactions:commercial.match.transfers"),
+                        true,
+                        true,
+                    )
+                    .on_press(|a: &mut App| a.navigate("/transfers")),
+                );
+            }
+            rows = rows.child(actions);
         } else {
             let default = if payout {
                 if payment.is_some_and(|p| s(p, "origin_kind") == "refund") {
@@ -924,13 +1003,18 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
                     "expense"
                 }
             } else {
-                "income"
+                "none"
             };
-            let kind = o.commercial_kind.clone().unwrap_or_else(|| default.into());
+            let kind = o
+                .commercial_kind
+                .as_ref()
+                .filter(|(id, _)| id == &link)
+                .map_or(default, |(_, kind)| kind)
+                .to_owned();
             let opts: Vec<&str> = if payout {
                 vec!["refund", "expense", "transfer", "none"]
             } else {
-                vec!["income", "transfer", "none"]
+                vec!["income", "none"]
             };
             let mut sel = row()
                 .gap(tk.r(0.25))
@@ -939,21 +1023,22 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
                 .label(t("transactions:commercial.review.kindLabel"));
             for k in opts {
                 let k2 = k.to_owned();
+                let link_id = link.clone();
                 sel = sel.child(
-                    super::widgets::badge(
+                    small_button(
                         tk,
+                        format!("txd-com-kind-{i}-{k}"),
+                        (kind == k).then_some(&I::CHECK),
                         &t(&format!("transactions:commercial.commercialKind.{k}")),
-                        if kind == k { tk.primary_fg } else { tk.fg },
-                        if kind == k { tk.primary } else { tk.background },
-                        tk.border,
+                        kind == k,
+                        !busy,
                     )
-                    .key(format!("txd-com-kind-{i}-{k}"))
                     .role("radio")
                     .checked(kind == k)
                     .focusable(true)
                     .on_press(move |a: &mut App| {
                         if let Some(o) = a.detail.open.as_mut() {
-                            o.commercial_kind = Some(k2.clone());
+                            o.commercial_kind = Some((link_id.clone(), k2.clone()));
                         }
                     }),
                 );
@@ -963,7 +1048,11 @@ pub fn commercial(app: &App, tk: &Tk, o: &Open) -> Option<El> {
                 tk,
                 format!("txd-com-confirm-{i}"),
                 Some(&I::CHECK),
-                &t("transactions:commercial.review.confirm"),
+                &t(if payout {
+                    "transactions:commercial.review.confirm"
+                } else {
+                    "transactions:commercial.match.link"
+                }),
                 true,
                 !busy,
             );

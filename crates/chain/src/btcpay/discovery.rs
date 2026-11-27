@@ -141,6 +141,7 @@ fn inspect_store(
     grant: &KeyGrant,
     major: Option<i64>,
     version: Option<(i64, i64)>,
+    bark_supported: bool,
 ) -> Result<StoreResult> {
     let store_id = from_py(&text(field(&entry, "id")));
     let mut capabilities = if grant.known {
@@ -272,6 +273,38 @@ fn inspect_store(
         }
         result.methods.push(method);
     }
+    // Ark checkout can be disabled while the store's Bark wallet still
+    // settles Lightning and serves its full wallet history.
+    if bark_supported
+        && field(&capabilities, "wallet_history") != &Value::Bool(false)
+        && !result
+            .methods
+            .iter()
+            .any(|method| field(method, "payment_method_id") == &s(methods::BARK_PAYMENT_METHOD_ID))
+        && result.methods.iter().any(|method| {
+            truthy(field(method, "enabled"))
+                && [s(methods::RAIL_LIGHTNING), s(methods::RAIL_LNURL)]
+                    .contains(field(method, "rail"))
+        })
+        && super::fetch::bark_wallet_history_status(reads, &store_id)?.is_none()
+    {
+        let raw = dict([
+            ("paymentMethodId", s(methods::BARK_PAYMENT_METHOD_ID)),
+            ("enabled", Value::Bool(false)),
+        ]);
+        let mut method = normalize::normalize_payment_method(&store_py, &raw)
+            .expect("BTC-ARK is a recognized payment method");
+        set(&mut method, "wallet_history_available", Value::Bool(true));
+        for key in [
+            "wallet_fingerprint",
+            "network",
+            "preview_error",
+            "wallet_history_error",
+        ] {
+            set(&mut method, key, Value::Null);
+        }
+        result.methods.push(method);
+    }
     Ok(result)
 }
 
@@ -309,6 +342,7 @@ pub fn inspect(reads: Reads<'_>) -> Result<Inspection> {
         }
     }
     let major = major_version(&version);
+    let bark_supported = supported.contains(&s(methods::BARK_PAYMENT_METHOD_ID));
     let server = dict([
         ("version", version.clone().map_or(Value::Null, s)),
         (
@@ -402,7 +436,7 @@ pub fn inspect(reads: Reads<'_>) -> Result<Inspection> {
     let mut previews = Vec::new();
     for entry in stores {
         let id = from_py(&text(field(&entry, "id")));
-        let result = inspect_store(reads, entry, &grant, major, wallet_version)?;
+        let result = inspect_store(reads, entry, &grant, major, wallet_version, bark_supported)?;
         public_stores.push(result.store);
         payment_methods.extend(result.methods);
         if !result.previews.is_empty() {
@@ -486,4 +520,88 @@ pub fn inspect(reads: Reads<'_>) -> Result<Inspection> {
         previews,
         grant,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kassiber_net::{test_support::HandledProvider, Consent, Gate, Ledger, Offline};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn lightning_only_store_discovers_its_bark_wallet_during_authorized_inspection() {
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let recorded = hits.clone();
+        let server = HandledProvider::start(move |request| {
+            assert_eq!(request.method, "GET");
+            recorded.lock().unwrap().push(request.target.clone());
+            let (status, body) = match request.target.as_str() {
+                "/api/v1/server/info" => (
+                    200,
+                    r#"{"version":"2.4.7","supportedPaymentMethods":["BTC-LN","BTC-ARK"]}"#,
+                ),
+                "/api/v1/api-keys/current" => (404, "{}"),
+                "/api/v1/stores" => (200, r#"[{"id":"bark"},{"id":"other"}]"#),
+                "/api/v1/stores/bark/payment-methods?onlyEnabled=true"
+                | "/api/v1/stores/other/payment-methods?onlyEnabled=true" => {
+                    (200, r#"[{"paymentMethodId":"BTC-LN","enabled":true}]"#)
+                }
+                "/api/v1/stores/bark/payment-methods/BTC-ARK/wallet" => (
+                    200,
+                    r#"{"balance":"0.01","confirmedBalance":"0.01","unconfirmedBalance":"0"}"#,
+                ),
+                "/api/v1/stores/other/payment-methods/BTC-ARK/wallet" => (404, "{}"),
+                _ => (400, "{}"),
+            };
+            (status, body.to_owned())
+        })
+        .unwrap();
+        let client = super::super::client::Greenfield::from_backend(
+            &serde_json::json!({"url": server.base(), "token": "fixture-key"}),
+            Gate::new(|| Offline::Online, Ledger::default()),
+            "test",
+            [1; 32],
+            None,
+        )
+        .unwrap();
+        let wrong_request = super::super::client::Greenfield::from_backend(
+            &serde_json::json!({"url": server.base(), "token": "fixture-key"}),
+            Gate::new(|| Offline::Online, Ledger::default()),
+            "test",
+            [2; 32],
+            None,
+        )
+        .unwrap();
+        let reads = |consent| Reads {
+            client: &client,
+            consent,
+            deadline: Instant::now() + Duration::from_secs(5),
+            progress: None,
+        };
+        let wrong_consent = Consent::explicit_trigger(wrong_request.request());
+        assert!(inspect(reads(&wrong_consent)).is_err());
+        assert!(hits.lock().unwrap().is_empty());
+
+        let consent = Consent::explicit_trigger(client.request());
+        let result = inspect(reads(&consent)).unwrap();
+        let Value::List(payment_methods) = field(&result.public, "payment_methods") else {
+            panic!("missing payment methods");
+        };
+        let bark: Vec<_> = payment_methods
+            .iter()
+            .filter(|method| field(method, "payment_method_id") == &s("BTC-ARK"))
+            .collect();
+        assert_eq!(
+            bark.len(),
+            1,
+            "only the store with Bark history should offer it"
+        );
+        assert_eq!(field(bark[0], "store_id"), &s("bark"));
+        assert_eq!(
+            field(bark[0], "wallet_history_available"),
+            &Value::Bool(true)
+        );
+        assert_eq!(field(bark[0], "enabled"), &Value::Bool(false));
+    }
 }

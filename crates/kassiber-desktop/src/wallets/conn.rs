@@ -140,6 +140,18 @@ impl Conn {
         self.lightning_capability("nodeSnapshot")
     }
 
+    pub fn display_kind(&self) -> &str {
+        if crate::model::is_btcpay_source(
+            &self.kind,
+            self.sync_source.as_deref(),
+            self.sync_mode.as_deref(),
+        ) {
+            "btcpay"
+        } else {
+            &self.kind
+        }
+    }
+
     /// `connectionCategoryLabel`: the chain wins over the kind (a Liquid descriptor is "Liquid").
     pub fn category_label(&self) -> &'static str {
         if self.is_backend() {
@@ -148,7 +160,7 @@ impl Conn {
         if self.chain.as_deref() == Some("liquid") {
             return "Liquid";
         }
-        kind_category_label(&self.kind)
+        kind_category_label(self.display_kind())
     }
 
     /// `connectionCategorySortRank`.

@@ -13,10 +13,12 @@ use std::collections::BTreeSet;
 pub enum Command {
     Suggest { limit: i64 },
     Links { state: Value, limit: i64 },
+    NeedsReview { limit: i64 },
     Records { record_type: Value, limit: i64 },
     Context { transaction: String },
     Review(Review),
 }
+mod matches;
 mod review;
 pub use review::Review;
 const LINK_SELECT: &str = "SELECT cl.*, p.stable_key AS btcpay_stable_key, p.invoice_id, p.payment_id, p.txid, p.payment_request_id, p.origin_kind, p.origin_label, d.label AS document_label, t.external_id AS transaction_external_id FROM commercial_links cl LEFT JOIN btcpay_provenance_records p ON p.id=cl.btcpay_record_id LEFT JOIN external_documents d ON d.id=cl.document_id LEFT JOIN transactions t ON t.id=cl.transaction_id";
@@ -30,6 +32,9 @@ fn limit(n: i64, default: i64, max: i64) -> i64 {
 pub fn execute(conn: &Connection, scope: &Scope<'_>, command: &Command) -> Result<Value> {
     let result = (|| match command {
         Command::Suggest { limit: n } => atomic(conn, || suggest(conn, scope, limit(*n, 500, 500))),
+        Command::NeedsReview { limit: n } => {
+            matches::needs_review(conn, scope.profile_id, limit(*n, 100, 1000))
+        }
         Command::Links { state, limit: n } => {
             let state = if truthy(state) {
                 Some(choice(
@@ -194,7 +199,28 @@ fn matching(conn: &Connection, profile: &str, record: &Value, stable: bool) -> R
     } else {
         Value::Null
     };
-    rows(conn,"SELECT id,direction,amount,fee,amount_includes_fee,fiat_value_exact,fiat_value FROM transactions WHERE profile_id=? AND excluded=0 AND ((? AND external_id=?) OR (? AND payment_hash=?) OR (? AND external_id=?)) AND (? != 'payout' OR direction='outbound') ORDER BY occurred_at ASC,id ASC",params![profile,truthy(&txid),sql(&txid)?,truthy(&hash),sql(&hash)?,truthy(&key),sql(&key)?,text(record,"record_type")])
+    rows(
+        conn,
+        "SELECT t.id,t.direction,t.amount,t.fee,t.amount_includes_fee,t.fiat_value_exact,t.fiat_value
+         FROM transactions t JOIN wallets w ON w.id=t.wallet_id
+         WHERE t.profile_id=?1 AND t.excluded=0
+           AND (?2 != 'payout' OR t.direction='outbound')
+           AND (
+                (?3 AND t.external_id=?4)
+                OR ((?5 AND t.external_id=?6 OR ?7 AND t.payment_hash=?8)
+                    AND CASE WHEN json_valid(w.config_json)
+                             AND json_extract(w.config_json,'$.sync_source')='btcpay'
+                        THEN json_extract(w.config_json,'$.store_id')=?9
+                         AND json_extract(w.config_json,'$.backend')=?10 COLLATE NOCASE
+                        ELSE 1 END)
+           )
+         ORDER BY t.occurred_at ASC,t.id ASC",
+        params![
+            profile, text(record, "record_type"), truthy(&key), sql(&key)?,
+            truthy(&txid), sql(&txid)?, truthy(&hash), sql(&hash)?,
+            text(record, "store_id"), text(record, "backend_name"),
+        ],
+    )
 }
 struct Suggestion<'a> {
     record: &'a str,
@@ -212,10 +238,13 @@ fn upsert(
     a: Suggestion<'_>,
     now: &str,
 ) -> Result<(bool, Value)> {
-    let existing=rows(conn,"SELECT id,document_id FROM commercial_links WHERE profile_id=? AND COALESCE(btcpay_record_id,'')=COALESCE(?,'') AND (?='btcpay_payment_transaction' OR COALESCE(document_id,'')=COALESCE(?,'')) AND COALESCE(transaction_id,'')=COALESCE(?,'') AND link_type=? AND state!='rejected'",params![scope.profile_id,a.record,a.kind,a.document,a.transaction,a.kind]);
+    let existing=rows(conn,"SELECT id,document_id,state FROM commercial_links WHERE profile_id=? AND COALESCE(btcpay_record_id,'')=COALESCE(?,'') AND (?='btcpay_payment_transaction' OR COALESCE(document_id,'')=COALESCE(?,'')) AND COALESCE(transaction_id,'')=COALESCE(?,'') AND link_type=?
+        AND (state!='rejected' OR (link_type='btcpay_payment_transaction' AND reconciliation_state='ignored'))
+        ORDER BY CASE state WHEN 'reviewed' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END",params![scope.profile_id,a.record,a.kind,a.document,a.transaction,a.kind]);
     let existing = existing?;
     let (created, id) = if let Some(row) = existing.first() {
-        if a.kind == "btcpay_payment_transaction"
+        if text(row, "state") != "rejected"
+            && a.kind == "btcpay_payment_transaction"
             && a.document.is_some_and(|s| !s.is_empty())
             && !truthy(&value(row, "document_id"))
         {
@@ -241,40 +270,58 @@ fn suggest(conn: &Connection, scope: &Scope<'_>, limit: i64) -> Result<Value> {
     let records=rows(conn,"SELECT * FROM btcpay_provenance_records WHERE profile_id=? AND (record_type='payment' OR (record_type='payout' AND LOWER(COALESCE(status,'')) IN ('inprogress','completed'))) ORDER BY COALESCE(occurred_at,created_at) DESC LIMIT ?",params![scope.profile_id,limit])?;
     for record in &records {
         let matches = matching(conn, scope.profile_id, record, true)?;
-        if matches.len() != 1 {
-            continue;
-        }
-        let tx = &matches[0];
-        let amount = value(tx, "amount");
-        let mut principal = integer(&amount)?;
-        if lower(strip(text(tx, "direction"))) == "outbound"
-            && truthy(&value(tx, "amount_includes_fee"))
+        let targets: Vec<&Value> = if matches.len() == 1 {
+            matches.iter().collect()
+        } else if text(record, "record_type") == "payment"
+            && text(record, "status").eq_ignore_ascii_case("settled")
+            && text(record, "payment_hash").len() == 64
+            && text(record, "payment_hash")
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit())
         {
-            principal -= integer(&value(tx, "fee"))?;
-        }
-        let exact = !matches!(value(record, "amount"), Value::Null)
-            && integer(&value(record, "amount"))? == principal.abs();
-        let (new, link) = upsert(
-            conn,
-            scope,
-            Suggestion {
-                record: text(record, "id"),
-                document: None,
-                transaction: Some(text(tx, "id")),
-                kind: "btcpay_payment_transaction",
-                confidence: if exact { "exact" } else { "strong" },
-                method: if text(record, "record_type") == "payout" {
-                    "payout_proof"
-                } else {
-                    "txid_or_payment_hash"
+            // Preserve a review target for a paid invoice when an owned
+            // Lightning sender or competing receipts also match its hash.
+            matches
+                .iter()
+                .filter(|tx| text(tx, "direction") == "inbound")
+                .collect()
+        } else {
+            continue;
+        };
+        for tx in targets {
+            let amount = value(tx, "amount");
+            let mut principal = integer(&amount)?;
+            if lower(strip(text(tx, "direction"))) == "outbound"
+                && truthy(&value(tx, "amount_includes_fee"))
+            {
+                principal -= integer(&value(tx, "fee"))?;
+            }
+            let exact = !matches!(value(record, "amount"), Value::Null)
+                && integer(&value(record, "amount"))? == principal.abs();
+            let (new, link) = upsert(
+                conn,
+                scope,
+                Suggestion {
+                    record: text(record, "id"),
+                    document: None,
+                    transaction: Some(text(tx, "id")),
+                    kind: "btcpay_payment_transaction",
+                    confidence: if exact { "exact" } else { "strong" },
+                    method: if text(record, "record_type") == "payout" {
+                        "payout_proof"
+                    } else {
+                        "txid_or_payment_hash"
+                    },
+                    amount: value(record, "amount"),
+                    fiat: value(record, "fiat_value_exact"),
                 },
-                amount: value(record, "amount"),
-                fiat: value(record, "fiat_value_exact"),
-            },
-            &now,
-        )?;
-        created += usize::from(new);
-        suggestions.push(link);
+                &now,
+            )?;
+            created += usize::from(new);
+            if text(&link, "state") != "rejected" {
+                suggestions.push(link);
+            }
+        }
     }
     for record_type in ["invoice", "payment"] {
         let matches=rows(conn,"SELECT d.id AS document_id,p.id AS btcpay_record_id,p.txid,p.payment_hash,d.fiat_value_exact AS doc_value,p.fiat_value_exact AS btcpay_value,p.amount AS payment_amount FROM external_documents d JOIN btcpay_provenance_records p ON p.profile_id=d.profile_id AND p.record_type=? AND ((d.external_ref IS NOT NULL AND d.external_ref!='' AND (d.external_ref=p.invoice_id OR d.external_ref=p.order_id OR d.external_ref=p.payment_request_id)) OR (d.fiat_currency IS NOT NULL AND p.fiat_currency=d.fiat_currency AND d.fiat_value_exact IS NOT NULL AND p.fiat_value_exact=d.fiat_value_exact)) WHERE d.profile_id=? LIMIT 500",[record_type,scope.profile_id])?;
@@ -322,7 +369,9 @@ fn suggest(conn: &Connection, scope: &Scope<'_>, limit: i64) -> Result<Value> {
                 &now,
             )?;
             created += usize::from(new);
-            suggestions.push(link);
+            if text(&link, "state") != "rejected" {
+                suggestions.push(link);
+            }
         }
     }
     // Dict assignment replaces a duplicate's value without moving its position.
@@ -436,13 +485,23 @@ fn context(conn: &Connection, scope: &Scope<'_>, reference: &str) -> Result<Valu
         [scope.profile_id, &id],
     )?;
     let selected = rows(conn, CONTEXT_SQL, [scope.profile_id, &id])?;
+    let assessments = matches::transaction(conn, scope.profile_id, &id)?;
     let mut links = Vec::new();
     let mut btcpay = Vec::new();
     let mut documents = Vec::new();
     let mut stores = BTreeSet::new();
     let mut payouts = Vec::new();
     for row in &selected {
-        let link = link_context(row);
+        let mut link = link_context(row);
+        if let Some(assessment) = assessments
+            .iter()
+            .find(|a| text(a, "id") == text(row, "id"))
+        {
+            let status = text(assessment, "match_status");
+            if status != "needs_review" {
+                kassiber_envelope::set(&mut link, "match_status", s(status));
+            }
+        }
         links.push(link.clone());
         if truthy(&value(row, "payment_store_id")) && truthy(&value(row, "payment_backend_name")) {
             stores.insert((
@@ -663,9 +722,15 @@ const CONTEXT_SQL: &str = r#"SELECT cl.*, p.invoice_id, p.payment_id,
         LEFT JOIN btcpay_provenance_records inv
           ON inv.profile_id = cl.profile_id
          AND inv.store_id = p.store_id
+         AND inv.backend_name IS p.backend_name
          AND inv.invoice_id = p.invoice_id
          AND inv.record_type = 'invoice'
         LEFT JOIN external_documents d ON d.id = cl.document_id
         WHERE cl.profile_id = ? AND cl.transaction_id = ?
           AND cl.state IN ('suggested', 'reviewed')
+          AND (cl.state = 'reviewed' OR NOT EXISTS (
+            SELECT 1 FROM commercial_links dismissed
+             WHERE dismissed.profile_id = cl.profile_id AND dismissed.transaction_id = cl.transaction_id
+               AND dismissed.btcpay_record_id = cl.btcpay_record_id AND dismissed.link_type = cl.link_type
+               AND dismissed.state = 'rejected' AND dismissed.reconciliation_state = 'ignored'))
         ORDER BY cl.reviewed_at DESC, cl.created_at DESC, cl.id DESC"#;

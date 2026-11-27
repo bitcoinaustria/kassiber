@@ -13,6 +13,65 @@ use sha2::{Digest, Sha256};
 
 const NULL: Value = Value::Null;
 
+#[cfg(test)]
+mod instance_tests {
+    use super::*;
+
+    #[test]
+    fn same_store_on_a_second_instance_gets_its_own_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let book = kassiber_store::Book::create(&dir.path().join("book"), None).unwrap();
+        let conn = book.connection();
+        conn.execute_batch(
+            "INSERT INTO workspaces(id,label,created_at) VALUES('w','Main','2026');
+             INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('p','w','Main','2026');",
+        )
+        .unwrap();
+        let scope = Scope {
+            workspace_id: "w",
+            profile_id: "p",
+        };
+        let origin = |name, aliases_json, server_identity| Origin {
+            backend: name,
+            aliases_json,
+            server_identity,
+        };
+        let first = origin(
+            "first",
+            r#"["first","alternate-key"]"#,
+            "https://one.example",
+        );
+        let second = origin("second", r#"["second"]"#, "https://two.example");
+        let alias = origin(
+            "alternate-key",
+            r#"["first","alternate-key"]"#,
+            "https://one.example",
+        );
+        let invoice = dict([
+            ("invoice_id", s("shared-id")),
+            ("store_id", s("shared-store")),
+        ]);
+        upsert_provenance(conn, &scope, &first, std::slice::from_ref(&invoice)).unwrap();
+        let original: String = conn
+            .query_row("SELECT id FROM btcpay_provenance_records", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        upsert_provenance(conn, &scope, &second, std::slice::from_ref(&invoice)).unwrap();
+        upsert_provenance(conn, &scope, &alias, &[invoice]).unwrap();
+        let records = rows(
+            conn,
+            "SELECT id, backend_name FROM btcpay_provenance_records ORDER BY backend_name",
+            [],
+        )
+        .unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(text(field(&records[0], "backend_name")), "alternate-key");
+        assert_eq!(text(field(&records[0], "id")), original);
+        assert_eq!(text(field(&records[1], "backend_name")), "second");
+    }
+}
+
 fn field<'a>(v: &'a Value, key: &str) -> &'a Value {
     get(v, key).unwrap_or(&NULL)
 }
@@ -102,7 +161,6 @@ fn sql_opt(v: Option<String>) -> Option<String> {
 }
 
 struct Record<'a> {
-    backend: &'a str,
     store_id: &'a Value,
     payment_method_id: Option<String>,
     record_type: &'a str,
@@ -130,19 +188,48 @@ struct Record<'a> {
     raw_json: String,
 }
 
+/// Current connection and other saved keys for the same BTCPay endpoint.
+pub struct Origin<'a> {
+    pub backend: &'a str,
+    pub aliases_json: &'a str,
+    pub server_identity: &'a str,
+}
+
 /// `_upsert_record`: `true` when inserted.
-fn upsert_record(conn: &Connection, scope: &Scope<'_>, r: Record<'_>, now: &str) -> Result<bool> {
+fn upsert_record(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    origin: &Origin<'_>,
+    r: Record<'_>,
+    now: &str,
+) -> Result<bool> {
     let store = text(r.store_id);
+    // Keep published keys and audited links for existing evidence. A second
+    // instance reporting the same provider IDs gets its own stable key.
+    let fingerprint: String = Sha256::digest(origin.server_identity.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let qualified = format!("{}:instance:{fingerprint}", r.stable_key);
     let existing = rows(
         conn,
-        "SELECT id FROM btcpay_provenance_records WHERE profile_id = ? AND stable_key = ?",
-        params![scope.profile_id, r.stable_key],
+        "SELECT id FROM btcpay_provenance_records
+         WHERE profile_id = ?1 AND store_id = ?2 AND stable_key IN (?3, ?4)
+           AND backend_name COLLATE NOCASE IN (SELECT value FROM json_each(?5))
+         ORDER BY stable_key = ?3 DESC LIMIT 1",
+        params![
+            scope.profile_id,
+            store,
+            qualified,
+            r.stable_key,
+            origin.aliases_json
+        ],
     )?;
     if let Some(row) = existing.first() {
         conn.execute(
             "UPDATE btcpay_provenance_records SET backend_name = ?, store_id = ?, payment_method_id = ?, record_type = ?, invoice_id = ?, payment_id = ?, order_id = ?, status = ?, occurred_at = ?, asset = ?, amount = ?, txid = ?, payment_hash = ?, destination = ?, payment_request_id = ?, origin_kind = ?, origin_app_id = ?, origin_label = ?, origin_url = ?, origin_source = ?, fiat_currency = ?, fiat_value_exact = ?, fiat_rate_exact = ?, pricing_timestamp = ?, raw_json = ?, updated_at = ? WHERE id = ?",
             params![
-                r.backend, store, r.payment_method_id, r.record_type, r.invoice_id, r.payment_id,
+                origin.backend, store, r.payment_method_id, r.record_type, r.invoice_id, r.payment_id,
                 r.order_id, r.status, r.occurred_at, r.asset, r.amount, r.txid, r.payment_hash,
                 r.destination, r.payment_request_id, r.origin_kind, r.origin_app_id,
                 r.origin_label, r.origin_url, r.origin_source, r.fiat_currency,
@@ -153,12 +240,20 @@ fn upsert_record(conn: &Connection, scope: &Scope<'_>, r: Record<'_>, now: &str)
         .map_err(error)?;
         return Ok(false);
     }
+    let occupied: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM btcpay_provenance_records WHERE profile_id=? AND stable_key=?)",
+            params![scope.profile_id, r.stable_key],
+            |row| row.get(0),
+        )
+        .map_err(error)?;
+    let stable_key = if occupied { &qualified } else { &r.stable_key };
     let id = uuid(conn)?;
     conn.execute(
         "INSERT INTO btcpay_provenance_records(id, workspace_id, profile_id, backend_name, store_id, payment_method_id, record_type, stable_key, invoice_id, payment_id, order_id, status, occurred_at, asset, amount, txid, payment_hash, destination, payment_request_id, origin_kind, origin_app_id, origin_label, origin_url, origin_source, fiat_currency, fiat_value_exact, fiat_rate_exact, pricing_timestamp, raw_json, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
-            id, scope.workspace_id, scope.profile_id, r.backend, store, r.payment_method_id,
-            r.record_type, r.stable_key, r.invoice_id, r.payment_id, r.order_id, r.status,
+            id, scope.workspace_id, scope.profile_id, origin.backend, store, r.payment_method_id,
+            r.record_type, stable_key, r.invoice_id, r.payment_id, r.order_id, r.status,
             r.occurred_at, r.asset, r.amount, r.txid, r.payment_hash, r.destination,
             r.payment_request_id, r.origin_kind, r.origin_app_id, r.origin_label, r.origin_url,
             r.origin_source, r.fiat_currency, r.fiat_value_exact, r.fiat_rate_exact,
@@ -192,7 +287,7 @@ fn stable_payment_id(payment: &Value) -> Result<String> {
 pub fn upsert_provenance(
     conn: &Connection,
     scope: &Scope<'_>,
-    backend: &str,
+    origin: &Origin<'_>,
     invoices: &[Value],
 ) -> Result<Value> {
     let (mut inserted, mut updated) = (0, 0);
@@ -209,8 +304,8 @@ pub fn upsert_provenance(
         let was_insert = upsert_record(
             conn,
             scope,
+            origin,
             Record {
-                backend,
                 store_id: store,
                 payment_method_id: None,
                 record_type: "invoice",
@@ -287,8 +382,8 @@ pub fn upsert_provenance(
             let was_insert = upsert_record(
                 conn,
                 scope,
+                origin,
                 Record {
-                    backend,
                     store_id: store,
                     payment_method_id: opt_text(method),
                     record_type: "payment",
@@ -338,7 +433,7 @@ pub fn upsert_provenance(
 pub fn upsert_payouts(
     conn: &Connection,
     scope: &Scope<'_>,
-    backend: &str,
+    origin: &Origin<'_>,
     payouts: &[Value],
 ) -> Result<Value> {
     let (mut inserted, mut updated) = (0, 0);
@@ -351,8 +446,8 @@ pub fn upsert_payouts(
         let was_insert = upsert_record(
             conn,
             scope,
+            origin,
             Record {
-                backend,
                 store_id: store,
                 payment_method_id: opt_text(field(payout, "payout_method_id")),
                 record_type: "payout",

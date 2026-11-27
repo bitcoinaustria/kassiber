@@ -44,6 +44,26 @@
       "CREATE TABLE bank_statement_lines (\n    id TEXT PRIMARY KEY,\n    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n    import_id TEXT NOT NULL REFERENCES bank_statement_imports(id) ON DELETE CASCADE,\n    document_id TEXT NOT NULL REFERENCES external_documents(id) ON DELETE CASCADE,\n    line_index INTEGER NOT NULL,\n    booking_date TEXT NOT NULL,\n    value_date TEXT,\n    amount TEXT NOT NULL,\n    currency TEXT NOT NULL,\n    counterparty_name TEXT,\n    counterparty_iban_masked TEXT,\n    remittance TEXT,\n    bank_reference TEXT,\n    end_to_end_id TEXT,\n    account_id TEXT NOT NULL,\n    account_masked TEXT,\n    dedupe_group TEXT NOT NULL,\n    dedupe_key TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    UNIQUE (profile_id, dedupe_key)\n)"
     ]
   ],
+  "btcpay_bark_activity": [
+    [
+      "index",
+      "idx_btcpay_bark_activity_wallet_date",
+      "btcpay_bark_activity",
+      "CREATE INDEX idx_btcpay_bark_activity_wallet_date ON btcpay_bark_activity(wallet_id, occurred_at DESC, row_id)"
+    ],
+    [
+      "table",
+      "btcpay_bark_activity",
+      "btcpay_bark_activity",
+      "CREATE TABLE btcpay_bark_activity (\n    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,\n    source_key TEXT NOT NULL,\n    row_id TEXT NOT NULL,\n    kind TEXT NOT NULL,\n    occurred_at TEXT NOT NULL,\n    amount_msat INTEGER NOT NULL,\n    fee_msat INTEGER,\n    has_txid INTEGER NOT NULL CHECK(has_txid IN (0, 1)),\n    comment TEXT,\n    labels_json TEXT NOT NULL,\n    PRIMARY KEY(wallet_id, source_key, row_id)\n)"
+    ],
+    [
+      "table",
+      "btcpay_bark_history_imports",
+      "btcpay_bark_history_imports",
+      "CREATE TABLE btcpay_bark_history_imports (\n    wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,\n    source_key TEXT NOT NULL,\n    PRIMARY KEY(wallet_id, source_key)\n)"
+    ]
+  ],
   "provider_trade_holds": [
     [
       "index",

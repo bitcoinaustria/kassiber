@@ -960,6 +960,7 @@ fn review(
             reconciliation_state: Value::Null,
             commercial_kind: kind.map_or(Value::Null, s),
             notes: Value::Null,
+            verified_value: false,
         }),
     )
 }
@@ -986,6 +987,141 @@ fn version(conn: &Connection) -> i64 {
         |r| r.get(0),
     )
     .unwrap()
+}
+
+#[test]
+fn settled_invoice_links_without_review_and_rechecks_conflicting_evidence() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    let hash = "ab".repeat(32);
+    record(conn, "invoice", "invoice", None, None, None, "order");
+    record(
+        conn,
+        "payment",
+        "payment",
+        None,
+        Some(&hash),
+        Some(1001),
+        "order",
+    );
+    conn.execute(
+        "UPDATE btcpay_provenance_records SET status = 'Settled'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE transactions SET direction='inbound', amount=1001, fee=0,
+                  kind='deposit', payment_hash=? WHERE id='tx'",
+        [&hash],
+    )
+    .unwrap();
+    suggest(conn);
+    let id = link_for(conn, "payment");
+    let read_queue = || {
+        commercial::execute(
+            conn,
+            &scope(),
+            &commercial::Command::NeedsReview { limit: 10 },
+        )
+        .unwrap()
+    };
+    let status = || text(&list(&v(&context(conn), "links"))[0], "match_status").to_owned();
+    assert_eq!(status(), "verified");
+    assert!(list(&read_queue()).is_empty());
+    assert_eq!(tx_text(conn, "kind").as_deref(), Some("deposit"));
+    assert_eq!(tx_text(conn, "fiat_value_exact"), None);
+    assert_eq!(version(conn), 0);
+
+    conn.execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at)
+        VALUES('sender','w','p','Sender','lnd','2025');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,payment_hash,asset,direction,amount,occurred_at,kind,created_at)
+        SELECT 'send',workspace_id,profile_id,'sender','send','sent',payment_hash,asset,'outbound',amount,occurred_at,'withdrawal',created_at
+        FROM transactions WHERE id='tx';").unwrap();
+    assert_eq!(status(), "own_wallet");
+    assert_eq!(text(&list(&read_queue())[0], "match_status"), "own_wallet");
+    assert_eq!(text(&list(&read_queue())[0], "transaction_id"), "tx");
+    let use_value = || {
+        commercial::execute(
+            conn,
+            &scope(),
+            &commercial::Command::Review(commercial::Review {
+                link: id.clone(),
+                state: s("reviewed"),
+                reconciliation_state: Value::Null,
+                commercial_kind: s("none"),
+                notes: Value::Null,
+                verified_value: true,
+            }),
+        )
+    };
+    assert_eq!(use_value().unwrap_err().code, "conflict");
+    assert_eq!(version(conn), 0);
+
+    conn.execute("UPDATE transactions SET excluded=1 WHERE id='send'", [])
+        .unwrap();
+    assert_eq!(status(), "verified");
+    use_value().unwrap();
+    assert_eq!(tx_text(conn, "fiat_value_exact").as_deref(), Some("12.00"));
+    assert_eq!(tx_text(conn, "kind").as_deref(), Some("deposit"));
+
+    conn.execute(
+        "UPDATE transactions SET fiat_value_exact='9.00', fiat_price_source='manual',
+                  pricing_source_kind='manual_override' WHERE id='tx'",
+        [],
+    )
+    .unwrap();
+    review(conn, &id, "suggested", None).unwrap();
+    assert_eq!(status(), "reopened");
+    assert_eq!(tx_text(conn, "fiat_value_exact").as_deref(), Some("9.00"));
+    review(conn, &id, "rejected", None).unwrap();
+    assert_eq!(v(&suggest(conn), "created"), Value::Int(0.into()));
+    assert!(list(&v(&context(conn), "links")).is_empty());
+    assert!(list(&read_queue()).is_empty());
+}
+
+#[test]
+fn an_exact_refund_links_to_its_invoice_and_an_ordinary_payout_needs_review() {
+    let (_dir, book) = book();
+    let conn = book.connection();
+    let hash = "cd".repeat(32);
+    record(conn, "invoice", "invoice", None, None, None, "invoice");
+    record(
+        conn,
+        "refund",
+        "payout",
+        Some("chain"),
+        Some(&hash),
+        Some(1001),
+        "invoice",
+    );
+    conn.execute(
+        "UPDATE btcpay_provenance_records SET status='Settled' WHERE id='invoice'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE btcpay_provenance_records SET origin_kind='refund' WHERE id='refund'",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE transactions SET payment_hash=? WHERE id='tx'",
+        [&hash],
+    )
+    .unwrap();
+    suggest(conn);
+    let status = || get(&list(&v(&context(conn), "links"))[0], "match_status").cloned();
+    assert_eq!(status(), Some(s("verified")));
+    assert_eq!(tx_text(conn, "kind").as_deref(), Some("withdrawal"));
+
+    conn.execute(
+        "UPDATE btcpay_provenance_records SET origin_kind='store_payout' WHERE id='refund'",
+        [],
+    )
+    .unwrap();
+    assert_eq!(status(), None);
+    conn.execute("UPDATE btcpay_provenance_records SET origin_kind='refund', payment_hash=NULL WHERE id='refund'", []).unwrap();
+    assert_eq!(status(), None, "a bare txid cannot verify an output");
 }
 
 #[test]

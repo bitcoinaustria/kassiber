@@ -118,6 +118,23 @@ pub fn execute(
         );
     }
     let tx = kassiber_store::write_transaction(conn).map_err(sql_error)?;
+    if kassiber_store::optional::present(&tx, kassiber_store::optional::BTCPAY_BARK_ACTIVITY)
+        .map_err(|e| AppError::new(e.code, e.message))?
+    {
+        let activities = tx.execute(
+            "DELETE FROM btcpay_bark_activity WHERE wallet_id IN (SELECT id FROM wallets WHERE profile_id=?)",
+            [&pid],
+        ).map_err(sql_error)?;
+        tx.execute(
+            "DELETE FROM btcpay_bark_history_imports WHERE wallet_id IN (SELECT id FROM wallets WHERE profile_id=?)",
+            [&pid],
+        ).map_err(sql_error)?;
+        replace(
+            &mut removed,
+            "btcpay_bark_activity",
+            Value::Int(activities.into()),
+        );
+    }
     let mut rebind = Vec::new();
     if wipe {
         for (table, n) in crate::book_reset::discard_profile(&tx, &pid)? {

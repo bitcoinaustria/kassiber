@@ -248,6 +248,13 @@ sync (which upgrades them in place) or reviewed manually. Books without
 affected processed Bark rows or retained `exchange_txid_exact` decisions are
 untouched and receive no audit row.
 
+The first sync that imports Bark wallet activity reads history once without
+relying on earlier page fingerprints. This also upgrades any returned legacy
+send that still lacks the sync commitment. The activity and its completion
+marker are written in the same transaction as the wallet import. Opening the
+book does not fetch the history. The activity tables are opt-in and older
+Rust builds cannot open books that have used them.
+
 ## Custody authoring transaction compatibility
 
 The savepoint atomicity fix changes transaction ownership, not the schema or

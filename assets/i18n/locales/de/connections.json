@@ -211,6 +211,30 @@
       "openReview": "Prüfung öffnen",
       "openPrices": "Ohne Preis anzeigen"
     },
+    "barkActivity": {
+      "title": "Letzte Bark-Aktivität",
+      "kinds": {
+        "refresh": "Ark-Refresh",
+        "ark": "Ark-Zahlung",
+        "lightning": "Lightning-Zahlung",
+        "onchain": "On-chain-Zahlung",
+        "board": "Einzahlung in Ark",
+        "offboard": "Auszahlung aus Ark",
+        "exit": "Ark-Exit"
+      },
+      "fee": "Gebühr {{amount}}",
+      "payout": "Auszahlung",
+      "refund": "Erstattung",
+      "paired": "Gepaarter Transfer",
+      "missingTxid": "BTCPay hat noch keine On-chain-Transaktions-ID geliefert.",
+      "missingSyncProvenance": "Für diesen Ausgang fehlt der Nachweis aus dem Bark-Sync.",
+      "journalPending": "Die Journale müssen noch aktualisiert werden.",
+      "noPair": "Kein gepaarter Eingang in diesem Buch.",
+      "ambiguous": "Mehrere passende Bewegungen oder Ausgänge müssen geprüft werden.",
+      "networkMismatch": "Die passenden Einträge liegen auf unterschiedlichen Netzwerken.",
+      "authority": "Für Ausgang und Eingang fehlt noch ein passender Wallet-Nachweis oder eine Prüfung.",
+      "more": "Mehr Aktivität anzeigen"
+    },
     "transactionsTable": {
       "date": "Datum",
       "type": "Typ",

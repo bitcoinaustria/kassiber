@@ -795,13 +795,26 @@
     }
   },
   "commercial": {
-    "title": "Kommerzielle Herkunft",
+    "title": "BTCPay",
     "loading": "Wird geladen…",
     "btcpayPayment": "BTCPay-Zahlung",
     "btcpayPayout": "BTCPay-Auszahlung",
     "linked": "Verknüpft",
     "invoice": "Rechnung",
     "paidInvoice": "Bezahlte Rechnung",
+    "match": {
+      "order": "Bestellung {{id}}",
+      "refund": "Erstattung",
+      "useValue": "BTCPay-Wert übernehmen",
+      "unlink": "Rechnungsverknüpfung lösen",
+      "link": "Rechnung verknüpfen",
+      "transfers": "Umbuchungen öffnen",
+      "ownWallet": "Zu dieser Rechnung passt eine ausgehende Zahlung aus einer deiner Wallets.",
+      "competing": "Mehrere Zahlungen oder Transaktionen passen. Prüfe die Duplikate.",
+      "amountDiffers": "Der BTCPay-Betrag weicht von der Wallet-Transaktion ab.",
+      "reopened": "Dieser Rechnungsabgleich wurde wieder geöffnet.",
+      "checkEvidence": "Prüfe, ob diese Rechnung zur Transaktion gehört."
+    },
     "refundedInvoice": "Erstattete Rechnung",
     "unknown": "Unbekannt",
     "paymentRequest": "Zahlungsanforderung",
@@ -825,7 +838,7 @@
       "expense": "Ausgabe",
       "refund": "Erstattung",
       "transfer": "Transfer",
-      "none": "Keine"
+      "none": "Aktuelle Art beibehalten"
     },
     "originLabel": {
       "unknown": "Unbekannt",

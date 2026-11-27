@@ -24,6 +24,8 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     let failed_run = rv.q.attention().and_then(|a| a.last_error()).is_some();
     let clear = !updating
         && !failed_run
+        && !rv.commercial_error
+        && rv.commercial.as_ref().is_some_and(Vec::is_empty)
         && app.badges.as_ref().is_some_and(|b| {
             b.quarantine_attention.or(b.quarantine).unwrap_or(0.0) == 0.0
                 && !b.journals_needs_processing
@@ -116,6 +118,9 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
     if let Some(tr) = transfers(app, cx, tk, layer) {
         sections = sections.child(tr);
     }
+    if let Some(invoices) = invoice_matches(app, tk) {
+        sections = sections.child(invoices);
+    }
     sections = sections.child(cards::section(app, cx, tk, layer));
     page = page.child(sections);
     dialogs::mount(app, tk, layer);
@@ -123,6 +128,56 @@ pub fn view(app: &App, cx: &mut Cx<App>, tk: &Tk, layer: &mut Vec<El>) -> El {
         crate::overview::add_connection::dialog(app, cx, tk, layer);
     }
     page
+}
+
+fn invoice_matches(app: &App, tk: &Tk) -> Option<El> {
+    let review = &app.review.rv;
+    let links = review.commercial.as_deref().unwrap_or_default();
+    if links.is_empty() && !review.commercial_error {
+        return None;
+    }
+    let mut section = col().w_full().gap(tk.r(0.5)).child(
+        text(t("review:inbox.invoices.title"))
+            .font(tk.tsm(600.0))
+            .color(tk.fg)
+            .role("heading")
+            .level(2),
+    );
+    if review.commercial_error {
+        section = section.child(text(t("review:inbox.invoices.unavailable")).color(tk.muted_fg));
+    }
+    for link in links {
+        let tx = s(link, "transaction_id").to_owned();
+        section = section.child(
+            surface(tk)
+                .key(format!("rv-invoice-{}", s(link, "id")))
+                .w_full()
+                .padding(tk.card_pad())
+                .gap(tk.r(0.25))
+                .child(sensitive(
+                    s(link, "invoice_id").to_owned(),
+                    tk.tsm(500.0),
+                    tk.fg,
+                    app.prefs.hide_sensitive(),
+                ))
+                .child(
+                    text(t(super::invoice_match_reason(&s(link, "match_status"))))
+                        .font(tk.txs(400.0))
+                        .color(tk.muted_fg)
+                        .wrap(),
+                )
+                .child(
+                    kit::link(
+                        tk,
+                        format!("rv-invoice-open-{tx}"),
+                        &t("review:inbox.invoices.open"),
+                        true,
+                    )
+                    .on_press(move |a: &mut App| crate::txdetail::open(a, &tx, "details")),
+                ),
+        );
+    }
+    Some(section)
 }
 fn info_toggle(a: &mut App, key: &str) {
     toggle(a, Popup::Info(key.to_owned()));

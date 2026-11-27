@@ -231,6 +231,8 @@ pub struct State {
     pub generation: u64,
     pub tab: Tab,
     pub txs: Read<Vec<Value>>,
+    pub bark_activity: Vec<Value>,
+    pub bark_activity_visible: usize,
     pub dash: Read<Value>,
     pub utxos: Read<Value>,
     pub history: Read<Value>,
@@ -416,6 +418,7 @@ impl State {
             wallet: k.wallet,
             generation: k.generation,
             txs: k.txs,
+            bark_activity: k.bark_activity,
             dash: k.dash,
             utxos: k.utxos,
             history: k.history,
@@ -440,11 +443,16 @@ impl State {
 
 fn send_reads(app: &mut App, id: &str) {
     app.send("ui.wallets.list", Value::Null, "wallets.detail.wallets");
-    app.send(
-        "ui.transactions.list",
-        json!({"wallet": id, "limit": RECENT_LIMIT}),
-        "wallets.detail.txs",
-    );
+    let mut list_args = json!({"wallet": id, "limit": RECENT_LIMIT});
+    if super::conn::find(app, id).is_some_and(|wallet| {
+        matches!(
+            wallet.payment_method_id.as_deref(),
+            Some("BTC-ARK" | "BARK" | "BARK-CHAIN")
+        )
+    }) {
+        list_args["include_wallet_activity"] = json!(true);
+    }
+    app.send("ui.transactions.list", list_args, "wallets.detail.txs");
     app.send(
         "ui.transactions.dashboard",
         json!({"wallet": id, "period": "all", "timezone": "UTC"}),
@@ -595,6 +603,14 @@ pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
             })
         }
         "wallets.detail.txs" => {
+            if s(&r.data["filters"], "wallet") == Some(d.wallet.as_str()) {
+                d.bark_activity = r
+                    .data
+                    .get("walletActivity")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+            }
             d.txs = read_of(r, |v| {
                 v.get("txs")
                     .and_then(Value::as_array)

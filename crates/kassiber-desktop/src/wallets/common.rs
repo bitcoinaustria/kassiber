@@ -32,9 +32,10 @@ pub fn asset_badge(
 ) -> El {
     let h = |s: &str| rune::color::hex(s).expect("hex");
     let asset = c.asset_label();
-    let core_ln = c.kind == "core-ln";
-    let lnd = c.kind == "lnd";
-    let lightning = core_ln || lnd || c.kind == "nwc" || c.kind == "phoenix";
+    let kind = c.display_kind();
+    let core_ln = kind == "core-ln";
+    let lnd = kind == "lnd";
+    let lightning = core_ln || lnd || kind == "nwc" || kind == "phoenix";
     let liquid = asset == "LBTC";
     let side = tk.r(if md { 2.25 } else { 2.0 });
     let (fill, border) = if core_ln {
@@ -66,7 +67,9 @@ pub fn asset_badge(
     // The web pads and zooms each asset differently (`p-0.5 scale-115`, `p-0 scale-115`,
     // core-ln `scale-150`), so its Liquid disc and Lightning hexagon outgrow the bitcoin coin;
     // every asset's artwork is the bitcoin coin's size here.
-    let bytes = if core_ln {
+    let bytes = if kind == "btcpay" {
+        logos::BTCPAY
+    } else if core_ln {
         logos::CORE_LIGHTNING
     } else if lnd {
         logos::LIGHTNING_LABS_SVG

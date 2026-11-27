@@ -1398,7 +1398,14 @@ are suggested only against outbound transactions and review as `refund`,
 invoice JSON remains backend provenance and is not exposed to the desktop
 detail panel. `suggest` creates deterministic review items from
 txid/payment-hash matches, payment-ledger rows, and document/invoice
-references. Only `review` applies authoritative `btcpay_invoice` /
+references. An exact, unique settlement-backed match for a paid invoice or
+refund appears as a linked invoice in the transaction details without an
+approval prompt. Inexact, conflicting, and reopened matches appear in Review.
+An invoice link answers what was paid. The transaction's accounting type and
+price come from their own evidence or a commercial review. Use **Use BTCPay
+value** to adopt an available source value, or **Unlink invoice** to dismiss
+the link. Sync respects that dismissal and reviews preserve manual prices.
+Only `review` applies authoritative `btcpay_invoice` /
 `btcpay_payment` pricing or a commercial kind such as `income` to the wallet
 transaction; unreviewed BTCPay file imports, wallet-history sync, and payment
 ledgers remain conservative `deposit` / `withdrawal` transport rows. Several

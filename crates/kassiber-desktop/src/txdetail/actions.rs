@@ -592,6 +592,20 @@ pub fn commercial_review(app: &mut App, link: &str, state: &str, kind: Option<&s
     if let Some(k) = kind {
         args["commercial_kind"] = json!(k);
     }
+    send_commercial_review(app, link, args);
+}
+
+pub fn use_btcpay_value(app: &mut App, link: &str) {
+    send_commercial_review(
+        app,
+        link,
+        json!({
+            "link": link, "state": "reviewed", "commercial_kind": "none", "verified_value": true
+        }),
+    );
+}
+
+fn send_commercial_review(app: &mut App, link: &str, args: Value) {
     if let Some(o) = app.detail.open.as_mut() {
         o.busy.commercial = true;
         o.commercial_error = None;

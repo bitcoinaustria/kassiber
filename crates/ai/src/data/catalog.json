@@ -60,6 +60,10 @@
       "type": "string",
       "description": "Optional wallet id or label filter."
      },
+     "include_wallet_activity": {
+      "type": "boolean",
+      "description": "Also read bounded recent Bark wallet operations, including zero-fee refreshes. Requires a wallet filter."
+     },
      "since": {
       "type": "string",
       "description": "Optional RFC3339 lower bound on occurred_at."
@@ -4842,13 +4846,16 @@
   {
    "name": "ui.btcpay.provenance.links",
    "wire_name": "ui_btcpay_provenance_links",
-   "description": "Read reviewed or suggested commercial reconciliation links.",
+   "description": "Read commercial reconciliation links. Set needs_review to list uncertain or reopened BTCPay matches and their specific reasons.",
    "parameters": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
      "state": {
       "type": "string"
+     },
+     "needs_review": {
+      "type": "boolean"
      },
      "limit": {
       "type": "integer",
@@ -4887,7 +4894,7 @@
   {
    "name": "ui.btcpay.provenance.review",
    "wire_name": "ui_btcpay_provenance_review",
-   "description": "Accept, reject, or amend one commercial reconciliation link after explicit consent.",
+   "description": "Accept, reject, or amend one commercial reconciliation link after explicit consent. Set verified_value with state reviewed and commercial_kind none to apply the value only if the current BTCPay match is verified.",
    "parameters": {
     "type": "object",
     "additionalProperties": false,
@@ -4912,6 +4919,9 @@
      },
      "commercial_kind": {
       "type": "string"
+     },
+     "verified_value": {
+      "type": "boolean"
      },
      "notes": {
       "type": "string"

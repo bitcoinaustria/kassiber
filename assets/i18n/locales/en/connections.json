@@ -211,6 +211,30 @@
       "openReview": "Open review",
       "openPrices": "Show unpriced"
     },
+    "barkActivity": {
+      "title": "Recent Bark activity",
+      "kinds": {
+        "refresh": "Ark refresh",
+        "ark": "Ark payment",
+        "lightning": "Lightning payment",
+        "onchain": "On-chain payment",
+        "board": "Board into Ark",
+        "offboard": "Offboard from Ark",
+        "exit": "Ark exit"
+      },
+      "fee": "Fee {{amount}}",
+      "payout": "Payout",
+      "refund": "Refund",
+      "paired": "Paired transfer",
+      "missingTxid": "BTCPay has not supplied an on-chain transaction ID.",
+      "missingSyncProvenance": "There is no verified Bark sync record for this send yet.",
+      "journalPending": "Waiting for journal processing.",
+      "noPair": "No paired receipt in this book.",
+      "ambiguous": "More than one matching movement or output needs review.",
+      "networkMismatch": "The matching rows are on different networks.",
+      "authority": "The send and receipt still need matching wallet evidence or review.",
+      "more": "Show more activity"
+    },
     "transactionsTable": {
       "date": "Date",
       "type": "Type",

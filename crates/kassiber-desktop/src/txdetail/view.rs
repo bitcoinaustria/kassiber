@@ -143,7 +143,7 @@ fn panel_tab(app: &App, tk: &Tk, i: usize, label: String, active: bool, preview:
     let mut name = row()
         .key(format!("txd-tab-label-{i}"))
         .h_full()
-        .min_w(0.0)
+        .shrink()
         .center_y()
         .radius(tk.r(0.25))
         .role("tab")
@@ -158,10 +158,12 @@ fn panel_tab(app: &App, tk: &Tk, i: usize, label: String, active: bool, preview:
             }
         })
         .child(
-            text(label)
+            text(label.clone())
                 .font(style)
                 .color(if active { tk.fg } else { tk.muted_fg })
-                .truncate(),
+                .shrink()
+                .truncate_middle()
+                .help_when_truncated(label),
         );
     if let Some(h) = title {
         name = name.help(h);

@@ -212,7 +212,7 @@ pub fn execute(book: &mut dyn Book, args: &Value) -> Result<Value, AppError> {
                 book,
                 "ui.btcpay.provenance.links",
                 Some(&dict([
-                    ("state", s("suggested")),
+                    ("needs_review", Value::Bool(true)),
                     ("limit", Value::from(limit)),
                 ])),
             )

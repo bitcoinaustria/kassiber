@@ -27,10 +27,13 @@ const FIXTURE: &str = include_str!("../fixtures/optional-schema.json");
 pub const BANK_STATEMENTS: &str = "bank_statements";
 /// Provider trades held for review (`provider_trade_holds`).
 pub const PROVIDER_TRADE_HOLDS: &str = "provider_trade_holds";
+/// Imported Bark wallet operations and source labels.
+pub const BTCPAY_BARK_ACTIVITY: &str = "btcpay_bark_activity";
 /// Every group and the table whose presence marks it started.
 const GROUPS: &[(&str, &str)] = &[
     (BANK_STATEMENTS, "bank_statement_lines"),
     (PROVIDER_TRADE_HOLDS, "provider_trade_holds"),
+    (BTCPAY_BARK_ACTIVITY, "btcpay_bark_activity"),
 ];
 
 fn fixture() -> &'static Value {

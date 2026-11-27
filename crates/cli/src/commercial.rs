@@ -32,6 +32,7 @@ pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value,
                 .unwrap_or(Value::Null),
             commercial_kind: ns.get("commercial_kind").cloned().unwrap_or(Value::Null),
             notes: ns.get("notes").cloned().unwrap_or(Value::Null),
+            verified_value: false,
         }),
         _ => unreachable!("registered stored commercial command"),
     };

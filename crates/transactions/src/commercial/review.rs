@@ -35,6 +35,7 @@ pub struct Review {
     pub reconciliation_state: Value,
     pub commercial_kind: Value,
     pub notes: Value,
+    pub verified_value: bool,
 }
 
 fn validation(message: impl Into<String>) -> AppError {
@@ -234,19 +235,32 @@ fn restore(conn: &Connection, profile: &str, link: &Value) -> Result<bool> {
     }
     let tx = first(
         conn,
-        "SELECT commercial_applied_link_id FROM transactions WHERE profile_id = ? AND id = ?",
+        "SELECT commercial_applied_link_id, fiat_price_source, pricing_source_kind
+         FROM transactions WHERE profile_id = ? AND id = ?",
         params![profile, sql(&value(link, "transaction_id"))?],
     )?;
-    if tx.is_none_or(|tx| value(&tx, "commercial_applied_link_id") != value(link, "id")) {
+    let Some(tx) = tx.filter(|tx| value(tx, "commercial_applied_link_id") == value(link, "id"))
+    else {
         return Ok(false);
-    }
+    };
     let snapshot = loads(&snapshot)?;
     let updates = APPLY_COLUMNS
         .iter()
+        .filter(|column| {
+            matches!(**column, "kind" | "commercial_applied_link_id") || !manual_price(&tx)
+        })
         .map(|column| Ok((*column, snapshot_get(&snapshot, column)?)))
         .collect::<Result<Vec<_>>>()?;
     update_transaction(conn, profile, &value(link, "transaction_id"), &updates)?;
     Ok(true)
+}
+
+fn manual_price(tx: &Value) -> bool {
+    text(tx, "fiat_price_source") == "manual"
+        || matches!(
+            text(tx, "pricing_source_kind"),
+            "manual_override" | "manual_rate_cache"
+        )
 }
 
 fn origin_label(record: &Value) -> &'static str {
@@ -586,7 +600,11 @@ fn apply(
     }
     let currency = fiat_currency(&value(&record, "fiat_currency"));
     let tx_currency = value(&tx, "fiat_currency");
-    if !currency.is_empty() && truthy(&tx_currency) && s(currency.as_str()) != tx_currency {
+    if !manual_price(&tx)
+        && !currency.is_empty()
+        && truthy(&tx_currency)
+        && s(currency.as_str()) != tx_currency
+    {
         return Err(AppError::new(
             "validation",
             "BTCPay invoice currency does not match the target transaction currency",
@@ -684,7 +702,7 @@ fn apply(
         rate = exact(&s(quotient.to_string()))?.map_or(Value::Null, s);
     }
     let mut updates: Vec<(&str, Value)> = Vec::new();
-    if truthy(&fiat_value) || truthy(&rate) {
+    if !manual_price(&tx) && (truthy(&fiat_value) || truthy(&rate)) {
         let rate_exact = exact_decimal(&rate, "fiat_rate")?;
         let value_exact = exact_decimal(&fiat_value, "fiat_value")?;
         validate_derived(&value(&tx, "amount"), &rate_exact, &value_exact)?;
@@ -767,6 +785,22 @@ pub(super) fn review(conn: &Connection, scope: &Scope<'_>, request: &Review) -> 
         "link state",
         None,
     )?;
+    if request.verified_value
+        && (state != "reviewed"
+            || request.commercial_kind != s("none")
+            || !matches::transaction(conn, profile, text(&before, "transaction_id"))?
+                .iter()
+                .any(|match_row| {
+                    text(match_row, "id") == link_ref
+                        && text(match_row, "match_status") == "verified"
+                }))
+    {
+        return Err(AppError::new(
+            "conflict",
+            "The BTCPay match changed before its value could be applied",
+        )
+        .with_hint("Reopen the transaction and check its current invoice match."));
+    }
     let owner = batch_owner(conn, profile, &before)?;
     let was_reviewed = text(&before, "state") == "reviewed";
     if state == "rejected"

@@ -166,6 +166,20 @@ fn pop(value: &mut Value, key: &str) -> Option<Value> {
     Some(pairs.remove(index).1)
 }
 
+fn bark_history_checkpoint(
+    conn: &Connection,
+    wallet_id: &str,
+    source: &str,
+    mut checkpoint: Value,
+) -> Result<Value> {
+    if !bark::activity::imported(conn, wallet_id, source)? {
+        // Earlier imports discarded zero-effect operations and may also
+        // lack the current settlement proof. Revisit even unchanged pages.
+        pop(&mut checkpoint, "btcpay_pages");
+    }
+    Ok(checkpoint)
+}
+
 /// `fetch_btcpay_records` under this sync's grant: rows and page metadata.
 fn wallet_history(
     env: &Env<'_>,
@@ -289,12 +303,14 @@ pub(crate) fn sync_wallet(
         &checkpoint,
     )?;
     // The store's provenance is already written; the import stands alone.
+    let aliases = provenance::backend_aliases(&env, &name, backend["url"].as_str())?;
     nested(conn, || {
         let mut records = file_import::btcpay_rows(rows)?;
         let wallet_id = scope.wallet_id();
         let totals = ledger::payout_totals(
             conn,
             scope.profile_id,
+            &aliases,
             &methods::asset(&method).unwrap_or_else(|| "BTC".into()),
         )?;
         let backfilled = ledger::backfill_payout_fees(conn, scope.profile_id, &wallet_id, &totals)?;
@@ -400,6 +416,10 @@ fn bark_wallet(
 ) -> Result<Value> {
     let name = text(&backend["name"]);
     let store = url::from_py(store_id);
+    let aliases = provenance::backend_aliases(env, &name, backend["url"].as_str())?;
+    let conn = env.conn;
+    let wallet_id = scope.wallet_id();
+    let activity_source = bark::activity::source_key(&name, &store);
     let previous_provenance = match get(&checkpoint, "invoice_provenance") {
         Some(value @ Value::Dict(_)) => value.clone(),
         _ => dict::<&str>([]),
@@ -417,7 +437,7 @@ fn bark_wallet(
     let from = if migrated.is_some() {
         dict::<&str>([])
     } else {
-        checkpoint.clone()
+        bark_history_checkpoint(conn, &wallet_id, &activity_source, checkpoint.clone())?
     };
     let (rows, meta) = fetch::bark_wallet_rows(reads, store_id, page_size, &from, &mut |row| {
         bark::records(row, &store).map(|_| ())
@@ -444,15 +464,19 @@ fn bark_wallet(
         error.retryable = get(&provenance, "retryable").is_some_and(truthy);
         return Err(error);
     }
-    let conn = env.conn;
-    let wallet_id = scope.wallet_id();
-    bark::require_book_network(conn, scope.profile_id, &store)?;
+    bark::require_book_network(conn, scope.profile_id, &store, &aliases)?;
     // Freshness progress commits on this connection: the import stays quiet
     // inside its savepoint, as Python's does.
     nested(conn, || {
         crate::progress::silenced(|| {
-            let identities =
-                bark::assign_identities(conn, scope.profile_id, &wallet_id, &store, &mut records)?;
+            let identities = bark::assign_identities(
+                conn,
+                scope.profile_id,
+                &wallet_id,
+                &store,
+                &aliases,
+                &mut records,
+            )?;
             let mut kept = 0;
             if let Some(config) = migrated {
                 kept = bark::migrate_payment_ledger(
@@ -477,6 +501,7 @@ fn bark_wallet(
                 &wallet_id,
                 &name,
                 &store,
+                &aliases,
                 &records,
             )?;
             let import_rows =
@@ -494,6 +519,7 @@ fn bark_wallet(
                 },
                 &import_rows,
             )?;
+            bark::activity::publish(conn, &wallet_id, &activity_source, &rows)?;
             if (kept > 0 || moved > 0 || identities.rekeyed > 0)
                 && !get(&outcome, "journal_invalidated").is_some_and(truthy)
             {
@@ -672,6 +698,7 @@ fn payment_ledger(
     }
     let wallet_id = scope.wallet_id();
     let conn = env.conn;
+    let aliases = provenance::backend_aliases(&env, &name, backend["url"].as_str())?;
     nested(conn, || {
         let (count, wallets) =
             ledger::existing_tracked_elsewhere(conn, scope.profile_id, &wallet_id)?;
@@ -689,7 +716,7 @@ fn payment_ledger(
             ("wallets", Value::List(wallets.into_iter().map(s).collect())),
         ])));
         }
-        let (records, counts) = ledger::records(conn, scope.profile_id, &store, &ids)?;
+        let (records, counts) = ledger::records(conn, scope.profile_id, &store, &aliases, &ids)?;
         let (records, held) =
             ledger::split_tracked_elsewhere(conn, scope.profile_id, &wallet_id, records)?;
         let mut outcome = file_import::import_records(
@@ -1077,6 +1104,42 @@ pub fn sync_into_wallet(conn: &Connection, ctx: &Context<'_>, args: &Value) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_bark_pages_are_replayed_until_history_publication() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE wallets(id TEXT PRIMARY KEY); INSERT INTO wallets VALUES('bark');",
+        )
+        .unwrap();
+        let cached = kassiber_pytext::loads(
+            r#"{"btcpay_pages":{"0":{"rows":1}},"btcpay_pagination":{"legacy_wallet_paths":true}}"#,
+        )
+        .unwrap();
+        let before = bark_history_checkpoint(&conn, "bark", "shop", cached.clone()).unwrap();
+        assert!(get(&before, "btcpay_pages").is_none());
+        assert_eq!(
+            get(&before, "btcpay_pagination"),
+            get(&cached, "btcpay_pagination")
+        );
+
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        bark::activity::publish(&conn, "bark", "shop", &[]).unwrap();
+        conn.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(
+            bark_history_checkpoint(&conn, "bark", "shop", cached.clone()).unwrap(),
+            before
+        );
+        bark::activity::publish(&conn, "bark", "shop", &[]).unwrap();
+        assert_eq!(
+            bark_history_checkpoint(&conn, "bark", "shop", cached.clone()).unwrap(),
+            cached
+        );
+        assert_eq!(
+            bark_history_checkpoint(&conn, "bark", "other-shop", cached).unwrap(),
+            before
+        );
+    }
 
     #[test]
     fn the_bark_import_savepoint_waits_for_another_writer() {

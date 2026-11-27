@@ -1022,6 +1022,11 @@
   },
   "inbox": {
     "updating": "Updating the books…",
+    "invoices": {
+      "title": "BTCPay matches to check",
+      "unavailable": "BTCPay matches could not be loaded.",
+      "open": "Open transaction"
+    },
     "clear": {
       "title": "Nothing to review",
       "body": "Every transaction is booked and every suggested transfer is decided."

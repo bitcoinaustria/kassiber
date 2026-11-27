@@ -776,13 +776,26 @@
     }
   },
   "commercial": {
-    "title": "Commercial provenance",
+    "title": "BTCPay",
     "loading": "Loading…",
     "btcpayPayment": "BTCPay payment",
     "btcpayPayout": "BTCPay payout",
     "linked": "Linked",
     "invoice": "Invoice",
     "paidInvoice": "Paid invoice",
+    "match": {
+      "order": "Order {{id}}",
+      "refund": "Refund",
+      "useValue": "Use BTCPay value",
+      "unlink": "Unlink invoice",
+      "link": "Link invoice",
+      "transfers": "Open Transfers",
+      "ownWallet": "This invoice matches an outgoing payment from one of your wallets.",
+      "competing": "More than one payment or transaction matches. Check the duplicates.",
+      "amountDiffers": "The BTCPay amount differs from the wallet transaction.",
+      "reopened": "This invoice match was reopened.",
+      "checkEvidence": "Check whether this invoice belongs to the transaction."
+    },
     "refundedInvoice": "Refunded invoice",
     "unknown": "Unknown",
     "paymentRequest": "Payment request",
@@ -806,7 +819,7 @@
       "expense": "Expense",
       "refund": "Refund",
       "transfer": "Transfer",
-      "none": "None"
+      "none": "Keep current type"
     },
     "originLabel": {
       "unknown": "Unknown",

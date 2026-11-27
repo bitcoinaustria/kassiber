@@ -85,7 +85,18 @@ pub struct Connection {
     #[serde(deserialize_with = "nullable")]
     pub chain: String,
     pub network: Option<String>,
+    pub sync_source: Option<String>,
+    pub sync_mode: Option<String>,
     pub deprecated: bool,
+}
+
+/// Identify a BTCPay source even when its wallet kind describes a different integration layer.
+pub(crate) fn is_btcpay_source(
+    kind: &str,
+    sync_source: Option<&str>,
+    sync_mode: Option<&str>,
+) -> bool {
+    kind == "btcpay" || sync_source == Some("btcpay") || sync_mode == Some("btcpay")
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

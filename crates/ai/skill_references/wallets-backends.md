@@ -294,6 +294,13 @@ an already imported wallet), `skip`. A payment ledger only sees what passes
 through BTCPay; withdrawals made outside it need their own record, and it needs
 a key that can read payouts. A Bark store (`BTC-ARK`) with plugin 0.10 or later
 is a `wallet_source` for the read-only key: the whole Bark wallet with its fees.
+On servers advertising Bark, setup can offer this wallet for a Lightning-only
+store even with Ark checkout disabled. Refreshing an existing Lightning ledger
+alone does not add a Bark wallet. Rerun BTCPay setup to add the wallet history.
+Use `ui.transactions.list` with a wallet filter and
+`include_wallet_activity=true` to see recent final operations, including
+zero-fee refreshes. Activity does not create another booking. Attribute
+Lightning settlement per payment when a store switches backends.
 A `BTC-ARK` ledger switches to it on the next sync and keeps the payments it
 booked; a payment it cannot match stops the sync (`bark_migration_conflict`)
 with the book unchanged. Lightning payments that settle into Bark belong to

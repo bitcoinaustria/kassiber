@@ -23,6 +23,7 @@ macro_rules! web_asset {
 }
 
 pub static BITCOIN: &[u8] = web_asset!("bitcoin.svg");
+pub static BTCPAY: &[u8] = web_asset!("btcpay.svg");
 pub static LIQUID: &[u8] = web_asset!("liquid.svg");
 pub static LIGHTNING: &[u8] = web_asset!("lightning.svg");
 pub static CORE_LIGHTNING: &[u8] = web_asset!("core-lightning.svg");
@@ -83,7 +84,7 @@ const BOUNDS: &[(u64, [f32; 4])] = &[
     (0xffcbe7aa5abb999c, [0.123, 0.109, 0.711, 0.891]), // liana.svg
     (0x314b229aa67146ef, [0.205, 0.012, 0.736, 0.998]), // lightning-labs.png
     (0x85b55ee47ed75904, [0.000, 0.000, 1.000, 1.000]), // lightning-labs.svg
-    (0xce16f099b0ef0efc, [0.072, 0.000, 0.928, 1.000]), // lightning.svg
+    (0x6befc19b1af37359, [0.072, 0.000, 0.928, 1.000]), // lightning.svg
     (0x98f4082e884ed65f, [0.035, 0.035, 0.965, 0.965]), // liquid.svg
     (0x83194cfd3e83499a, [0.000, 0.006, 0.994, 1.000]), // mempool-space.svg
     (0x245c045899616a72, [0.109, 0.338, 0.875, 0.662]), // nunchuk.svg
@@ -275,6 +276,7 @@ mod tests {
     fn every_drawn_logo_is_measured() {
         let mut files: Vec<&'static [u8]> = vec![
             BITCOIN,
+            BTCPAY,
             LIQUID,
             LIGHTNING,
             CORE_LIGHTNING,

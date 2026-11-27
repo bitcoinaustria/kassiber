@@ -37,6 +37,17 @@ pub fn backend_kind(kind: &str) -> String {
     }
 }
 
+pub(crate) fn backend_aliases(
+    env: &Env<'_>,
+    name: &str,
+    server_url: Option<&str>,
+) -> Result<String> {
+    let mut names = super::setup::same_server_backends(env.backends, server_url)?;
+    names.push(name.to_owned());
+    serde_json::to_string(&names)
+        .map_err(|_| AppError::new("internal_error", "Invalid BTCPay instance names"))
+}
+
 pub struct Sync<'a> {
     /// The resolved book scope (`resolve_scope`).
     pub workspace_id: &'a str,
@@ -92,6 +103,14 @@ pub fn sync(env: &Env<'_>, request: Sync<'_>) -> Result<Value> {
         .with_hint("Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`."));
     }
     let store = url::from_py(request.store_id);
+    let server_url = backend["url"].as_str();
+    let aliases = backend_aliases(env, &name, server_url)?;
+    let server_identity = url::server_url_identity(server_url.unwrap_or_default())?;
+    let origin = records::Origin {
+        backend: &name,
+        aliases_json: &aliases,
+        server_identity: &server_identity,
+    };
     let previous = match request.checkpoint {
         value @ Value::Dict(_) => value.clone(),
         _ => dict::<&str>([]),
@@ -140,9 +159,9 @@ pub fn sync(env: &Env<'_>, request: Sync<'_>) -> Result<Value> {
         profile_id: request.profile_id,
     };
     let (mut outcome, suggestions) = atomic(env, || {
-        let mut outcome = records::upsert_provenance(env.conn, &scope, &name, &invoices)?;
+        let mut outcome = records::upsert_provenance(env.conn, &scope, &origin, &invoices)?;
         if let Some((rows, _)) = &payouts {
-            let payout_outcome = records::upsert_payouts(env.conn, &scope, &name, rows)?;
+            let payout_outcome = records::upsert_payouts(env.conn, &scope, &origin, rows)?;
             if let (Value::Dict(base), Value::Dict(extra)) = (&mut outcome, payout_outcome) {
                 base.extend(extra);
             }

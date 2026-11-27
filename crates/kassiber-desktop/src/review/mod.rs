@@ -110,11 +110,30 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 /// (`keptCrossCheck`); its file error is the component's own.
 pub fn on_leave(app: &mut App, from: &str) {
     app.review.popup = None;
+    if from == "/review" {
+        app.review.rv.commercial_ticket = None;
+    }
     if from == "/reconcile" {
         if !app.review.rc.checking && !app.review.rc.verifying {
             app.review.rc = reconcile::State::default();
         }
         app.review.tools.file_error = None;
+    }
+}
+
+pub(crate) fn refresh_commercial(app: &mut App) {
+    if app.route.path() == "/review" {
+        state::load_commercial(app);
+    }
+}
+
+pub(crate) fn invoice_match_reason(status: &str) -> &'static str {
+    match status {
+        "own_wallet" => "transactions:commercial.match.ownWallet",
+        "competing_match" => "transactions:commercial.match.competing",
+        "amount_differs" => "transactions:commercial.match.amountDiffers",
+        "reopened" => "transactions:commercial.match.reopened",
+        _ => "transactions:commercial.match.checkEvidence",
     }
 }
 

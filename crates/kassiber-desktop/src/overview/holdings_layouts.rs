@@ -69,10 +69,17 @@ fn source_link(c: &Ctx, item: &Item, body: El) -> El {
     )
 }
 
-/// `SourceIcon`: the rail's logo, a bank for an exchange or file, nothing for "Other sources".
+/// `SourceIcon`: the source or rail logo, with a bank fallback for exchanges and files.
 fn source_icon(c: &Ctx, cx: &Cx<App>, item: &Item) -> Option<El> {
     let tk = c.tk;
-    if item.rail != Rail::None {
+    if item.btcpay {
+        use crate::logos::{self, Logo};
+        let (art, slot) = logos::role::RAIL;
+        Some(
+            logos::fitted(c.app, cx, Logo::svg(logos::BTCPAY), tk.r(art), tk.r(slot))
+                .help("BTCPay Server"),
+        )
+    } else if item.rail != Rail::None {
         Some(rail_icon(c.app, cx, tk, item.rail))
     } else if item.connection_id.is_some() {
         Some(

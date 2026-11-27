@@ -15,6 +15,8 @@ use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::{params, Connection};
 use std::collections::BTreeMap;
 
+pub(crate) mod activity;
+
 pub const RAW_SOURCE: &str = "btcpay_bark_wallet";
 pub const PAYMENT_HASH_SOURCE: &str = "btcpay_bark";
 const FALLBACK_PREFIX: &str = "btcpay-bark";
@@ -282,6 +284,8 @@ pub struct Record {
     pub fee_msat: i64,
     pub payment_hash: Option<String>,
     pub transaction_hash: Option<String>,
+    onchain_send: bool,
+    destination_script: Option<bitcoin::ScriptBuf>,
     /// The record dict, without `id`/`txid` until an identity is set.
     pub record: Value,
     pub id: String,
@@ -340,6 +344,10 @@ pub fn records(row: &Value, store_id: &str) -> Result<Vec<Record>> {
     let lightning = LIGHTNING_KINDS.contains(&kind.as_str());
     let payment_hash = keys.payment_hash.clone().filter(|_| lightning);
     let transaction_hash = text(field(row, "transactionHash"));
+    let onchain_send = matches!(kind.as_str(), "send-onchain" | "offboard" | "onchain-send");
+    let destination_script = onchain_send
+        .then(|| payout_destination(field(row, "destination")))
+        .flatten();
     let comment = text(field(row, "comment"));
     let labels = field(row, "labels");
 
@@ -389,6 +397,8 @@ pub fn records(row: &Value, store_id: &str) -> Result<Vec<Record>> {
             fee_msat: fee_part,
             payment_hash: hash.clone(),
             transaction_hash: transaction_hash.clone(),
+            onchain_send,
+            destination_script: destination_script.clone(),
             id: String::new(),
             record: dict([
                 ("occurred_at", s(occurred_at.as_str())),
@@ -578,11 +588,24 @@ enum IndexKey {
     Movement(String, String),
     OutboundHash(String),
     TransactionHash(String),
+    TransactionDestination(String, bitcoin::ScriptBuf),
+}
+
+fn payout_destination(value: &Value) -> Option<bitcoin::ScriptBuf> {
+    text(value)?
+        .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+        .ok()
+        .map(|address| address.assume_checked().script_pubkey())
 }
 
 /// `_provenance_index`: provenance keys (and amounts) of the store's Bark and
 /// Lightning payments and payouts.
-fn provenance_index(conn: &Connection, profile_id: &str, store_id: &str) -> Result<Index> {
+fn provenance_index(
+    conn: &Connection,
+    profile_id: &str,
+    store_id: &str,
+    aliases: &str,
+) -> Result<Index> {
     let mut index: Index = BTreeMap::new();
     let mut add = |key: IndexKey, stable: &str, amount: Option<i64>| {
         let keys = index.entry(key).or_default();
@@ -592,13 +615,18 @@ fn provenance_index(conn: &Connection, profile_id: &str, store_id: &str) -> Resu
     };
     for row in rows(
         conn,
-        "SELECT record_type, stable_key, invoice_id, payment_id, payment_method_id, txid, payment_hash, amount FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ? AND record_type IN ('payment', 'payout') ORDER BY stable_key ASC",
-        [profile_id, store_id],
+        "SELECT record_type, stable_key, invoice_id, payment_id, payment_method_id, txid, payment_hash, amount, destination, status
+         FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ?
+           AND backend_name COLLATE NOCASE IN (SELECT value FROM json_each(?))
+           AND record_type IN ('payment', 'payout') ORDER BY stable_key ASC",
+        [profile_id, store_id, aliases],
     )? {
         let method = raw_text(&row, "payment_method_id");
-        let bark = methods::canonical(&method) == BARK_PAYMENT_METHOD_ID;
+        let canonical = methods::canonical(&method);
+        let bark = canonical == BARK_PAYMENT_METHOD_ID;
         let lightning = methods::ledger_group(&method).as_deref() == Some("lightning");
-        if !(bark || lightning) {
+        let onchain = canonical == "BTC-CHAIN";
+        if !(bark || lightning || onchain) {
             continue;
         }
         let stable = or_text(field(&row, "stable_key"));
@@ -608,13 +636,24 @@ fn provenance_index(conn: &Connection, profile_id: &str, store_id: &str) -> Resu
         };
         let payment_hash = Some(kassiber_pytext::lower(&raw_text(&row, "payment_hash"))).filter(|h| !h.is_empty());
         if or_text(field(&row, "record_type")) == "payout" {
-            if let Some(hash) = &payment_hash {
-                add(IndexKey::OutboundHash(hash.clone()), &stable, amount);
+            if !raw_text(&row, "status").eq_ignore_ascii_case("completed") {
+                continue;
             }
-            let txid = raw_text(&row, "txid");
-            if bark && !txid.is_empty() {
-                add(IndexKey::TransactionHash(kassiber_pytext::lower(&txid)), &stable, amount);
+            if let Some(hash) = payment_hash.filter(|_| bark || lightning) {
+                add(IndexKey::OutboundHash(hash), &stable, amount);
             }
+            let txid = kassiber_pytext::lower(&raw_text(&row, "txid"));
+            if is_hex64(&txid) {
+                if let Some(script) = payout_destination(field(&row, "destination")) {
+                    add(IndexKey::TransactionDestination(txid.clone(), script), &stable, amount);
+                }
+                if bark {
+                    add(IndexKey::TransactionHash(txid), &stable, amount);
+                }
+            }
+            continue;
+        }
+        if onchain {
             continue;
         }
         let mut key = if bark { payment_keys(field(&row, "payment_id")) } else { PaymentKey::None };
@@ -638,7 +677,10 @@ fn provenance_index(conn: &Connection, profile_id: &str, store_id: &str) -> Resu
 }
 
 /// `_candidates`.
-fn candidates(record: &Record, index: &Index) -> Vec<String> {
+fn candidates(record: &Record, index: &Index) -> Option<Vec<String>> {
+    if record.amount_msat <= 0 {
+        return None;
+    }
     let keys = &record.keys;
     let mut lookups = Vec::new();
     if record.direction == "inbound" {
@@ -655,39 +697,48 @@ fn candidates(record: &Record, index: &Index) -> Vec<String> {
         if let Some(hash) = &keys.payment_hash {
             lookups.push(IndexKey::OutboundHash(hash.clone()));
         }
-        if let Some(txid) = &record.transaction_hash {
-            lookups.push(IndexKey::TransactionHash(kassiber_pytext::lower(txid)));
+        if let Some(txid) = record
+            .transaction_hash
+            .as_ref()
+            .filter(|_| record.onchain_send)
+        {
+            let txid = kassiber_pytext::lower(txid);
+            if let Some(script) = &record.destination_script {
+                lookups.push(IndexKey::TransactionDestination(txid, script.clone()));
+            } else {
+                lookups.push(IndexKey::TransactionHash(txid));
+            }
         }
     }
-    let Some(found) = lookups
+    let found = lookups
         .into_iter()
-        .find_map(|lookup| index.get(&lookup).filter(|found| !found.is_empty()))
-    else {
-        return vec![];
-    };
-    // One movement can pay several payments (one per VTXO): the amount tells
-    // them apart, or none is taken.
-    if found.len() > 1 {
-        let same: Vec<&String> = found
+        .find_map(|lookup| index.get(&lookup).filter(|found| !found.is_empty()))?;
+    // A proof can cover multiple payments. A single candidate still needs
+    // the exact positive principal before it can determine the row identity.
+    Some(
+        found
             .iter()
-            .filter(|(_, amount)| amount.is_some_and(|a| a.abs() == record.amount_msat))
-            .map(|(key, _)| key)
-            .collect();
-        if same.len() == 1 {
-            return vec![same[0].clone()];
-        }
-    }
-    found.iter().map(|(key, _)| key.clone()).collect()
+            .filter(|(_, amount)| *amount == Some(record.amount_msat))
+            .map(|(key, _)| key.clone())
+            .collect(),
+    )
 }
 
 /// `bark_networks`: `main`/`test` from the Ark addresses the store's Bark
 /// payments went to.
-fn bark_networks(conn: &Connection, profile_id: &str, store_id: &str) -> Result<Vec<&'static str>> {
+fn bark_networks(
+    conn: &Connection,
+    profile_id: &str,
+    store_id: &str,
+    aliases: &str,
+) -> Result<Vec<&'static str>> {
     let mut found = std::collections::BTreeSet::new();
     for row in rows(
         conn,
-        "SELECT payment_method_id, destination FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ? AND record_type = 'payment' AND destination IS NOT NULL",
-        [profile_id, store_id],
+        "SELECT payment_method_id, destination FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ?
+           AND backend_name COLLATE NOCASE IN (SELECT value FROM json_each(?))
+           AND record_type = 'payment' AND destination IS NOT NULL",
+        [profile_id, store_id, aliases],
     )? {
         if methods::canonical(&raw_text(&row, "payment_method_id")) != BARK_PAYMENT_METHOD_ID {
             continue;
@@ -704,7 +755,12 @@ fn bark_networks(conn: &Connection, profile_id: &str, store_id: &str) -> Result<
 
 /// `require_book_network`: refuse a Bark wallet whose payments went to
 /// another network than the book's.
-pub fn require_book_network(conn: &Connection, profile_id: &str, store_id: &str) -> Result<()> {
+pub fn require_book_network(
+    conn: &Connection,
+    profile_id: &str,
+    store_id: &str,
+    aliases: &str,
+) -> Result<()> {
     let binding = super::setup::book_network(conn, profile_id)?;
     if field(&binding, "state") != &s("bound") {
         return Ok(());
@@ -715,7 +771,7 @@ pub fn require_book_network(conn: &Connection, profile_id: &str, store_id: &str)
     } else {
         "test"
     };
-    let networks = bark_networks(conn, profile_id, store_id)?;
+    let networks = bark_networks(conn, profile_id, store_id, aliases)?;
     if !networks.is_empty() && networks != [scope] {
         return Err(AppError::new(
             "book_network_mismatch",
@@ -801,28 +857,44 @@ pub fn assign_identities(
     profile_id: &str,
     wallet_id: &str,
     store_id: &str,
+    aliases: &str,
     records: &mut [Record],
 ) -> Result<Identities> {
-    let index = provenance_index(conn, profile_id, store_id)?;
+    let index = provenance_index(conn, profile_id, store_id, aliases)?;
     let mut claims: BTreeMap<String, i64> = BTreeMap::new();
     let mut wanted = Vec::with_capacity(records.len());
+    let mut counts = Identities::default();
     for record in records.iter() {
-        let found = if record.part == PART_PRINCIPAL {
-            candidates(record, &index)
-        } else {
-            vec![]
+        let Some(found) = (record.part == PART_PRINCIPAL)
+            .then(|| candidates(record, &index))
+            .flatten()
+        else {
+            wanted.push(None);
+            continue;
         };
         let key = (found.len() == 1).then(|| found[0].clone());
-        if let Some(key) = &key {
-            *claims.entry(key.clone()).or_default() += 1;
+        if key.is_none() {
+            counts.ambiguous += 1;
+        }
+        for claim in found {
+            *claims.entry(claim).or_default() += 1;
         }
         wanted.push(key);
     }
     let stored = stored_identities(conn, profile_id, wallet_id)?;
-    let mut counts = Identities::default();
+    let stored_claims: BTreeMap<_, _> = stored
+        .iter()
+        .map(|(row, record)| (record.external_id.as_str(), row))
+        .collect();
     for (record, key) in records.iter_mut().zip(wanted) {
+        let row = (record.row_id.clone(), record.part.to_owned());
         let mut key = key;
-        if key.as_ref().is_some_and(|k| claims[k] > 1) {
+        if key.as_ref().is_some_and(|k| {
+            claims[k] > 1
+                || stored_claims
+                    .get(k.as_str())
+                    .is_some_and(|prior| **prior != row)
+        }) {
             counts.ambiguous += 1;
             key = None;
         }
@@ -830,7 +902,7 @@ pub fn assign_identities(
             .clone()
             .unwrap_or_else(|| fallback_identity(store_id, &record.row_id, record.part));
         counts.linked += i64::from(key.is_some());
-        let Some(existing) = stored.get(&(record.row_id.clone(), record.part.to_owned())) else {
+        let Some(existing) = stored.get(&row) else {
             record.set_identity(&desired);
             continue;
         };
@@ -1020,8 +1092,11 @@ pub fn adopt_lightning_ledger_rows(
     wallet_id: &str,
     backend_name: &str,
     store_id: &str,
+    backend_aliases: &str,
     records: &[Record],
 ) -> Result<i64> {
+    let aliases: Vec<String> = serde_json::from_str(backend_aliases)
+        .map_err(|_| AppError::new("internal_error", "Invalid BTCPay instance aliases"))?;
     let mut moved = 0;
     for record in records {
         let Some(hash) = record
@@ -1042,7 +1117,8 @@ pub fn adopt_lightning_ledger_rows(
             let backend = config["backend"].as_str().map(|v| kassiber_pytext::lower(kassiber_pytext::strip(v))).unwrap_or_default();
             let ledger_row = raw_text(&object, "source") == ledger::RAW_SOURCE
                 && raw_text(&object, "store_id") == store_id
-                && backend == kassiber_pytext::lower(kassiber_pytext::strip(backend_name))
+                && (backend.eq_ignore_ascii_case(backend_name)
+                    || aliases.iter().any(|alias| backend.eq_ignore_ascii_case(alias)))
                 && ledger::is_ledger(&config);
             let label = or_text(field(&row, "wallet_label"));
             let mut details: Vec<(&str, Value)> = vec![
@@ -1114,6 +1190,37 @@ pub fn bark_config(config: &serde_json::Value) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn payout_attribution_requires_exact_principal_and_destination() {
+        let txid = "a".repeat(64);
+        let dst = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
+        let other = "1BitcoinEaterAddressDontSendf59kuE";
+        let mut row = serde_json::json!({
+            "id":"send","kind":"send-onchain","timestamp":1795000000,
+            "amount":"-0.00000201","fee":"0.00000001","transactionHash":txid,"destination":dst
+        });
+        let script = payout_destination(&s(dst)).unwrap();
+        let mut indexed = Index::new();
+        let key = IndexKey::TransactionDestination(txid, script);
+        indexed.insert(key.clone(), vec![("payout".to_owned(), Some(190_000))]);
+        let proof = |row: &serde_json::Value| {
+            records(&kassiber_pytext::loads(&row.to_string()).unwrap(), "S1")
+                .unwrap()
+                .remove(0)
+        };
+        assert_eq!(candidates(&proof(&row), &indexed), Some(vec![]));
+        indexed.insert(key, vec![("payout".to_owned(), Some(200_000))]);
+        assert_eq!(
+            candidates(&proof(&row), &indexed),
+            Some(vec!["payout".to_owned()])
+        );
+        row["destination"] = other.into();
+        assert_eq!(candidates(&proof(&row), &indexed), None);
+        row["destination"] = dst.into();
+        row["amount"] = "-0.00000001".into();
+        assert_eq!(candidates(&proof(&row), &indexed), None);
+    }
 
     fn vectors() -> Value {
         kassiber_pytext::loads(include_str!("../../tests/vectors/python_btcpay_bark.json")).unwrap()

@@ -107,6 +107,11 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
             record_type: get(args, "record_type").cloned().unwrap_or(Value::Null),
             limit: limit(args, 100)?,
         },
+        "ui.btcpay.provenance.links" if get(args, "needs_review") == Some(&Value::Bool(true)) => {
+            commercial::Command::NeedsReview {
+                limit: limit(args, 100)?,
+            }
+        }
         "ui.btcpay.provenance.links" => commercial::Command::Links {
             state: get(args, "state").cloned().unwrap_or(Value::Null),
             limit: limit(args, 100)?,
@@ -121,6 +126,7 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
                 reconciliation_state: field("reconciliation_state"),
                 commercial_kind: field("commercial_kind"),
                 notes: field("notes"),
+                verified_value: field("verified_value") == Value::Bool(true),
             })
         }
         _ => unreachable!("registered commercial kind"),

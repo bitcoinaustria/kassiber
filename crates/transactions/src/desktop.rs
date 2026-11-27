@@ -1,6 +1,7 @@
 //! Desktop transaction reads over persisted observations and journal projections.
 //! These reads never process journals, infer ownership or contact a provider.
 mod audit;
+mod bark_activity;
 mod dashboard;
 mod lineage;
 mod render;
@@ -689,6 +690,7 @@ fn page(conn: &Connection, scope: &Scope<'_>, kind: &str, args: &Value) -> Resul
             "quick",
             "sort",
             "order",
+            "include_wallet_activity",
         ],
     )?;
     let query = optional(args, "query")?.unwrap_or_default();
@@ -1031,7 +1033,7 @@ fn page(conn: &Connection, scope: &Scope<'_>, kind: &str, args: &Value) -> Resul
     } else {
         Value::Null
     };
-    Ok(dict([
+    let mut response = dict([
         ("txs", Value::List(output)),
         ("year", year(conn, &raw)?),
         (
@@ -1067,7 +1069,20 @@ fn page(conn: &Connection, scope: &Scope<'_>, kind: &str, args: &Value) -> Resul
         ("total", val(&count[0], "count")),
         ("nextCursor", next),
         ("hasMore", Value::Bool(more)),
-    ]))
+    ]);
+    if flag(args, &["include_wallet_activity"])? {
+        if kind != "ui.transactions.list" || wallet.is_empty() {
+            return Err(invalid(
+                "include_wallet_activity requires a wallet transaction list",
+            ));
+        }
+        set(
+            &mut response,
+            "walletActivity",
+            bark_activity::recent(conn, scope.profile_id, &wallet, current, limit.min(100))?,
+        );
+    }
+    Ok(response)
 }
 fn optional_if_absent(args: &Value, primary: &str, alias: &str) -> Result<Option<String>> {
     if get(args, primary).is_none_or(|v| *v == Value::Null) {

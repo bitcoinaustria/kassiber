@@ -468,7 +468,8 @@ wallet you already track.
   the wallet source or mapping and the others keep provenance, or all of them
   map onto the same tracked wallet.
 - Rotate a key with `backends update NAME --token-stdin`; routes reference the
-  backend name, and provenance records are keyed by store id, not by key.
+  backend name. Keys for the same server URL share the store's provenance.
+  Identical provider IDs from another instance get distinct record keys.
 
 #### Payment methods and plugins
 
@@ -516,6 +517,11 @@ standard wallet-history path (`/payment-methods/BTC-ARK/wallet/transactions`)
 to a key with `btcpay.store.canviewwallet`, which the read-only preset
 includes. Inspection asks `/payment-methods/BTC-ARK/wallet` once per store to
 tell such plugins from older ones; setup then recommends a `wallet_source`.
+If the server advertises Bark and a store enables Lightning alone, setup checks
+the same wallet endpoint. It offers the full Bark wallet when that endpoint is
+available, even with Ark checkout disabled. Rerun BTCPay setup to add this wallet
+to an existing book. The first Bark sync takes over exact Lightning ledger
+matches and keeps earlier payments from other Lightning backends in place.
 Older plugins, stores without Bark set up, and keys that cannot view the
 wallet keep a payment ledger.
 
@@ -570,6 +576,25 @@ from the start. Another wallet booking the same payment in the same direction
 (for example a node connected to the book) stops the sync with
 `bark_migration_conflict` (`booked_by_other_wallet`) until one copy is
 excluded.
+
+Changing Lightning backends. A store's `BTC-LN` setting can change without
+moving funds. Keep the existing wallet or payment ledger for its earlier
+transactions. A new Bark wallet takes only exact Bark settlements, including
+late BTCPay records that match its history. An unrelated Lightning wallet in
+the book does not affect the setup recommendation for a store. A store with
+an explicit provenance route keeps that route. Review payments without
+settlement evidence and record any actual movement of residual funds as a
+separate transfer.
+
+Recent Bark activity in the wallet view shows final operations and their
+current BTCPay labels. A zero-amount, zero-fee refresh is visible as activity.
+A paid refresh books its fee once. The wallet's transaction total, balances
+and journal inputs use only the accounting rows. The activity view also
+shows confirmed payout or refund attribution and the current transfer result
+when the book can establish them. An automatic payout match requires a
+positive exact principal. An ordinary `BTC-CHAIN` payout also needs matching
+destination evidence. Bark plugin versions that omit the destination in
+Greenfield leave those matches for commercial review.
 
 Network. No Bark field names the network; setup takes the server's on-chain
 network for the wallet, as for ledgers, and every sync checks the Ark

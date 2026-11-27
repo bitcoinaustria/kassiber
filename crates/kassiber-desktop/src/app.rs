@@ -682,6 +682,7 @@ impl App {
         self.book_generation += 1;
         self.send("ui.overview.snapshot", Value::Null, "app.overview");
         self.send("ui.review.badges", Value::Null, "app.badges");
+        crate::review::refresh_commercial(self);
         self.send("ui.freshness.status", Value::Null, "app.freshness");
         self.send("ui.profiles.snapshot", Value::Null, "app.profiles");
         crate::wallets::behind::read_behind(self);

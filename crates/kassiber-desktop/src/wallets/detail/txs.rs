@@ -320,10 +320,147 @@ pub fn panel(app: &App, tk: &Tk, c: &Conn, width: f32) -> El {
                 .child(ui::skeleton(tk, Some(width * 0.66), tk.r(2.0))),
         );
     }
-    if rows.is_empty() {
-        return empty(app, tk);
+    let transactions = if rows.is_empty() {
+        empty(app, tk)
+    } else {
+        table(app, tk, c, &rows, width)
+    };
+    if d.bark_activity.is_empty() {
+        transactions
+    } else {
+        col()
+            .w_full()
+            .gap(tk.r(0.75))
+            .child(bark_activity(app, tk))
+            .child(transactions)
     }
-    table(app, tk, c, &rows, width)
+}
+
+fn bark_activity(app: &App, tk: &Tk) -> El {
+    const PAGE: usize = 10;
+    let d = &app.wallets.detail;
+    let visible = d.bark_activity_visible.max(PAGE);
+    let hidden = app.prefs.hide_sensitive();
+    let mut card = ui::card(tk)
+        .w_full()
+        .padding(tk.r(1.0))
+        .gap(tk.r(0.5))
+        .child(
+            text(t("connections:detail.barkActivity.title"))
+                .font(tk.tsm(600.0))
+                .color(tk.fg),
+        );
+    for activity in d.bark_activity.iter().take(visible) {
+        let kind = s(activity, "kind").unwrap_or_default();
+        let kind_key = match kind {
+            "refresh" => "refresh",
+            "ark-send" | "ark-receive" => "ark",
+            "lightning-send" | "lightning-receive" => "lightning",
+            "send-onchain" | "onchain-send" | "onchain-receive" | "onchain-internal" => "onchain",
+            "board" => "board",
+            "offboard" => "offboard",
+            _ => "exit",
+        };
+        let description = s(activity, "comment").filter(|value| !value.is_empty());
+        let labels = activity["labels_json"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join(" · ");
+        let amount = activity["amount_msat"].as_i64().unwrap_or_default();
+        let fee = activity["fee_msat"].as_i64();
+        let status = match s(activity, "transfer_status") {
+            Some("paired") => Some("paired"),
+            Some("missing_txid") => Some("missingTxid"),
+            Some("missing_sync_provenance") => Some("missingSyncProvenance"),
+            Some("journal_pending") => Some("journalPending"),
+            Some("no_pair") if s(activity, "payout_kind").is_none() => Some("noPair"),
+            Some("owned_fanout_unresolved" | "custody_quantity_unresolved") => Some("ambiguous"),
+            Some("transfer_network_mismatch") => Some("networkMismatch"),
+            Some("recorded_transfer_authority_conflict" | "transfer_pair_dependency_blocked") => {
+                Some("authority")
+            }
+            _ => None,
+        };
+        let purpose = match s(activity, "payout_kind") {
+            Some("refund") => Some("refund"),
+            Some("store_payout" | "pull_payment") => Some("payout"),
+            _ => None,
+        };
+        let mut detail = col().grow(1.0).w(0.0).gap(tk.r(0.125)).child(
+            text(t(&format!(
+                "connections:detail.barkActivity.kinds.{kind_key}"
+            )))
+            .font(tk.tsm(500.0))
+            .color(tk.fg),
+        );
+        for value in description
+            .into_iter()
+            .chain((!labels.is_empty()).then_some(labels.as_str()))
+        {
+            detail = detail.child(sensitive(value.to_owned(), tk.txs(400.0), tk.fg, hidden).wrap());
+        }
+        for key in purpose.into_iter().chain(status) {
+            detail = detail.child(
+                text(t(&format!("connections:detail.barkActivity.{key}")))
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg)
+                    .wrap(),
+            );
+        }
+        let mut amounts = col().gap(tk.r(0.125)).items_end().child(sensitive(
+            crate::format::signed_msat_sats(amount.into()),
+            tk.tsm(500.0),
+            tk.fg,
+            hidden,
+        ));
+        if let Some(fee) = fee.filter(|fee| *fee > 0) {
+            amounts = amounts.child(sensitive(
+                tr(
+                    "connections:detail.barkActivity.fee",
+                    &[("amount", &crate::format::signed_msat_sats(-(fee as i128)))],
+                ),
+                tk.txs(400.0),
+                tk.muted_fg,
+                hidden,
+            ));
+        }
+        card = card.child(
+            row()
+                .w_full()
+                .gap(tk.r(0.75))
+                .py(tk.r(0.25))
+                .child(
+                    text(crate::format::tx_date(
+                        s(activity, "occurred_at").unwrap_or(""),
+                        true,
+                    ))
+                    .font(tk.txs(400.0))
+                    .color(tk.muted_fg),
+                )
+                .child(detail)
+                .child(amounts),
+        );
+    }
+    if d.bark_activity.len() > visible {
+        card = card.child(
+            button(
+                tk,
+                "wd-bark-activity-more",
+                Variant::Outline,
+                Size::Sm,
+                None,
+                &t("connections:detail.barkActivity.more"),
+                true,
+            )
+            .on_press(move |app: &mut App| {
+                app.wallets.detail.bark_activity_visible = visible + PAGE
+            }),
+        );
+    }
+    card
 }
 
 fn empty(app: &App, tk: &Tk) -> El {

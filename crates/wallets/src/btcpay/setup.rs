@@ -34,7 +34,6 @@ pub fn reason(code: &str) -> Option<&'static str> {
         "configured_via_other_key" => "Already set up through another API key for this server.",
         "non_bitcoin_asset" => "Kassiber tracks Bitcoin and Liquid Bitcoin only.",
         "disabled" => "This payment method is disabled in BTCPay.",
-        "lightning_settles_elsewhere" => "A Lightning node is already connected to this book, so Kassiber keeps these invoices as provenance and links them by payment hash. Choose the payment ledger if that node is not this store's.",
         "lightning_payment_ledger" => "Kassiber cannot watch this store's Lightning node or wallet directly, so it books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_payment_ledger" => "Plugin payment method: Kassiber books BTCPay's settled payments and completed payouts as the balance.",
         "plugin_rail" => "Plugin payment method in an unknown currency; invoices are kept as provenance.",
@@ -883,7 +882,6 @@ pub fn plan(
         set(method, "actions", actions);
         let rail = text(field(method, "rail"));
         let lightning_rail = rail == RAIL_LIGHTNING || rail == RAIL_LNURL;
-        let has_lightning = matches!(&lightning, Value::List(items) if !items.is_empty());
         if lightning_rail {
             set(method, "lightning_wallets", lightning.clone());
         }
@@ -907,18 +905,21 @@ pub fn plan(
             (action, why) = ("skip", "configured_via_other_key");
         } else if !truthy(field(method, "bitcoin_asset")) {
             (action, why) = ("skip", "non_bitcoin_asset");
+        } else if bark_method && field(method, "wallet_history_available") == &Value::Bool(true) {
+            (action, why) = if compatible == Some(false) {
+                ("skip", "network_mismatch")
+            } else {
+                ("wallet_source", "import_bark_wallet_history")
+            };
         } else if get(method, "enabled").is_some_and(|v| !truthy(v)) {
             (action, why) = ("skip", "disabled");
         } else if lightning_rail {
-            (action, why) = if has_lightning {
-                ("provenance_only", "lightning_settles_elsewhere")
-            } else {
-                ("payment_ledger", "lightning_payment_ledger")
-            };
+            // A node elsewhere in the book does not identify the node this
+            // store uses today. Explicit routes above still take precedence.
+            // The ledger withholds payments already observed by exact hash.
+            (action, why) = ("payment_ledger", "lightning_payment_ledger");
         } else if bark_method && compatible == Some(false) {
             (action, why) = ("skip", "network_mismatch");
-        } else if bark_method && field(method, "wallet_history_available") == &Value::Bool(true) {
-            (action, why) = ("wallet_source", "import_bark_wallet_history");
         } else if bark_method {
             (action, why) = ("payment_ledger", "bark_payment_ledger");
         } else if rail != RAIL_ONCHAIN || !truthy(field(method, "sync_supported")) {

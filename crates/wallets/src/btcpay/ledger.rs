@@ -29,13 +29,17 @@ fn database(error: kassiber_store::rusqlite::Error) -> AppError {
 pub fn payout_totals(
     conn: &Connection,
     profile_id: &str,
+    aliases: &str,
     asset: &str,
 ) -> Result<BTreeMap<String, (i64, i64)>> {
     let mut totals: BTreeMap<String, (i64, i64)> = BTreeMap::new();
     for row in rows(
         conn,
-        "SELECT txid, amount FROM btcpay_provenance_records WHERE profile_id = ? AND record_type = 'payout' AND txid IS NOT NULL AND amount IS NOT NULL AND asset = ? AND LOWER(COALESCE(status, '')) IN ('inprogress', 'completed')",
-        [profile_id, asset],
+        "SELECT txid, amount FROM btcpay_provenance_records WHERE profile_id = ?
+           AND backend_name COLLATE NOCASE IN (SELECT value FROM json_each(?))
+           AND record_type = 'payout' AND txid IS NOT NULL AND amount IS NOT NULL AND asset = ?
+           AND LOWER(COALESCE(status, '')) IN ('inprogress', 'completed')",
+        [profile_id, aliases, asset],
     )? {
         let entry = totals
             .entry(kassiber_pytext::lower(&py_str(field(&row, "txid"))))
@@ -240,6 +244,7 @@ pub fn records(
     conn: &Connection,
     profile_id: &str,
     store_id: &str,
+    aliases: &str,
     methods_ids: &[String],
 ) -> Result<(Vec<Row>, Value)> {
     let groups: Vec<String> = methods_ids
@@ -254,16 +259,21 @@ pub fn records(
     let mut seen: Vec<String> = Vec::new();
     for row in rows(
         conn,
-        "SELECT * FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ? AND record_type IN ('payment', 'payout') AND amount IS NOT NULL AND amount > 0 AND occurred_at IS NOT NULL ORDER BY occurred_at ASC, stable_key ASC",
-        [profile_id, store_id],
+        "SELECT * FROM btcpay_provenance_records WHERE profile_id = ? AND store_id = ?
+           AND backend_name COLLATE NOCASE IN (SELECT value FROM json_each(?))
+           AND record_type IN ('payment', 'payout') AND amount > 0 AND occurred_at IS NOT NULL
+         ORDER BY occurred_at ASC, stable_key ASC",
+        [profile_id, store_id, aliases],
     )? {
         let method = py_str(field(&row, "payment_method_id"));
         let key = or_text(field(&row, "stable_key"));
-        if !methods::ledger_group(&method).is_some_and(|g| groups.contains(&g)) || seen.contains(&key)
+        if !methods::ledger_group(&method).is_some_and(|g| groups.contains(&g))
+            || seen.contains(&key)
         {
             continue;
         }
-        let status = kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(&row, "status"))));
+        let status =
+            kassiber_pytext::lower(kassiber_pytext::strip(&or_text(field(&row, "status"))));
         let payout = or_text(field(&row, "record_type")) == "payout";
         if status != if payout { "completed" } else { "settled" } {
             counts[2] += 1;
@@ -275,7 +285,10 @@ pub fn records(
             ("source", s(RAW_SOURCE)),
             ("stable_key", field(&row, "stable_key").clone()),
             ("store_id", field(&row, "store_id").clone()),
-            ("payment_method_id", field(&row, "payment_method_id").clone()),
+            (
+                "payment_method_id",
+                field(&row, "payment_method_id").clone(),
+            ),
             ("record_type", field(&row, "record_type").clone()),
             ("invoice_id", field(&row, "invoice_id").clone()),
         ]);
@@ -290,7 +303,11 @@ pub fn records(
             ("direction", s(if payout { "outbound" } else { "inbound" })),
             (
                 "asset",
-                if truthy(asset) { asset.clone() } else { s("BTC") },
+                if truthy(asset) {
+                    asset.clone()
+                } else {
+                    s("BTC")
+                },
             ),
             (
                 "amount",
@@ -304,7 +321,11 @@ pub fn records(
             ("payment_hash", hash.clone()),
             (
                 "payment_hash_source",
-                if truthy(&hash) { s("btcpay") } else { Value::Null },
+                if truthy(&hash) {
+                    s("btcpay")
+                } else {
+                    Value::Null
+                },
             ),
             ("raw_json", s(raw)),
         ]));

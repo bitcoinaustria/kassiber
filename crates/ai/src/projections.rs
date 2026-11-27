@@ -737,6 +737,27 @@ pub fn read_for_ai(
         };
     }
     match name {
+        "ui.transactions.list" if flag(arguments, "include_wallet_activity") => {
+            let mut payload = book.read(kind, arguments, "gui")?;
+            if let Some(Value::List(activity)) = get(&payload, "walletActivity") {
+                let rows = activity
+                    .iter()
+                    .map(|row| {
+                        dict([
+                            ("kind", field(row, "kind")),
+                            ("occurred_at", field(row, "occurred_at")),
+                            ("amount_msat", field(row, "amount_msat")),
+                            ("fee_msat", field(row, "fee_msat")),
+                            ("wallet_transaction_id", field(row, "transaction_id")),
+                            ("transfer_status", field(row, "transfer_status")),
+                            ("payout_kind", field(row, "payout_kind")),
+                        ])
+                    })
+                    .collect();
+                set(&mut payload, "walletActivity", Value::List(rows));
+            }
+            Ok(payload)
+        }
         "ui.reports.capital_gains" => {
             capital_gains_for_ai(book.read(kind, arguments, "gui")?, arguments)
         }

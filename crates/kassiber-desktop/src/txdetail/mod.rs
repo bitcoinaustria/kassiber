@@ -172,7 +172,7 @@ pub struct Open {
     pub revert_confirm: Option<(String, Option<String>, String)>,
     pub busy: Busy,
     pub attach_error: Option<String>,
-    pub commercial_kind: Option<String>,
+    pub commercial_kind: Option<(String, String)>,
     pub commercial_error: Option<String>,
     /// The classification picked in the acquisition card: `None` until the user picks,
     /// `Some(None)` for an explicit reset to the imported classification.

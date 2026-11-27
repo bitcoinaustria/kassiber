@@ -7091,6 +7091,106 @@ fn bark_sync_stamps_and_upgrades_provenance_while_file_import_cannot() {
     assert_eq!(parsed["transaction_hash"], json!(txid));
 }
 
+#[test]
+fn bark_activity_in_wallet_transactions_is_scoped_and_does_not_count_as_payment() {
+    let conn = fixture();
+    let source = crate::btcpay::bark::activity::source_key("bark-instance", "shop");
+    let refresh = kassiber_pytext::loads(
+        r#"{"id":"round-1","kind":"refresh","timestamp":1795000000,"amount":"0","fee":"0","labels":{"Auto-refresh":{"text":"Auto-refresh","type":"raw"}}}"#,
+    ).unwrap();
+    crate::btcpay::bark::activity::publish(&conn, "wallet", &source, &[refresh]).unwrap();
+    let query =
+        kassiber_pytext::loads(r#"{"wallet":"wallet","include_wallet_activity":true}"#).unwrap();
+    let list = |profile_id| {
+        kassiber_transactions::desktop::execute(
+            &conn,
+            &kassiber_transactions::Scope {
+                workspace_id: "ws",
+                profile_id,
+            },
+            kassiber_transactions::desktop::Projection::List,
+            Some(&query),
+            &|_, _| Ok(Py::Null),
+        )
+        .unwrap()
+    };
+    let data = list("p");
+    assert_eq!(
+        kassiber_envelope::get(&data, "txs"),
+        Some(&Py::List(vec![]))
+    );
+    let Some(Py::List(activity)) = kassiber_envelope::get(&data, "walletActivity") else {
+        panic!("missing activity");
+    };
+    assert_eq!(activity.len(), 1);
+    assert_eq!(
+        kassiber_envelope::get(&activity[0], "kind"),
+        Some(&s("refresh"))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&list("q"), "walletActivity"),
+        Some(&Py::List(vec![]))
+    );
+}
+
+#[test]
+fn store_backend_switch_preserves_payments_without_bark_settlement_evidence() {
+    let conn = fixture();
+    conn.execute_batch(r#"
+        UPDATE wallets SET config_json='{"backend":"old-key","sync_source":"btcpay","store_id":"shop","source_mode":"payments","payment_method_id":"BTC-LN"}' WHERE id='wallet';
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES
+          ('bark','ws','p','Bark','custom','{"backend":"rotated-key","sync_source":"btcpay","store_id":"shop","payment_method_id":"BTC-ARK"}','2026'),
+          ('second','ws','p','Second store','custom','{"backend":"rotated-key","sync_source":"btcpay","store_id":"second","source_mode":"payments","payment_method_id":"BTC-LN"}','2026');
+    "#).unwrap();
+    for (id, wallet, store, hash, occurred) in [
+        ("old", "wallet", "shop", "a".repeat(64), "2026-10-30"),
+        ("new", "wallet", "shop", "b".repeat(64), "2026-11-20"),
+        ("late", "wallet", "shop", "c".repeat(64), "2026-11-22"),
+        ("other", "second", "second", "d".repeat(64), "2026-11-23"),
+    ] {
+        let raw = json!({"source":"btcpay_payment_ledger","store_id":store}).to_string();
+        let external_id = format!("btcpay:{store}:invoice:invoice:payment:{id}");
+        conn.execute(
+            "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,fee,amount_includes_fee,kind,note,raw_json,payment_hash,created_at)
+             VALUES(?,'ws','p',?,?,?,?,'inbound','BTC',1000,0,0,'deposit','keep me',?,?,'2026')",
+            params![id, wallet, external_id, id, occurred, raw, hash],
+        ).unwrap();
+    }
+    let a = json!({"id":"movement","kind":"lightning-receive","timestamp":1795176000,
+        "amount":"0.00000001","fee":"0","paymentHash":"b".repeat(64)});
+    let api = kassiber_pytext::loads(&a.to_string()).unwrap();
+    let mut entries = crate::btcpay::bark::records(&api, "shop").unwrap();
+    entries[0].set_identity("btcpay:shop:invoice:invoice:payment:new");
+    assert_eq!(
+        crate::btcpay::bark::adopt_lightning_ledger_rows(
+            &conn,
+            "p",
+            "bark",
+            "rotated-key",
+            "shop",
+            r#"["old-key","rotated-key"]"#,
+            &entries,
+        )
+        .unwrap(),
+        1
+    );
+    for (id, expected) in [
+        ("old", "wallet"),
+        ("new", "bark"),
+        ("late", "wallet"),
+        ("other", "second"),
+    ] {
+        let row: (String, String) = conn
+            .query_row(
+                "SELECT wallet_id, note FROM transactions WHERE id=?",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(row, (expected.to_owned(), "keep me".to_owned()));
+    }
+}
+
 #[rustfmt::skip]
 mod bitcoinde_csv;
 pub(super) use bitcoinde_csv::{import_bitcoinde, BITCOINDE_CSV};

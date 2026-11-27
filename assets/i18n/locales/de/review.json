@@ -1021,6 +1021,11 @@
     "actionSelected": "Ausgewählt"
   },
   "inbox": {
+    "invoices": {
+      "title": "BTCPay-Abgleiche prüfen",
+      "unavailable": "Die BTCPay-Abgleiche konnten nicht geladen werden.",
+      "open": "Transaktion öffnen"
+    },
     "updating": "Bücher werden aktualisiert…",
     "clear": {
       "title": "Nichts zu prüfen",
