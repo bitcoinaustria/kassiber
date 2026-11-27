@@ -194,8 +194,8 @@ impl HttpRequest {
             options,
             None,
             &|| Ok(()),
-            |connection, method, upgrade, limit| {
-                let (response, _) = receive(connection, method, upgrade, limit, false)?;
+            |connection, method, upgrade, limit, _| {
+                let (response, _) = receive(connection, method, upgrade, limit, false, false)?;
                 let location = response.header("location").map(str::to_owned);
                 Ok((response.status, location, response, None))
             },
@@ -237,8 +237,9 @@ impl HttpRequest {
             options,
             active_pool,
             check,
-            |connection, method, upgrade, limit| {
-                let (response, reusable) = receive(connection, method, upgrade, limit, use_pool)?;
+            |connection, method, upgrade, limit, reused| {
+                let (response, reusable) =
+                    receive(connection, method, upgrade, limit, use_pool, reused)?;
                 let location = response.header("location").map(str::to_owned);
                 Ok((response.status, location, response, reusable))
             },
@@ -263,7 +264,7 @@ impl HttpRequest {
             options,
             None,
             &|| Ok(()),
-            |connection, method, _, limit| {
+            |connection, method, _, limit, _| {
                 let mut stream = HttpStream::receive(connection, method, limit)?;
                 let location = stream.header("location").map(str::to_owned);
                 if matches!(stream.status, 301 | 302 | 303 | 307 | 308) && location.is_some() {
@@ -295,6 +296,7 @@ impl HttpRequest {
             &str,
             bool,
             usize,
+            bool,
         ) -> Result<(u16, Option<String>, T, Option<Connection>), Error>,
     ) -> Result<T, Error> {
         route.check()?;
@@ -380,6 +382,7 @@ impl HttpRequest {
                     &self.method,
                     self.upgrade,
                     options.max_response_bytes.min(MAX_RESPONSE_BYTES),
+                    reused,
                 ) {
                     Ok(done) => {
                         wire.fill(0);
@@ -815,7 +818,7 @@ impl HttpStream {
         limit: usize,
     ) -> Result<Self, Error> {
         let mut reader = BufReader::with_capacity(IO_BUFFER_BYTES, reader);
-        let (_, status, reason, headers) = read_head(&mut reader)?;
+        let (_, status, reason, headers) = read_head(&mut reader, false)?;
         check_content_encoding(&headers)?;
         if status == 101 {
             return Err(Error::HttpInvalid);
@@ -1179,9 +1182,10 @@ fn receive(
     upgrade: bool,
     limit: usize,
     keep_alive: bool,
+    reused: bool,
 ) -> Result<(HttpResponse, Option<Connection>), Error> {
     let mut reader = BufReader::with_capacity(IO_BUFFER_BYTES, connection);
-    let (minor, status, reason, headers) = read_head(&mut reader)?;
+    let (minor, status, reason, headers) = read_head(&mut reader, reused)?;
     let mut response = HttpResponse {
         status,
         reason,
@@ -1218,7 +1222,7 @@ fn receive(
     Ok((response, reusable))
 }
 
-fn read_head(reader: &mut impl BufRead) -> Result<(u8, u16, String, Headers), Error> {
+fn read_head(reader: &mut impl BufRead, reused: bool) -> Result<(u8, u16, String, Headers), Error> {
     let mut total = 0;
     for informational in 0..=MAX_INFORMATIONAL {
         let mut head = Vec::new();
@@ -1227,7 +1231,7 @@ fn read_head(reader: &mut impl BufRead) -> Result<(u8, u16, String, Headers), Er
             let line = read_line_eof(
                 reader,
                 MAX_HEADER_BYTES.saturating_sub(total),
-                informational == 0 && first_line,
+                reused && informational == 0 && first_line,
             )?;
             first_line = false;
             total += line.len();
@@ -1459,10 +1463,13 @@ mod tests {
                 .header(name, value)
                 .is_err());
         }
-        assert!(read_head(&mut Cursor::new(format!(
-            "HTTP/1.1 200 OK\r\nX: {}\r\n\r\n",
-            "x".repeat(MAX_HEADER_BYTES)
-        )))
+        assert!(read_head(
+            &mut Cursor::new(format!(
+                "HTTP/1.1 200 OK\r\nX: {}\r\n\r\n",
+                "x".repeat(MAX_HEADER_BYTES)
+            )),
+            false,
+        )
         .is_err());
     }
     #[test]
@@ -1842,7 +1849,7 @@ mod tests {
             )
         };
         assert_eq!(send("GET").unwrap().status, 200);
-        assert!(send("POST").is_err());
+        assert!(matches!(send("POST"), Err(Error::HttpInvalid)));
         assert_eq!(send("GET").unwrap().status, 200);
         server.join().unwrap();
     }
