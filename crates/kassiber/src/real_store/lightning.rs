@@ -39,8 +39,8 @@ pub(super) const COMMANDS: &[&str] = &[
 ];
 
 enum Client {
-    Cln(ClnReportClient),
-    Lnd(LndReportClient),
+    Cln(Box<ClnReportClient>),
+    Lnd(Box<LndReportClient>),
 }
 
 impl Client {
@@ -180,8 +180,13 @@ impl<'a> Prepared<'a> {
         let raw = serde_json::from_str(&raw)
             .map_err(|_| AppError::new("config_error", "Invalid backend configuration"))?;
         let client = match connection.kind.as_str() {
-            "coreln" => Client::Cln(ClnReportClient::new(&raw, gate.clone(), action)?),
-            _ => Client::Lnd(LndReportClient::new(&raw, gate.clone(), version, action)?),
+            "coreln" => Client::Cln(Box::new(ClnReportClient::new(&raw, gate.clone(), action)?)),
+            _ => Client::Lnd(Box::new(LndReportClient::new(
+                &raw,
+                gate.clone(),
+                version,
+                action,
+            )?)),
         };
         Ok(Self {
             command,
@@ -394,8 +399,13 @@ pub(super) fn backend_test(
             export_file: None,
         };
         let client = match kind.as_str() {
-            "coreln" => Client::Cln(ClnReportClient::new(&raw, gate.clone(), action)?),
-            _ => Client::Lnd(LndReportClient::new(&raw, gate.clone(), version, action)?),
+            "coreln" => Client::Cln(Box::new(ClnReportClient::new(&raw, gate.clone(), action)?)),
+            _ => Client::Lnd(Box::new(LndReportClient::new(
+                &raw,
+                gate.clone(),
+                version,
+                action,
+            )?)),
         };
         let grant = Grant(Consent::explicit_trigger(client.request()));
         let deadline = Instant::now() + Duration::from_secs(300);

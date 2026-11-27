@@ -63,7 +63,7 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(handler._call("blockchain.transaction.get", ["txid"]), "raw-txid")
         self.assertEqual(handler._call("blockchain.block.header", [41]), "header-41")
 
-    def test_esplora_scripthash_preserves_electrum_index_order(self) -> None:
+    def test_esplora_scripthash_converts_digest_order_to_electrum_index_order(self) -> None:
         captured: list[object] = []
 
         class CapturingHandler(backend_stack.ApiHandler):
@@ -79,9 +79,36 @@ class RegtestBackendStackTest(unittest.TestCase):
             def _error(self, code, message) -> None:
                 raise AssertionError(f"unexpected error {code}: {message}")
 
-        CapturingHandler()._scripthash("/api/scripthash/deadbeef")
+        script = "0014" + "11" * 20
+        handler = CapturingHandler()
+        handler._scripthash(f"/api/scripthash/{backend_stack.esplora_scripthash(script)}")
+        handler._scripthash(f"/api/scripthash/{backend_stack.electrum_scripthash(script)}")
 
-        self.assertEqual(captured, [{"seen": "deadbeef"}])
+        self.assertEqual(captured, [
+            {"seen": backend_stack.electrum_scripthash(script)},
+            {"seen": backend_stack.esplora_scripthash(script)},
+        ])
+
+    def test_esplora_scripthash_confirmed_history_uses_the_cursor(self) -> None:
+        captured = []
+        forward = backend_stack.esplora_scripthash("51")
+        electrum = backend_stack.electrum_scripthash("51")
+        ids = [f"{i:064x}" for i in range(30)]
+
+        def history(scripthash, *, mempool):
+            self.assertFalse(mempool)
+            return [{"tx_hash": txid} for txid in ids] if scripthash == electrum else []
+
+        handler = object.__new__(backend_stack.ApiHandler)
+        handler.server = SimpleNamespace(index=SimpleNamespace(
+            history=history, esplora_tx=lambda txid: txid,
+        ))
+        handler._json = captured.append
+        path = f"/api/scripthash/{forward}/txs/chain"
+        handler._scripthash(path)
+        handler._scripthash(f"{path}/{captured[0][-1]}")
+        handler._scripthash(f"/api/scripthash/{electrum}/txs/chain")
+        self.assertEqual(captured, [ids[5:][::-1], ids[:5][::-1], []])
 
     def test_esplora_address_routes_resolve_script_through_chain_rpc(self) -> None:
         captured: list[object] = []
@@ -238,9 +265,7 @@ class RegtestBackendStackTest(unittest.TestCase):
 
         index = backend_stack.BitcoinIndex(FakeRpc())
         electrum_rows = index.utxos(backend_stack.electrum_scripthash(script_hex))
-        esplora_rows = index.utxos(backend_stack.esplora_scripthash(script_hex))
-
-        self.assertEqual(electrum_rows, esplora_rows)
+        self.assertEqual(index.utxos(backend_stack.esplora_scripthash(script_hex)), [])
         self.assertEqual(len(electrum_rows), 2)
         self.assertEqual(electrum_rows[1]["tx_hash"], "tx-1")
         self.assertEqual(electrum_rows[1]["tx_pos"], 0)
@@ -248,7 +273,7 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(electrum_rows[1]["txid"], "tx-1")
         self.assertEqual(electrum_rows[1]["vout"], 0)
 
-    def test_index_history_includes_electrum_and_esplora_keys(self) -> None:
+    def test_index_history_uses_electrum_keys(self) -> None:
         script_hex = "0014" + "11" * 20
         index = backend_stack.BitcoinIndex(SimpleNamespace())
         history: dict[str, list[dict[str, object]]] = {}
@@ -271,8 +296,7 @@ class RegtestBackendStackTest(unittest.TestCase):
         )
 
         electrum_rows = history[backend_stack.electrum_scripthash(script_hex)]
-        esplora_rows = history[backend_stack.esplora_scripthash(script_hex)]
-        self.assertEqual(electrum_rows, esplora_rows)
+        self.assertNotIn(backend_stack.esplora_scripthash(script_hex), history)
         self.assertEqual(electrum_rows, [{"tx_hash": "funding", "height": 42}])
 
     def test_index_history_includes_no_change_spend_via_prevout_script(self) -> None:

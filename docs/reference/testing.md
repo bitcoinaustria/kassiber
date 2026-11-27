@@ -218,6 +218,9 @@ seed, test clock and reported-version hooks.
 - `KASSIBER_TEST_NET_TAPE=record:<file>`, `replay:<file>` or
   `replay-strict:<file>` records a process's connections as a plaintext tape
   or serves them from one without opening a socket (`crates/net/src/tape.rs`).
+  New recordings carry a wire-version header. Recording and replay both use
+  separate HTTP connections and serial wallet waves so the recorded request
+  order is reproducible. Unversioned tapes retain their historical wire format.
   A strict replay notes every request the recording never answered in
   `<file>.misses`.
 - `KASSIBER_TEST_SQLITE_SEED` seeds SQLite's id generator, so random row ids

@@ -5,9 +5,43 @@ use elements_miniscript::{self as em, elements};
 use kassiber_envelope::{dict, s, AppError};
 use miniscript::descriptor::DescriptorSecretKey;
 use miniscript::{Descriptor, DescriptorPublicKey, ForEachKey};
+use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::{LazyLock, Mutex, OnceLock};
+
+static BTC_SECP_VERIFY: LazyLock<bitcoin::secp256k1::Secp256k1<bitcoin::secp256k1::VerifyOnly>> =
+    LazyLock::new(bitcoin::secp256k1::Secp256k1::verification_only);
+static ELEMENTS_SECP_ALL: LazyLock<
+    elements::secp256k1_zkp::Secp256k1<elements::secp256k1_zkp::All>,
+> = LazyLock::new(elements::secp256k1_zkp::Secp256k1::new);
+
+const DERIVATION_CACHE_MAX_TARGETS: usize = 200_000;
+
+#[derive(Default)]
+struct DerivationCache {
+    entries: HashMap<(String, u32, String), Vec<Value>>,
+    total_targets: usize,
+}
+
+static DERIVATION_CACHE: OnceLock<Mutex<DerivationCache>> = OnceLock::new();
+
+/// Drop all cached public derived descriptor targets (called when locking or
+/// switching books). Cache holds only public addresses, scripts, and paths.
+pub fn clear_derivation_cache() {
+    if let Some(cache) = DERIVATION_CACHE.get() {
+        let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+        guard.entries.clear();
+        guard.total_targets = 0;
+    }
+}
+
+pub(crate) fn elements_secp(
+) -> &'static elements::secp256k1_zkp::Secp256k1<elements::secp256k1_zkp::All> {
+    &ELEMENTS_SECP_ALL
+}
 
 mod view;
 use view::ViewKey;
@@ -138,7 +172,9 @@ pub fn normalize_descriptor_text(chain: &str, input: &str) -> Result<String> {
     ] {
         result = result.replace(a, b);
     }
-    let pattern = regex::Regex::new(r"slip77\(([0-9a-fA-F]{64})\)").expect("constant regex");
+    static SLIP77_RE: OnceLock<Regex> = OnceLock::new();
+    let pattern = SLIP77_RE
+        .get_or_init(|| Regex::new(r"slip77\(([0-9a-fA-F]{64})\)").expect("constant regex"));
     let mut failure = false;
     let normalized = pattern.replace_all(&result, |m: &regex::Captures<'_>| {
         match bitcoin::hex::FromHex::from_hex(&m[1])
@@ -328,10 +364,13 @@ impl Parsed {
             )));
         }
         if chain == "bitcoin" {
-            let keys = regex::Regex::new(
-                r"\b(?:xpub|tpub|ypub|zpub|Ypub|Zpub|upub|vpub|Upub|Vpub)[1-9A-HJ-NP-Za-km-z]+",
-            )
-            .expect("constant regex");
+            static XPUB_ANY_RE: OnceLock<Regex> = OnceLock::new();
+            let keys = XPUB_ANY_RE.get_or_init(|| {
+                Regex::new(
+                    r"\b(?:xpub|tpub|ypub|zpub|Ypub|Zpub|upub|vpub|Upub|Vpub)[1-9A-HJ-NP-Za-km-z]+",
+                )
+                .expect("constant regex")
+            });
             let mut versions = vec![];
             let normalized = keys.replace_all(input, |m: &regex::Captures<'_>| {
                 let Ok(mut bytes) = bitcoin::base58::decode_check(&m[0]) else {
@@ -365,8 +404,10 @@ impl Parsed {
         match self {
             Self::Bitcoin(d, versions) => {
                 let canonical = format!("{d:#}").replace('\'', "h");
-                let keys = regex::Regex::new(r"\b(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+")
-                    .expect("constant regex");
+                static XPUB_STD_RE: OnceLock<Regex> = OnceLock::new();
+                let keys = XPUB_STD_RE.get_or_init(|| {
+                    Regex::new(r"\b(?:xpub|tpub)[1-9A-HJ-NP-Za-km-z]+").expect("constant regex")
+                });
                 let mut used = std::collections::BTreeMap::<String, usize>::new();
                 keys.replace_all(&canonical, |m: &regex::Captures<'_>| {
                     let count = used.entry(m[0].to_owned()).or_default();
@@ -460,7 +501,9 @@ impl Parsed {
 /// one and spells it `<a;b>`; only a `/` can precede it, never a taproot
 /// tree's brace.
 fn legacy_sets(input: &str) -> String {
-    let pattern = regex::Regex::new(r"/\{([^{}]*)\}").expect("constant regex");
+    static LEGACY_SETS_RE: OnceLock<Regex> = OnceLock::new();
+    let pattern =
+        LEGACY_SETS_RE.get_or_init(|| Regex::new(r"/\{([^{}]*)\}").expect("constant regex"));
     pattern
         .replace_all(input, |m: &regex::Captures<'_>| {
             format!("/<{}>", m[1].replace(',', ";"))
@@ -630,8 +673,11 @@ pub fn load(config: &Value) -> Result<Option<Plan>> {
     let chain = normalize_chain(&field(config, "chain"))?;
     let mut network = normalize_network(&chain, &field(config, "network"))?;
     if chain == "bitcoin" {
-        let re = regex::Regex::new(r"(?:^|[^A-Za-z0-9])(xpub|tpub)[1-9A-HJ-NP-Za-km-z]")
-            .expect("constant regex");
+        static NET_PREFIX_RE: OnceLock<Regex> = OnceLock::new();
+        let re = NET_PREFIX_RE.get_or_init(|| {
+            Regex::new(r"(?:^|[^A-Za-z0-9])(xpub|tpub)[1-9A-HJ-NP-Za-km-z]")
+                .expect("constant regex")
+        });
         let mut families = std::collections::BTreeSet::new();
         for source in [&xpub, &descriptor, &change] {
             for cap in re.captures_iter(source) {
@@ -845,14 +891,7 @@ impl Plan {
     /// target, SLIP-77 or a view key as embit derives it, from the same
     /// script and view key as the target's confidential address (a fixed
     /// branch included, since Python round 14).
-    pub(crate) fn liquid_blinding_secret(
-        &self,
-        branch_index: u32,
-        address_index: u32,
-    ) -> Result<elements::secp256k1_zkp::SecretKey> {
-        let missing = || {
-            Error::Value("Liquid descriptor does not include the private blinding material needed for unblinding".into())
-        };
+    fn liquid_branch(&self, branch_index: u32, address_index: u32) -> Result<&Branch> {
         let branch = self
             .branches
             .iter()
@@ -869,20 +908,60 @@ impl Plan {
                 branch.label
             )));
         }
+        Ok(branch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn liquid_blinding_secret(
+        &self,
+        branch_index: u32,
+        address_index: u32,
+    ) -> Result<elements::secp256k1_zkp::SecretKey> {
+        let missing = || {
+            Error::Value("Liquid descriptor does not include the private blinding material needed for unblinding".into())
+        };
+        let branch = self.liquid_branch(branch_index, address_index)?;
         let Parsed::Liquid(descriptor, Some(blind)) = &branch.selected else {
             return Err(missing());
         };
-        let secp = elements::secp256k1_zkp::Secp256k1::verification_only();
         let script = descriptor
-            .derived_descriptor(&secp, address_index)
+            .derived_descriptor(&*ELEMENTS_SECP_ALL, address_index)
             .map_err(|_| Error::Value("Can't do hardened derivation from public key".into()))?
             .script_pubkey();
+        Self::liquid_blinding_secret_with_blind(blind, address_index, &script, missing)
+    }
+
+    /// Derive the Liquid blinding secret when the exact `script_pubkey` is
+    /// already known from the transaction output, skipping redundant spending
+    /// descriptor derivation.
+    pub(crate) fn liquid_blinding_secret_for_script(
+        &self,
+        branch_index: u32,
+        address_index: u32,
+        script: &elements::Script,
+    ) -> Result<elements::secp256k1_zkp::SecretKey> {
+        let missing = || {
+            Error::Value("Liquid descriptor does not include the private blinding material needed for unblinding".into())
+        };
+        let branch = self.liquid_branch(branch_index, address_index)?;
+        let Parsed::Liquid(_, Some(blind)) = &branch.selected else {
+            return Err(missing());
+        };
+        Self::liquid_blinding_secret_with_blind(blind, address_index, script, missing)
+    }
+
+    fn liquid_blinding_secret_with_blind(
+        blind: &Blind,
+        address_index: u32,
+        script: &elements::Script,
+        missing: impl Fn() -> Error,
+    ) -> Result<elements::secp256k1_zkp::SecretKey> {
         match blind {
-            Blind::Slip77(master) => Ok(master.blinding_private_key(&script)),
+            Blind::Slip77(master) => Ok(master.blinding_private_key(script)),
             Blind::View(view) => {
                 let secret = view
                     .blinding_secret(address_index, script.as_bytes())?
-                    .ok_or_else(missing)?;
+                    .ok_or_else(&missing)?;
                 elements::secp256k1_zkp::SecretKey::from_slice(&secret.secret_bytes())
                     .map_err(|_| missing())
             }
@@ -907,20 +986,101 @@ impl Plan {
             if branch.is_some_and(|n| n != b.index) {
                 continue;
             }
-            for index in start..if b.selected.ranged() { end } else { end.min(1) } {
-                result.push(self.target(b, index)?);
+            let effective_end = if b.selected.ranged() { end } else { end.min(1) };
+            if effective_end <= start {
+                continue;
+            }
+            let key = (self.fingerprint.clone(), b.index, b.label.clone());
+            let cache = DERIVATION_CACHE.get_or_init(Default::default);
+            // Fast path: full hit from prefix cache.
+            {
+                let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(cached) = guard.entries.get(&key) {
+                    if effective_end as usize <= cached.len() {
+                        result.extend_from_slice(&cached[start as usize..effective_end as usize]);
+                        continue;
+                    }
+                }
+            }
+            // Check how much of the prefix is already cached so we only derive the new suffix.
+            let cached_len = {
+                let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+                guard.entries.get(&key).map_or(0usize, Vec::len)
+            };
+            // Hoist Liquid spending descriptor parsing once per branch instead of per index.
+            let liquid_bitcoin = match &b.selected {
+                Parsed::Liquid(_, _) => {
+                    let canonical = b.selected.canonical();
+                    Some(
+                        Descriptor::from_str(spending_text(&canonical).0).map_err(|_| {
+                            Error::Value("Unsupported Liquid spending descriptor".into())
+                        })?,
+                    )
+                }
+                Parsed::Bitcoin(_, _) => None,
+            };
+            if (start as usize) <= cached_len && (effective_end as usize) <= 25_000 {
+                // Extend the contiguous prefix cache from `cached_len..effective_end`.
+                let mut suffix =
+                    Vec::with_capacity((effective_end as usize).saturating_sub(cached_len));
+                for index in (cached_len as u32)..effective_end {
+                    suffix.push(self.target_with(b, index, liquid_bitcoin.as_ref())?);
+                }
+                let mut guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+                if guard.total_targets + suffix.len() > DERIVATION_CACHE_MAX_TARGETS {
+                    guard.entries.clear();
+                    guard.total_targets = 0;
+                }
+                let added = suffix.len();
+                let mut extended = false;
+                let existing = {
+                    let entry = guard.entries.entry(key).or_default();
+                    if entry.len() == cached_len {
+                        entry.extend(suffix);
+                        result.extend_from_slice(&entry[start as usize..effective_end as usize]);
+                        extended = true;
+                        None
+                    } else if effective_end as usize <= entry.len() {
+                        result.extend_from_slice(&entry[start as usize..effective_end as usize]);
+                        None
+                    } else {
+                        let existing = entry.len();
+                        if existing > start as usize {
+                            result.extend_from_slice(&entry[start as usize..existing]);
+                        }
+                        Some(existing)
+                    }
+                };
+                if extended {
+                    guard.total_targets += added;
+                } else if let Some(existing) = existing {
+                    drop(guard);
+                    let tail_start = (existing as u32).max(start);
+                    for index in tail_start..effective_end {
+                        result.push(self.target_with(b, index, liquid_bitcoin.as_ref())?);
+                    }
+                }
+            } else {
+                for index in start..effective_end {
+                    result.push(self.target_with(b, index, liquid_bitcoin.as_ref())?);
+                }
             }
         }
         Ok(result)
     }
-    fn target(&self, branch: &Branch, index: u32) -> Result<Value> {
+    fn target_with(
+        &self,
+        branch: &Branch,
+        index: u32,
+        liquid_bitcoin: Option<&Descriptor<DescriptorPublicKey>>,
+    ) -> Result<Value> {
         let mut paths = vec![];
         let mut origins = vec![];
         let (address, unconfidential, script) = match &branch.selected {
             Parsed::Bitcoin(d, _) => {
                 metadata(d, branch.selected.ranged(), index, &mut paths, &mut origins)?;
                 let derived = d
-                    .derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index)
+                    .derived_descriptor(&*BTC_SECP_VERIFY, index)
                     .map_err(|_| {
                         Error::Value("Can't do hardened derivation from public key".into())
                     })?;
@@ -941,18 +1101,27 @@ impl Plan {
             }
             Parsed::Liquid(d, view) => {
                 // The spending grammar and BIP32 metadata are shared with Bitcoin.
-                let canonical = branch.selected.canonical();
-                let bitcoin = Descriptor::from_str(spending_text(&canonical).0)
-                    .map_err(|_| Error::Value("Unsupported Liquid spending descriptor".into()))?;
+                let owned_bitcoin;
+                let bitcoin = match liquid_bitcoin {
+                    Some(parsed) => parsed,
+                    None => {
+                        let canonical = branch.selected.canonical();
+                        owned_bitcoin =
+                            Descriptor::from_str(spending_text(&canonical).0).map_err(|_| {
+                                Error::Value("Unsupported Liquid spending descriptor".into())
+                            })?;
+                        &owned_bitcoin
+                    }
+                };
                 metadata(
-                    &bitcoin,
+                    bitcoin,
                     branch.selected.ranged(),
                     index,
                     &mut paths,
                     &mut origins,
                 )?;
-                let secp = elements::secp256k1_zkp::Secp256k1::new();
-                let derived = d.derived_descriptor(&secp, index).map_err(|_| {
+                let secp = &*ELEMENTS_SECP_ALL;
+                let derived = d.derived_descriptor(secp, index).map_err(|_| {
                     Error::Value("Can't do hardened derivation from public key".into())
                 })?;
                 let params = match self.network.as_str() {
@@ -964,16 +1133,16 @@ impl Plan {
                     .address(params)
                     .map_err(|_| Error::Value("Script has no address".into()))?
                     .to_string();
+                let script = derived.script_pubkey();
                 let address = match view {
                     Some(Blind::Slip77(key)) => em::confidential::Descriptor {
                         key: em::confidential::Key::Slip77(*key),
-                        descriptor: derived.clone(),
+                        descriptor: derived,
                     }
-                    .address(&secp, params)
+                    .address(secp, params)
                     .map_err(|_| Error::Value("Invalid blinding key".into()))?
                     .to_string(),
                     Some(Blind::View(view)) => {
-                        let script = derived.script_pubkey();
                         let public = view.blinding_public(index, script.as_bytes())?;
                         let public =
                             elements::secp256k1_zkp::PublicKey::from_slice(&public.serialize())
@@ -987,8 +1156,7 @@ impl Plan {
                 (
                     address,
                     Some(unconfidential),
-                    derived
-                        .script_pubkey()
+                    script
                         .as_bytes()
                         .iter()
                         .map(|b| format!("{b:02x}"))
@@ -1212,5 +1380,26 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn incremental_derivation_cache_extends_and_clears_cleanly() {
+        clear_derivation_cache();
+        let config = json!({
+            "chain": "bitcoin",
+            "network": "main",
+            "descriptor": "wpkh(xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+            "gap_limit": 20
+        });
+        let plan = load(&config).ok().flatten().expect("valid plan");
+        let first = plan.derive(Some(0), 0, 10).ok().expect("derive 0..10");
+        let extended = plan.derive(Some(0), 0, 25).ok().expect("derive 0..25");
+        assert_eq!(extended[..10], first[..]);
+        let slice = plan.derive(Some(0), 5, 15).ok().expect("derive 5..15");
+        assert_eq!(slice, extended[5..15]);
+        let all_before = plan.derive(None, 0, 25).ok().expect("derive all 0..25");
+        clear_derivation_cache();
+        let after_clear = plan.derive(None, 0, 25).ok().expect("derive after clear");
+        assert_eq!(after_clear, all_before);
     }
 }

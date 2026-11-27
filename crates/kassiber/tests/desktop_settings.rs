@@ -110,6 +110,47 @@ fn settings_desk(golden: &str) -> Desk {
 }
 
 #[test]
+fn offline_preference_override_blocks_backend_probes_after_a_cli_switch() {
+    let mut desk = Desk::new("offline_preference_override");
+    let key = "KASSIBER_OFFLINE_PREFERENCE_FILE";
+    let override_path = format!("{}/", desk.env[key]);
+    desk.env.insert(key.into(), override_path);
+    desk.env.remove("KASSIBER_NO_EGRESS");
+    desk.env
+        .insert("KASSIBER_TEST_NO_EGRESS".into(), "strict".into());
+    desk.setup_cli(&["offline", "off"]);
+
+    let mut daemon = support::Daemon::spawn(&desk, &[]);
+    let online = daemon.step("online", "ui.network.offline", None);
+    assert_eq!(
+        path(&online, &["data", "offline"]),
+        Some(&Value::Bool(false))
+    );
+
+    desk.setup_cli(&["offline", "on"]);
+    let offline = daemon.step("offline", "ui.network.offline", None);
+    assert_eq!(
+        path(&offline, &["data", "offline"]),
+        Some(&Value::Bool(true))
+    );
+
+    let probe = daemon.step(
+        "probe",
+        "ui.backends.http.test",
+        Some(r#"{"url":"http://127.0.0.1:1"}"#),
+    );
+    assert_eq!(path(&probe, &["data", "ok"]), Some(&Value::Bool(false)));
+    assert!(
+        list(&probe, &["data", "logs"])
+            .iter()
+            .any(|line| text(line).is_some_and(|line| line.contains("Kassiber is in offline mode"))),
+        "{probe:?}"
+    );
+    daemon.step("stop", "daemon.shutdown", None);
+    daemon.exit_cleanly();
+}
+
+#[test]
 fn settings_status_reads_match_wire_bytes_across_policies() {
     let mut desk = settings_desk("settings_status_reads_match_wire_bytes_across_policies");
     let mut responses = Vec::new();

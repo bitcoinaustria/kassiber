@@ -385,7 +385,7 @@ fn esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded
         .map_err(descriptors::Error::into_app)
         .unwrap()
         .unwrap();
-    let hash = script_hash(
+    let hash = esplora_query_hash(
         plan.derive(Some(0), 0, 1)
             .map_err(descriptors::Error::into_app)
             .unwrap()[0]["script_pubkey"]
@@ -396,7 +396,7 @@ fn esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded
     let a = action(
         "esplora",
         server.base(),
-        json!({"esplora_scripthashes":{hash:{"tx_count":1}}}),
+        json!({"esplora_scripthash_order":crate::compatibility_cache::ESPLORA_HASH_ORDER,"esplora_scripthashes":{hash:{"tx_count":1}}}),
         Some(config),
     );
     let grant = DiscoveryConsent::explicit_trigger(&a);

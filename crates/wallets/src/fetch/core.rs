@@ -208,13 +208,13 @@ impl<'a> Node<'a> {
     }
 
     fn call(&self, method: &str, params: Value, wallet: Option<&str>) -> Result<Value> {
-        self.control.check(self.deadline)?;
-        self.client.call(
+        self.client.call_checked(
             method,
             Some(&params),
             wallet,
             Some(self.consent),
             self.deadline,
+            &|| self.control.check(self.deadline),
         )
     }
 
@@ -374,13 +374,13 @@ impl<'a> Node<'a> {
     }
 
     fn import_into(&self, method: &str, params: Value, wallet: &str) -> Result<Value> {
-        self.control.check(self.deadline)?;
-        self.import.call(
+        self.import.call_checked(
             method,
             Some(&params),
             Some(wallet),
             Some(self.consent),
             self.deadline,
+            &|| self.control.check(self.deadline),
         )
     }
 }
@@ -1126,19 +1126,15 @@ fn enrich(
 }
 
 /// `record_from_bitcoinrpc_details`.
-fn record(
-    txid: &str,
-    details: &[Value],
-    backend: &str,
-    graph: Option<&Value>,
-    tracked: &BTreeSet<String>,
-) -> Result<Option<Value>> {
-    let graph = graph.map(|graph| {
-        let mut graph = graph.clone();
-        graph["observer_owned_scripts"] =
-            json!(bitcoin_records::graph_scoped_scripts(&graph, tracked));
-        graph
-    });
+struct DetailSummary {
+    amount: Decimal,
+    fee: Decimal,
+    sent: bool,
+    occurred: String,
+    confirmed: Option<String>,
+}
+
+fn summarize_details(details: &[Value]) -> Result<Option<DetailSummary>> {
     let mut amount = Decimal::zero();
     let mut fee = Decimal::zero();
     let mut sent = false;
@@ -1187,6 +1183,37 @@ fn record(
     if amount.is_zero() && fee.is_zero() {
         return Ok(None);
     }
+    Ok(Some(DetailSummary {
+        amount,
+        fee,
+        sent,
+        occurred,
+        confirmed,
+    }))
+}
+
+fn record_from_summary(
+    txid: &str,
+    details: &[Value],
+    summary: DetailSummary,
+    backend: &str,
+    graph: Option<&Value>,
+    tracked: &BTreeSet<String>,
+) -> Result<Value> {
+    let DetailSummary {
+        amount,
+        fee,
+        sent,
+        occurred,
+        confirmed,
+    } = summary;
+    let graph = graph.map(|graph| {
+        let mut graph = graph.clone();
+        graph["observer_owned_scripts"] = json!(bitcoin_records::graph_scoped_scripts_normalized(
+            &graph, tracked
+        ));
+        graph
+    });
     let (direction, value, row_fee, kind) = if amount.is_positive() {
         ("inbound", amount.clone(), Decimal::zero(), "deposit")
     } else {
@@ -1245,7 +1272,9 @@ fn record(
         };
         payload["component"] = json!({"fee_attribution": "implicit_wallet_delta"});
         payload["observer_owned_scripts"] = match &graph {
-            Some(graph) => json!(bitcoin_records::graph_scoped_scripts(graph, tracked)),
+            Some(graph) => json!(bitcoin_records::graph_scoped_scripts_normalized(
+                graph, tracked
+            )),
             None => json!(tracked),
         };
         let found =
@@ -1288,7 +1317,7 @@ fn record(
     if let Some(boundary) = boundary {
         record["privacy_boundary"] = json!(boundary);
     }
-    Ok(Some(record))
+    Ok(record)
 }
 
 /// `bitcoinrpc_records_for_wallet`.
@@ -1305,13 +1334,18 @@ fn records(
     let since = (imported == 0 && current).then_some(checkpoint);
     let (details, mut meta) = transactions(node, wallet, since)?;
     let mut grouped: Vec<(String, Vec<Value>)> = vec![];
+    let mut grouped_index: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for detail in &details {
         let Some(txid) = detail["txid"].as_str().filter(|t| !t.is_empty()) else {
             continue;
         };
-        match grouped.iter_mut().find(|(id, _)| id == txid) {
-            Some((_, list)) => list.push(detail.clone()),
-            None => grouped.push((txid.to_owned(), vec![detail.clone()])),
+        if let Some(&idx) = grouped_index.get(txid) {
+            grouped[idx].1.push(detail.clone());
+        } else {
+            let idx = grouped.len();
+            grouped_index.insert(txid.to_owned(), idx);
+            grouped.push((txid.to_owned(), vec![detail.clone()]));
         }
     }
     let time = |detail: &Value| -> i64 {
@@ -1326,18 +1360,15 @@ fn records(
             .and_then(|n| i64::try_from(n).ok())
             .unwrap_or(0)
     };
-    grouped.sort_by(|(a, left), (b, right)| {
-        let l = left.iter().map(time).max().unwrap_or(0);
-        let r = right.iter().map(time).max().unwrap_or(0);
-        (l, a).cmp(&(r, b))
+    grouped.sort_by_cached_key(|(txid, list)| {
+        let max_time = list.iter().map(time).max().unwrap_or(0);
+        (max_time, txid.clone())
     });
     let tracked: BTreeSet<String> = targets
         .iter()
         .filter_map(|t| {
-            t["script_pubkey"]
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(str::to_owned)
+            let s = kassiber_pytext::lower(kassiber_pytext::strip(t["script_pubkey"].as_str()?));
+            (!s.is_empty()).then_some(s)
         })
         .collect();
     let backend = node.name();
@@ -1346,30 +1377,32 @@ fn records(
     let mut unavailable: BTreeSet<String> = BTreeSet::new();
     for (txid, list) in &grouped {
         node.control.check(node.deadline)?;
-        let mut record_value = record(txid, list, &backend, None, &tracked)?;
-        if record_value.is_some() {
-            let mut graph = fetch_graph(node, wallet, txid, &mut cache);
-            if let Some(found) = graph
-                .clone()
-                .filter(|_| list.iter().any(|d| category(d) == "send"))
-            {
-                match enrich(node, wallet, &found, &mut cache)? {
-                    Some(enriched) => graph = Some(enriched),
-                    None => {
-                        unavailable.insert(txid.to_lowercase());
-                    }
-                }
-            }
-            match &graph {
-                Some(graph) => record_value = record(txid, list, &backend, Some(graph), &tracked)?,
+        let Some(summary) = summarize_details(list)? else {
+            continue;
+        };
+        let mut graph = fetch_graph(node, wallet, txid, &mut cache);
+        if let Some(found) = graph
+            .clone()
+            .filter(|_| list.iter().any(|d| category(d) == "send"))
+        {
+            match enrich(node, wallet, &found, &mut cache)? {
+                Some(enriched) => graph = Some(enriched),
                 None => {
                     unavailable.insert(txid.to_lowercase());
                 }
             }
         }
-        if let Some(found) = record_value {
-            records.push(found);
+        if graph.is_none() {
+            unavailable.insert(txid.to_lowercase());
         }
+        records.push(record_from_summary(
+            txid,
+            list,
+            summary,
+            &backend,
+            graph.as_ref(),
+            &tracked,
+        )?);
     }
     if unavailable.is_empty() {
         meta.insert(
@@ -1403,15 +1436,28 @@ fn records(
         }
     }
     // `_bitcoinrpc_highest_used_from_details`.
+    let mut by_address: std::collections::HashMap<&str, &Value> =
+        std::collections::HashMap::with_capacity(targets.len());
+    for t in targets {
+        if descriptors::truthy(&t["address"]) {
+            if let Some(addr) = t["address"].as_str() {
+                by_address.insert(addr, t);
+            }
+        }
+    }
     let mut highest = Map::new();
     for detail in &details {
         if category(detail) == "immature" || retracted(detail) {
             continue;
         }
-        if let Some(target) = targets
-            .iter()
-            .rev()
-            .find(|t| descriptors::truthy(&t["address"]) && t["address"] == detail["address"])
+        if let Some(target) = detail["address"]
+            .as_str()
+            .and_then(|addr| by_address.get(addr).copied())
+            .or_else(|| {
+                targets.iter().rev().find(|t| {
+                    descriptors::truthy(&t["address"]) && t["address"] == detail["address"]
+                })
+            })
         {
             merge_highest(&mut highest, target);
         }
@@ -1438,18 +1484,39 @@ fn outputs(
         json!([0, 9_999_999, addresses, true]),
         Some(wallet),
     )?;
+    let mut by_address: std::collections::HashMap<&str, &Value> =
+        std::collections::HashMap::with_capacity(targets.len());
+    let mut by_script: std::collections::HashMap<&str, &Value> =
+        std::collections::HashMap::with_capacity(targets.len());
+    for t in targets {
+        if descriptors::truthy(&t["address"]) {
+            if let Some(addr) = t["address"].as_str() {
+                by_address.insert(addr, t);
+            }
+        }
+        if descriptors::truthy(&t["script_pubkey"]) {
+            if let Some(script) = t["script_pubkey"].as_str() {
+                by_script.insert(script, t);
+            }
+        }
+    }
     let mut outputs = vec![];
     let mut metadata: Map<String, Value> = Map::new();
+    let mut block_heights: std::collections::HashMap<String, Value> =
+        std::collections::HashMap::new();
     for raw in listed.as_array().into_iter().flatten() {
-        let target = targets
-            .iter()
-            .rev()
-            .find(|t| descriptors::truthy(&t["address"]) && t["address"] == raw["address"])
+        let target = raw["address"]
+            .as_str()
+            .and_then(|addr| by_address.get(addr).copied())
+            .or_else(|| {
+                targets
+                    .iter()
+                    .rev()
+                    .find(|t| descriptors::truthy(&t["address"]) && t["address"] == raw["address"])
+            })
             .or_else(|| {
                 let script = kassiber_pytext::lower(&descriptors::text(&raw["scriptPubKey"]));
-                targets.iter().rev().find(|t| {
-                    descriptors::truthy(&t["script_pubkey"]) && t["script_pubkey"] == json!(script)
-                })
+                by_script.get(script.as_str()).copied()
             });
         let Some(target) = target else {
             continue;
@@ -1463,7 +1530,7 @@ fn outputs(
             0
         };
         if !metadata.contains_key(&txid) {
-            let found = transaction_metadata(node, wallet, &txid, &mut cache)?;
+            let found = transaction_metadata(node, wallet, &txid, &mut cache, &mut block_heights)?;
             metadata.insert(txid.clone(), found);
         }
         let found = &metadata[&txid];
@@ -1494,6 +1561,7 @@ fn transaction_metadata(
     wallet: &str,
     txid: &str,
     cache: &mut Cache,
+    block_heights: &mut std::collections::HashMap<String, Value>,
 ) -> Result<Value> {
     let tx = match cache.get(txid).filter(|t| t.is_object()) {
         Some(tx) => tx.clone(),
@@ -1513,7 +1581,14 @@ fn transaction_metadata(
     let block_time = iso(when)?;
     let mut height = Value::Null;
     if descriptors::truthy(&tx["blockhash"]) {
-        if let Ok(header) = node.call("getblockheader", json!([tx["blockhash"]]), None) {
+        if let Some(hash) = tx["blockhash"].as_str() {
+            if let Some(cached) = block_heights.get(hash) {
+                height = cached.clone();
+            } else if let Ok(header) = node.call("getblockheader", json!([hash]), None) {
+                height = header["height"].clone();
+                block_heights.insert(hash.to_owned(), height.clone());
+            }
+        } else if let Ok(header) = node.call("getblockheader", json!([tx["blockhash"]]), None) {
             height = header["height"].clone();
         }
     }

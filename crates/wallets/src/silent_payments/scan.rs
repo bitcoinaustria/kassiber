@@ -730,13 +730,18 @@ pub(crate) fn normalize(
     }
     // A dict comprehension: a later input's spender replaces an earlier one's.
     let mut spent_by: Vec<(String, String)> = vec![];
+    let mut spent_by_idx: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for tx in &txs {
         for input in owned(tx, "inputs", "vin") {
             let key = outpoint(input, &NULL)?;
             let spender = txid(field(tx, "txid"))?;
-            match spent_by.iter_mut().find(|(k, _)| *k == key) {
-                Some(slot) => slot.1 = spender,
-                None => spent_by.push((key, spender)),
+            if let Some(&idx) = spent_by_idx.get(&key) {
+                spent_by[idx].1 = spender;
+            } else {
+                let idx = spent_by.len();
+                spent_by_idx.insert(key.clone(), idx);
+                spent_by.push((key, spender));
             }
         }
     }
@@ -747,22 +752,19 @@ pub(crate) fn normalize(
             String::new()
         }
     };
-    let mut by_id: Vec<(String, &Value)> = vec![];
+    let mut by_id: std::collections::HashMap<String, &Value> =
+        std::collections::HashMap::with_capacity(txs.len());
     for tx in &txs {
         let key = lowered(field(tx, "txid"));
-        match by_id.iter_mut().find(|(k, _)| *k == key) {
-            Some(slot) => slot.1 = tx,
-            None => by_id.push((key, tx)),
-        }
+        by_id.insert(key, tx);
     }
     let empty = dict::<&str>([]);
     let mut outputs: Vec<(String, Value)> = vec![];
+    let mut outputs_idx: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for row in mappings(payload, "utxos", "outputs") {
         let key = lowered(field(row, "txid"));
-        let tx = by_id
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map_or(&empty, |(_, tx)| *tx);
+        let tx = by_id.get(&key).copied().unwrap_or(&empty);
         let point = outpoint(row, field(tx, "txid"))?;
         if !owned_outputs.contains(&point) {
             return Err(validation("Silent Payments UTXO rows must correspond to owned transaction outputs")
@@ -770,9 +772,12 @@ pub(crate) fn normalize(
                 .into());
         }
         let value = utxo(row, tx, plan)?;
-        match outputs.iter_mut().find(|(k, _)| *k == point) {
-            Some(slot) => slot.1 = value,
-            None => outputs.push((point, value)),
+        if let Some(&idx) = outputs_idx.get(&point) {
+            outputs[idx].1 = value;
+        } else {
+            let idx = outputs.len();
+            outputs_idx.insert(point.clone(), idx);
+            outputs.push((point, value));
         }
     }
     for tx in &txs {
@@ -787,14 +792,17 @@ pub(crate) fn normalize(
                     py_str(field(&value, "txid")),
                     py_str(field(&value, "vout"))
                 );
-                if !outputs.iter().any(|(k, _)| *k == key) {
+                if !outputs_idx.contains_key(&key) {
+                    let idx = outputs.len();
+                    outputs_idx.insert(key.clone(), idx);
                     outputs.push((key, value));
                 }
             }
         }
     }
     for (point, spender) in &spent_by {
-        if let Some((_, output)) = outputs.iter_mut().find(|(k, _)| k == point) {
+        if let Some(&idx) = outputs_idx.get(point) {
+            let output = &mut outputs[idx].1;
             set(output, "spent_by", s(spender.as_str()));
             set(output, "spent", Value::Bool(true));
         }

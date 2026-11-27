@@ -48,8 +48,32 @@ pub use broker::{
     BROKER_PROGRAM_ENV, BROKER_TMPDIR_ENV, PROVIDER_BROKER_FLAG,
 };
 pub use http::{
-    Cancel, HttpOptions, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,
+    Cancel, HttpOptions, HttpPool, HttpRequest, HttpResponse, HttpStream, RedirectPolicy, Upgrade,
 };
+
+/// Whether a test build is recording or replaying a network tape.
+pub fn is_taped() -> bool {
+    #[cfg(feature = "test-observer")]
+    {
+        tape::is_taped()
+    }
+    #[cfg(not(feature = "test-observer"))]
+    {
+        false
+    }
+}
+
+/// Whether to match the wire format of a frozen, unversioned tape.
+pub fn uses_legacy_tape() -> bool {
+    #[cfg(feature = "test-observer")]
+    {
+        tape::uses_legacy_wire()
+    }
+    #[cfg(not(feature = "test-observer"))]
+    {
+        false
+    }
+}
 pub use offline::OfflineCache;
 pub use process::{ClnConfig, ClnMethod, ClnProcessError};
 pub use tls::{CertificateSummary, PinRefusal, PresentedCertificate, RootCertificates, TlsTrust};
@@ -333,13 +357,17 @@ fn guard_configuration_failure() -> ! {
 }
 
 fn no_egress() -> bool {
-    matches!(
-        env_value("KASSIBER_NO_EGRESS")
-            .trim()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    let Some(raw) = std::env::var_os("KASSIBER_NO_EGRESS") else {
+        return false;
+    };
+    let Some(text) = raw.to_str() else {
+        guard_configuration_failure();
+    };
+    let trimmed = text.trim();
+    trimmed == "1"
+        || trimmed.eq_ignore_ascii_case("true")
+        || trimmed.eq_ignore_ascii_case("yes")
+        || trimmed.eq_ignore_ascii_case("on")
 }
 
 impl Gate {
@@ -590,6 +618,7 @@ impl Route {
                 .record(&self.request, endpoint, Operation::Connect, 0);
             match TcpStream::connect_timeout(&address, remaining(deadline)?) {
                 Ok(stream) => {
+                    let _ = stream.set_nodelay(true);
                     let mut connection = Transport {
                         stream: socket(stream),
                         route: self,
@@ -763,6 +792,21 @@ impl Transport {
         }
     }
 
+    fn should_update_timeout(cached: Option<Duration>, desired: Duration) -> bool {
+        match cached {
+            None => true,
+            Some(prev) if prev == desired => false,
+            Some(prev) => {
+                // Avoid per-read setsockopt storms when a monotonic deadline
+                // ticks down by microseconds, while still keeping the socket
+                // timeout tightly bounded to the deadline.
+                desired < Duration::from_millis(500)
+                    || desired > prev
+                    || prev.saturating_sub(desired) >= Duration::from_millis(250)
+            }
+        }
+    }
+
     fn prepare_read(&mut self) -> io::Result<()> {
         if !self.in_operation {
             self.route.check().map_err(io::Error::other)?;
@@ -770,7 +814,7 @@ impl Transport {
             return Err(io::Error::other(Error::ConsentRevoked));
         }
         let timeout = self.timeout()?;
-        if self.read_timeout != Some(timeout) {
+        if Self::should_update_timeout(self.read_timeout, timeout) {
             self.stream.set_read_timeout(Some(timeout))?;
             self.read_timeout = Some(timeout);
         }
@@ -779,10 +823,9 @@ impl Transport {
 
     fn prepare_write(&mut self) -> io::Result<()> {
         // Every physical write checks current policy, even within a TLS read.
-        // Revision-based OfflineCache makes these checks cheap without a TTL.
         self.route.check().map_err(io::Error::other)?;
         let timeout = self.timeout()?;
-        if self.write_timeout != Some(timeout) {
+        if Self::should_update_timeout(self.write_timeout, timeout) {
             self.stream.set_write_timeout(Some(timeout))?;
             self.write_timeout = Some(timeout);
         }
@@ -872,6 +915,26 @@ impl Connection {
     /// This changes no route, trust, proxy, or consent authority.
     pub fn set_deadline(&mut self, deadline: Option<Instant>) {
         self.transport().deadline = deadline;
+    }
+
+    /// Rebind an idle pooled HTTP/1.1 connection to a fresh authorized route
+    /// for the exact same `Request` scope (endpoint, proxy, trust, subsystem,
+    /// action binding).
+    pub(crate) fn rebind_pooled(
+        &mut self,
+        route: Route,
+        timeout: Duration,
+        deadline: Option<Instant>,
+    ) -> Result<(), Error> {
+        let transport = self.transport();
+        if transport.route.request != route.request {
+            return Err(Error::ConsentScope);
+        }
+        route.check()?;
+        transport.route = route;
+        transport.timeout = timeout;
+        transport.deadline = deadline;
+        Ok(())
     }
 }
 

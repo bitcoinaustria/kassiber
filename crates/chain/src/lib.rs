@@ -48,7 +48,24 @@ fn redacted(text: &str) -> String {
     redact_operational_text(&redact_secret_text(text))
 }
 fn truthy(value: &Value) -> bool {
-    kassiber_envelope::truthy(&details(value.clone()))
+    match value {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i != 0
+            } else if let Some(u) = n.as_u64() {
+                u != 0
+            } else if let Some(f) = n.as_f64() {
+                f != 0.0
+            } else {
+                true
+            }
+        }
+        Value::String(s) => !s.is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(m) => !m.is_empty(),
+    }
 }
 
 #[cfg(test)]

@@ -474,7 +474,17 @@ Kassiber's HTTP transport before connection on both chains.
 Dependency-contract tests fail if an ordinary supported BDK route calls one of
 those adapters or retries through one after a BDK error.
 
+Multiple wallets can fetch in groups of up to six during an authorized sync.
+Each wallet keeps its own backend scope and consent. Freshness workers check
+live job authority with the database owner before continuing network work.
+Publication still runs in wallet order inside the caller's write transactions.
+
 ### Esplora and Electrum history checkpoints
+
+Esplora and its mempool alias send the SHA-256 digest of the script in
+digest order, for Bitcoin and Liquid. Electrum reverses those bytes. The
+first Esplora sync after upgrading fetches fresh histories before it can reuse
+script statistics or use memberships as an absence baseline.
 
 - Compatibility Esplora uses `esplora_scripthash_stats`,
   `esplora_stats_fingerprint`, `fetch_esplora_history`,

@@ -2,7 +2,8 @@
 //! `generate_anchor_vectors.py` records every request the unchanged Python
 //! adapter made against a deterministic chain and the reply it received. The
 //! Rust acquisition receives the same replies through loopback fakes and must
-//! issue the same requests and derive the same freshness checkpoint.
+//! derive the same freshness facts. Esplora hashes in the captures are translated
+//! from legacy Electrum order before serving them to the current client.
 use super::*;
 use crate::acquisition::tests::{run, scope};
 use kassiber_net::test_support::{FakeElectrum, FakeProvider};
@@ -53,13 +54,45 @@ fn rekey(checkpoint: &Value, from: &str, to: &str) -> Value {
     checkpoint
 }
 
+fn forward_hash(hash: &str) -> String {
+    let mut bytes = Vec::<u8>::from_hex(hash).unwrap();
+    bytes.reverse();
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn forward_keys(entries: &mut Value) {
+    if let Some(entries) = entries.as_object_mut() {
+        *entries = std::mem::take(entries)
+            .into_iter()
+            .map(|(hash, value)| (forward_hash(&hash), value))
+            .collect();
+    }
+}
+
+fn forward_checkpoint(mut checkpoint: Value) -> Value {
+    if !checkpoint.is_object() {
+        return checkpoint;
+    }
+    if let Some(stats) = checkpoint.get_mut("esplora_scripthashes") {
+        forward_keys(stats);
+    }
+    if let Some(scripts) = checkpoint
+        .get_mut("esplora_history_memberships")
+        .and_then(|v| v.get_mut("scripts"))
+    {
+        forward_keys(scripts);
+    }
+    checkpoint["esplora_scripthash_order"] = json!(cache::ESPLORA_HASH_ORDER);
+    checkpoint
+}
+
 fn acquisition(case: &Value, kind: &str, url: &str) -> Acquisition {
     let checkpoint = if kind == "esplora" {
-        rekey(
+        forward_checkpoint(rekey(
             &case["checkpoint"],
             &membership_key(PYTHON_URL),
             &membership_key(url),
-        )
+        ))
     } else {
         case["checkpoint"].clone()
     };
@@ -123,10 +156,13 @@ fn compare(case: &Value, actual: &Value, url: &str) {
     } else {
         actual["freshness_checkpoint"].clone()
     };
-    assert_eq!(
-        checkpoint, case["freshness_checkpoint"],
-        "{name}: checkpoint"
-    );
+    let expected = case["freshness_checkpoint"].clone();
+    let expected = if case["protocol"] == "esplora" {
+        forward_checkpoint(expected)
+    } else {
+        expected
+    };
+    assert_eq!(checkpoint, expected, "{name}: checkpoint");
     assert_eq!(
         actual["scripts_changed"], case["scripts_changed"],
         "{name}: changed"
@@ -165,15 +201,19 @@ fn esplora_history_anchors_match_python_requests_and_checkpoints() {
                 target.trim_start_matches('/').to_owned()
             })
             .collect();
-        let expected: Vec<&str> = requests
+        let expected: Vec<String> = requests
             .iter()
-            .map(|r| r["path"].as_str().unwrap())
+            .map(|r| {
+                let path = r["path"].as_str().unwrap();
+                path.strip_prefix("scripthash/")
+                    .and_then(|suffix| suffix.split_at_checked(64))
+                    .map_or_else(
+                        || path.to_owned(),
+                        |(hash, suffix)| format!("scripthash/{}{suffix}", forward_hash(hash)),
+                    )
+            })
             .collect();
-        same(
-            &paths,
-            &expected.iter().map(|p| p.to_string()).collect::<Vec<_>>(),
-            name,
-        );
+        same(&paths, &expected, name);
         compare(case, &actual, server.base());
     }
 }

@@ -674,22 +674,28 @@ fn find_authoritative(
     wallet_id: &str,
     normalized: &Value,
     fingerprint: &str,
+    preloaded: Option<&mut std::collections::HashMap<(String, String), Vec<Value>>>,
 ) -> Result<(Option<Value>, Vec<Value>)> {
     let Some(external) = canonical_txid(field(normalized, "external_id")) else {
         return Ok((None, vec![]));
     };
-    let candidates = rows(
-        conn,
-        &format!(
-            "SELECT {EXISTING_COLUMNS} FROM transactions WHERE wallet_id = ? AND external_id IS NOT NULL
-             AND LOWER(external_id) = ? AND asset = ? ORDER BY created_at DESC, id DESC"
-        ),
-        params_from_iter([
-            Sql::Text(wallet_id.into()),
-            Sql::Text(external.clone()),
-            sql(field(normalized, "asset"))?,
-        ]),
-    )?;
+    let candidates = match (preloaded, field(normalized, "asset").as_str_opt()) {
+        (Some(map), Some(asset_text)) => map
+            .remove(&(external.clone(), asset_text.to_owned()))
+            .unwrap_or_default(),
+        _ => rows(
+            conn,
+            &format!(
+                "SELECT {EXISTING_COLUMNS} FROM transactions WHERE wallet_id = ? AND external_id IS NOT NULL
+                 AND LOWER(external_id) = ? AND asset = ? ORDER BY created_at DESC, id DESC"
+            ),
+            params_from_iter([
+                Sql::Text(wallet_id.into()),
+                Sql::Text(external.clone()),
+                sql(field(normalized, "asset"))?,
+            ]),
+        )?,
+    };
     if candidates.is_empty() {
         return Ok((None, vec![]));
     }
@@ -1385,16 +1391,15 @@ fn merge_updates(existing: &Value, normalized: &Value, fingerprint: &str) -> Res
             n("swap_refund_funding_vout").clone(),
         );
     }
-    let graph_upgrade = graph_version(normalized) > graph_version(existing)
-        || strict_enrichment(existing, normalized);
-    let attestation = attestation_upgrade(existing, normalized);
-    if (!updates.is_empty() || graph_upgrade || attestation)
-        && truthy(n("raw_json"))
-        && !py_eq(n("raw_json"), e("raw_json"))
-    {
-        updates.put("raw_json", n("raw_json").clone());
-    } else if let Some(refreshed) = refreshed_block(existing, normalized)? {
-        updates.put("raw_json", Value::from(refreshed));
+    if !py_eq(n("raw_json"), e("raw_json")) {
+        let graph_upgrade = graph_version(normalized) > graph_version(existing)
+            || strict_enrichment(existing, normalized);
+        let attestation = attestation_upgrade(existing, normalized);
+        if (!updates.is_empty() || graph_upgrade || attestation) && truthy(n("raw_json")) {
+            updates.put("raw_json", n("raw_json").clone());
+        } else if let Some(refreshed) = refreshed_block(existing, normalized)? {
+            updates.put("raw_json", Value::from(refreshed));
+        }
     }
     Ok(updates)
 }
@@ -1468,28 +1473,49 @@ pub fn insert_records(
         .iter()
         .map(|record| normalize(record, source_label))
         .collect::<Result<_>>()?;
+    let binding = if normalized.is_empty() {
+        None
+    } else {
+        kassiber_setup::networks::binding_for(conn, scope.profile_id)?
+    };
+    let wallet_kind = field(&wallet, "kind");
+    let wallet_config = field(&wallet, "config_json");
     for record in &normalized {
-        let mut guarded = record.clone();
-        set(&mut guarded, "wallet_kind", field(&wallet, "kind").clone());
-        set(
-            &mut guarded,
-            "wallet_config_json",
-            field(&wallet, "config_json").clone(),
-        );
-        kassiber_setup::networks::guard_observation(conn, scope.profile_id, &guarded, "import")?;
+        let mut guarded = dict([
+            ("raw_json", field(record, "raw_json").clone()),
+            ("asset", field(record, "asset").clone()),
+            ("wallet_kind", wallet_kind.clone()),
+            ("wallet_config_json", wallet_config.clone()),
+        ]);
+        for key in [
+            "config_json",
+            "chain",
+            "network",
+            "bitcoin_network",
+            "chain_network",
+            "chain_instance_id",
+        ] {
+            if let Some(v) = get(record, key) {
+                set(&mut guarded, key, v.clone());
+            }
+        }
+        kassiber_setup::networks::guard_observation_with_binding(
+            binding.as_ref(),
+            &guarded,
+            "import",
+        )?;
     }
-    let mut projected: Vec<((String, Value), Value)> = Vec::new();
+    let mut projected: std::collections::HashMap<String, Vec<(Value, Value)>> =
+        std::collections::HashMap::new();
     for record in &mut normalized {
         let Some(external) = canonical_txid(field(record, "external_id")) else {
             continue;
         };
         set(record, "external_id", Value::from(external.clone()));
         set(record, "external_id_kind", s("txid"));
-        let key = (external.clone(), field(record, "asset").clone());
-        match projected
-            .iter()
-            .find(|(k, _)| k.0 == key.0 && py_eq(&k.1, &key.1))
-        {
+        let asset = field(record, "asset").clone();
+        let entries = projected.entry(external.clone()).or_default();
+        match entries.iter().find(|(a, _)| py_eq(a, &asset)) {
             Some((_, direction)) if !py_eq(direction, field(record, "direction")) => {
                 return Err(AppError::new(
                     "observer_projection_conflict",
@@ -1499,11 +1525,11 @@ pub fn insert_records(
                 .with_details(dict([
                     ("conflict_kind", s("conflicting_observer_projection_records")),
                     ("txid", s(external)),
-                    ("asset", field(record, "asset").clone()),
+                    ("asset", asset),
                 ])));
             }
             Some(_) => {}
-            None => projected.push((key, field(record, "direction").clone())),
+            None => entries.push((asset, field(record, "direction").clone())),
         }
     }
     let (mut imported, mut skipped, mut updated, mut unchanged, mut superseded, mut rescoped) =
@@ -1514,10 +1540,70 @@ pub fn insert_records(
     let reset_active = kassiber_setup::book_reset::has_state(conn, scope.profile_id)?;
     let mut reset_rebound = 0_i64;
     let mut superseded_records = Vec::new();
+    // Batch-preload existing rows for unique (external_id, asset) pairs in this
+    // batch so large syncs avoid N per-transaction SELECT queries. Pairs that
+    // repeat within the same batch fall back to live SQL to preserve exact
+    // intra-batch superseding/updating semantics.
+    let mut key_counts: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
+    let mut unique_externals: std::collections::BTreeSet<String> =
+        std::collections::BTreeSet::new();
+    for record in &normalized {
+        if let (Some(ext), Some(asset)) = (
+            canonical_txid(field(record, "external_id")),
+            field(record, "asset").as_str_opt(),
+        ) {
+            *key_counts
+                .entry((ext.clone(), asset.to_owned()))
+                .or_insert(0) += 1;
+            unique_externals.insert(ext);
+        }
+    }
+    let use_preload = unique_externals.len() > 1;
+    let mut preloaded_candidates: std::collections::HashMap<(String, String), Vec<Value>> =
+        std::collections::HashMap::new();
+    if use_preload {
+        let external_list: Vec<String> = unique_externals.into_iter().collect();
+        for chunk in external_list.chunks(400) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let found = rows(
+                conn,
+                &format!(
+                    "SELECT {EXISTING_COLUMNS} FROM transactions WHERE wallet_id = ? AND external_id IS NOT NULL
+                     AND LOWER(external_id) IN ({placeholders}) ORDER BY created_at DESC, id DESC"
+                ),
+                params_from_iter(
+                    std::iter::once(Sql::Text(scope.wallet_id.into()))
+                        .chain(chunk.iter().map(|ext| Sql::Text(ext.clone()))),
+                ),
+            )?;
+            for row in found {
+                if let (Some(ext), Some(asset)) = (
+                    canonical_txid(field(&row, "external_id")),
+                    field(&row, "asset").as_str_opt(),
+                ) {
+                    let key = (ext, asset.to_owned());
+                    if key_counts.get(&key) == Some(&1) {
+                        preloaded_candidates.entry(key).or_default().push(row);
+                    }
+                }
+            }
+        }
+    }
     for record in &normalized {
         let fingerprint = fingerprint(scope.wallet_id, record)?;
-        let (existing, obsolete) = if canonical_txid(field(record, "external_id")).is_some() {
-            find_authoritative(conn, scope.wallet_id, record, &fingerprint)?
+        let (existing, obsolete) = if let Some(ext) = canonical_txid(field(record, "external_id")) {
+            let can_preload = use_preload
+                && field(record, "asset").as_str_opt().is_some_and(|asset| {
+                    key_counts.get(&(ext.clone(), asset.to_owned())) == Some(&1)
+                });
+            find_authoritative(
+                conn,
+                scope.wallet_id,
+                record,
+                &fingerprint,
+                can_preload.then_some(&mut preloaded_candidates),
+            )?
         } else {
             (
                 find_by_fingerprint(conn, scope.wallet_id, record, &fingerprint)?,
@@ -1525,11 +1611,10 @@ pub fn insert_records(
             )
         };
         for row in obsolete {
-            conn.execute(
-                "UPDATE transactions SET excluded = 1 WHERE id = ?",
-                [sql(field(&row, "id"))?],
-            )
-            .map_err(database_error)?;
+            conn.prepare_cached("UPDATE transactions SET excluded = 1 WHERE id = ?")
+                .map_err(database_error)?
+                .execute([sql(field(&row, "id"))?])
+                .map_err(database_error)?;
             superseded += 1;
             superseded_records.push(dict([
                 ("transaction_id", field(&row, "id").clone()),
@@ -1563,10 +1648,11 @@ pub fn insert_records(
                     .map(|(_, value)| sql(value))
                     .collect::<Result<Vec<_>>>()?;
                 values.push(sql(field(&existing, "id"))?);
-                conn.execute(
-                    &format!("UPDATE transactions SET {assignments} WHERE id = ?"),
-                    params_from_iter(values),
-                )
+                conn.prepare_cached(&format!(
+                    "UPDATE transactions SET {assignments} WHERE id = ?"
+                ))
+                .map_err(database_error)?
+                .execute(params_from_iter(values))
                 .map_err(database_error)?;
                 updated += 1;
                 updated_records.push(change_record(
@@ -1577,11 +1663,13 @@ pub fn insert_records(
                 )?);
             } else {
                 if let Some(narrowed) = attestation_rescope(&existing, record)? {
-                    conn.execute(
-                        "UPDATE transactions SET raw_json = ? WHERE id = ?",
-                        params_from_iter([Sql::Text(narrowed), sql(field(&existing, "id"))?]),
-                    )
-                    .map_err(database_error)?;
+                    conn.prepare_cached("UPDATE transactions SET raw_json = ? WHERE id = ?")
+                        .map_err(database_error)?
+                        .execute(params_from_iter([
+                            Sql::Text(narrowed),
+                            sql(field(&existing, "id"))?,
+                        ]))
+                        .map_err(database_error)?;
                     rescoped += 1;
                 }
                 unchanged += 1;
@@ -1663,7 +1751,7 @@ pub fn insert_records(
             n("swap_refund_funding_vout")?,
             Sql::Text(now()),
         ];
-        conn.execute(
+        conn.prepare_cached(
             "INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id,
                 external_id_kind, fingerprint,
@@ -1678,8 +1766,9 @@ pub fn insert_records(
                 swap_refund_funding_vout,
                 created_at
             ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params_from_iter(values),
         )
+        .map_err(database_error)?
+        .execute(params_from_iter(values))
         .map_err(database_error)?;
         if reclaimed.is_some()
             && kassiber_setup::book_reset::settle_claim(conn, &id)?

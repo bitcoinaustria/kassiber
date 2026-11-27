@@ -203,45 +203,60 @@ impl Overlap {
             profile,
             4,
         )?;
+        struct WalletMeta {
+            label: String,
+            kind: String,
+            deprecated: bool,
+        }
+        let mut by_id: HashMap<String, WalletMeta> = HashMap::with_capacity(wallets.len());
+        let mut wallet_configs: Vec<(String, String, String, Value, bool)> =
+            Vec::with_capacity(wallets.len());
         let mut lists = Vec::new();
         for row in &wallets {
             let id = column(&row[0]);
+            let raw_label = column(&row[1]);
+            let kind = column(&row[2]);
             let config = wallet_config(&column(&row[3]));
+            let is_deprecated = deprecated(&config)?;
+            by_id.insert(
+                id.clone(),
+                WalletMeta {
+                    label: raw_label.clone(),
+                    kind: kind.clone(),
+                    deprecated: is_deprecated,
+                },
+            );
             let (chain, network) =
                 scope(&json_text(&config["chain"]), &json_text(&config["network"]));
-            if chain.is_empty() || network.is_empty() {
-                continue;
+            if !chain.is_empty() && !network.is_empty() {
+                let addresses = config::addresses(config.get("addresses"))?;
+                for (index, address) in addresses.iter().enumerate() {
+                    let Some(script) = config::bitcoin_address_script(address) else {
+                        continue;
+                    };
+                    lists.push(Source {
+                        label: Some(raw_label.clone())
+                            .filter(|l| !l.is_empty())
+                            .unwrap_or_else(|| id.clone()),
+                        kind: if kind.is_empty() {
+                            "address".into()
+                        } else {
+                            kind.clone()
+                        },
+                        chain: chain.clone(),
+                        network: network.clone(),
+                        script,
+                        source: "address_list",
+                        deprecated: is_deprecated,
+                        count: count(&id),
+                        branch: None,
+                        index: Some(index as i64),
+                        wallet: id.clone(),
+                    });
+                }
             }
-            let addresses = config::addresses(config.get("addresses"))?;
-            for (index, address) in addresses.iter().enumerate() {
-                let Some(script) = config::bitcoin_address_script(address) else {
-                    continue;
-                };
-                let kind = column(&row[2]);
-                let deprecated = deprecated(&config)?;
-                lists.push(Source {
-                    label: Some(column(&row[1]))
-                        .filter(|l| !l.is_empty())
-                        .unwrap_or_else(|| id.clone()),
-                    kind: if kind.is_empty() {
-                        "address".into()
-                    } else {
-                        kind
-                    },
-                    chain: chain.clone(),
-                    network: network.clone(),
-                    script,
-                    source: "address_list",
-                    deprecated,
-                    count: count(&id),
-                    branch: None,
-                    index: Some(index as i64),
-                    wallet: id.clone(),
-                });
-            }
+            wallet_configs.push((id, raw_label, kind, config, is_deprecated));
         }
-        let by_id: HashMap<String, &Vec<Sql>> =
-            wallets.iter().map(|row| (column(&row[0]), row)).collect();
         let mut inventory = Vec::new();
         for row in query(
             conn,
@@ -250,26 +265,27 @@ impl Overlap {
             9,
         )? {
             let id = column(&row[0]);
-            let raw = wallet_config(&column(&row[8]));
             let Some(script) = script_hex(&column(&row[4]))
-                .or_else(|| script_hex(&json_text(&raw["script_pubkey"])))
+                .or_else(|| {
+                    let raw = wallet_config(&column(&row[8]));
+                    script_hex(&json_text(&raw["script_pubkey"]))
+                })
                 .or_else(|| config::bitcoin_address_script(&column(&row[3])))
             else {
                 continue;
             };
             let owner = by_id.get(&id);
-            let config = owner.map_or_else(|| json!({}), |w| wallet_config(&column(&w[3])));
             let (chain, network) = scope(&column(&row[1]), &column(&row[2]));
             inventory.push(Source {
                 label: owner
-                    .map(|w| column(&w[1]))
+                    .map(|w| w.label.clone())
                     .unwrap_or_else(|| id.clone()),
-                kind: owner.map(|w| column(&w[2])).unwrap_or_default(),
+                kind: owner.map(|w| w.kind.clone()).unwrap_or_default(),
                 chain,
                 network,
                 script,
                 source: "inventory",
-                deprecated: deprecated(&config)?,
+                deprecated: owner.is_some_and(|w| w.deprecated),
                 count: count(&id),
                 branch: integer(&row[6]),
                 index: integer(&row[7]),
@@ -313,21 +329,19 @@ impl Overlap {
             }
         }
         let mut plans = Vec::new();
-        for row in &wallets {
-            let config = wallet_config(&column(&row[3]));
+        for (id, raw_label, kind, config, is_deprecated) in wallet_configs {
             if !material(&config) {
                 continue;
             }
             let Ok(Some(plan)) = descriptors::load(&config) else {
                 continue;
             };
-            let id = column(&row[0]);
             plans.push(Descriptor {
-                label: Some(column(&row[1]))
+                label: Some(raw_label)
                     .filter(|l| !l.is_empty())
                     .unwrap_or_else(|| id.clone()),
-                kind: column(&row[2]),
-                deprecated: deprecated(&config)?,
+                kind,
+                deprecated: is_deprecated,
                 wallet: id,
                 plan,
             });

@@ -92,7 +92,7 @@
   {
     "id": "discovery-cached-positive",
     "file": "crates/wallets/src/scan.rs",
-    "find": "if counter(cached)? > 0.into() {",
+    "find": "if crate::compatibility_cache::esplora_hashes_current(&self.checkpoint)\n                                && counter(cached)? > 0.into()\n                            {",
     "replace": "if false {",
     "expect_failing": [
       "esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded"

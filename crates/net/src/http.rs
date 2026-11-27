@@ -1,6 +1,10 @@
-//! Deliberately one HTTP/1.1 request per connection. No pool, background work,
-//! retries, cookies, proxy discovery, decompression, or implicit credentials.
-use crate::{remaining, Connection, Endpoint, Error, Proxy, ProxyKind, Route, TlsTrust, Transport};
+//! HTTP/1.1 client with optional request/client-scoped keep-alive pooling
+//! (`HttpPool`). No background work, cookies, proxy discovery, decompression,
+//! or implicit credentials; every connection and pooled reuse rechecks consent
+//! and offline policy.
+use crate::{
+    remaining, Connection, Endpoint, Error, Proxy, ProxyKind, Request, Route, TlsTrust, Transport,
+};
 use base64::Engine;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -14,6 +18,52 @@ const MAX_HEADER_BYTES: usize = 64 * 1024;
 const MAX_HEADERS: usize = 100;
 const MAX_INFORMATIONAL: usize = 8;
 const MAX_CHUNKS: usize = 1_000_000;
+const IO_BUFFER_BYTES: usize = 64 * 1024;
+const POOL_MAX_IDLE: usize = 16;
+const POOL_IDLE_TTL: Duration = Duration::from_secs(30);
+
+struct PooledConnection {
+    request: Request,
+    connection: Connection,
+    idle_since: Instant,
+}
+
+/// Client-scoped HTTP/1.1 keep-alive connection pool. Connections never cross
+/// different `Request` scopes (endpoint, proxy, trust, subsystem, action
+/// binding), recheck consent and offline state on every checkout/write/read,
+/// and close cleanly when the pool is dropped.
+#[derive(Default)]
+pub struct HttpPool {
+    idle: Mutex<Vec<PooledConnection>>,
+}
+
+impl HttpPool {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn take(&self, request: &Request) -> Option<Connection> {
+        let mut idle = self.idle.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        idle.retain(|entry| now.saturating_duration_since(entry.idle_since) < POOL_IDLE_TTL);
+        let pos = idle.iter().rposition(|entry| entry.request == *request)?;
+        Some(idle.swap_remove(pos).connection)
+    }
+
+    fn put(&self, request: Request, connection: Connection) {
+        let mut idle = self.idle.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        idle.retain(|entry| now.saturating_duration_since(entry.idle_since) < POOL_IDLE_TTL);
+        if idle.len() >= POOL_MAX_IDLE {
+            idle.remove(0);
+        }
+        idle.push(PooledConnection {
+            request,
+            connection,
+            idle_since: now,
+        });
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RedirectPolicy {
@@ -54,6 +104,7 @@ pub struct HttpRequest {
     method: String,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+    safe_to_replay: bool,
     upgrade: bool,
     cancel: Option<Cancel>,
 }
@@ -73,6 +124,7 @@ impl HttpRequest {
             method: method.into(),
             headers: Vec::new(),
             body: Vec::new(),
+            safe_to_replay: matches!(method, "GET" | "HEAD"),
             upgrade: false,
             cancel: None,
         })
@@ -122,6 +174,12 @@ impl HttpRequest {
         self
     }
 
+    /// Opt in to retrying a read-only RPC carried in a POST body.
+    pub fn retry_read_only_rpc(mut self) -> Self {
+        self.safe_to_replay = true;
+        self
+    }
+
     /// Makes `cancel` able to stop this request: [`Cancel::cancel`] shuts the
     /// socket down, so a blocked connect, write or read returns at once.
     pub fn cancellable(mut self, cancel: &Cancel) -> Self {
@@ -131,11 +189,60 @@ impl HttpRequest {
 
     pub fn send(self, route: Route, options: HttpOptions) -> Result<HttpResponse, Error> {
         let cancel = self.cancel.clone();
-        let response = self.exchange(route, options, |connection, method, upgrade, limit| {
-            let response = receive(connection, method, upgrade, limit)?;
-            let location = response.header("location").map(str::to_owned);
-            Ok((response.status, location, response))
-        });
+        let response = self.exchange(
+            route,
+            options,
+            None,
+            &|| Ok(()),
+            |connection, method, upgrade, limit| {
+                let (response, _) = receive(connection, method, upgrade, limit, false)?;
+                let location = response.header("location").map(str::to_owned);
+                Ok((response.status, location, response, None))
+            },
+        );
+        if let Some(cancel) = cancel {
+            cancel.release();
+        }
+        response
+    }
+
+    /// Like [`HttpRequest::send`], reusing an idle HTTP/1.1 keep-alive
+    /// connection from `pool` when one matches this exact `Route::request`.
+    pub fn send_pooled(
+        self,
+        route: Route,
+        options: HttpOptions,
+        pool: &HttpPool,
+    ) -> Result<HttpResponse, Error> {
+        self.send_pooled_checked(route, options, pool, &|| Ok(()))
+    }
+
+    /// Check the caller's live authority before connecting and writing,
+    /// including a retry after an idle connection closes.
+    pub fn send_pooled_checked(
+        self,
+        route: Route,
+        options: HttpOptions,
+        pool: &HttpPool,
+        check: &dyn Fn() -> Result<(), Error>,
+    ) -> Result<HttpResponse, Error> {
+        let cancel = self.cancel.clone();
+        #[cfg(feature = "test-observer")]
+        let use_pool = !crate::tape::is_taped() && !self.upgrade;
+        #[cfg(not(feature = "test-observer"))]
+        let use_pool = !self.upgrade;
+        let active_pool = use_pool.then_some(pool);
+        let response = self.exchange(
+            route,
+            options,
+            active_pool,
+            check,
+            |connection, method, upgrade, limit| {
+                let (response, reusable) = receive(connection, method, upgrade, limit, use_pool)?;
+                let location = response.header("location").map(str::to_owned);
+                Ok((response.status, location, response, reusable))
+            },
+        );
         if let Some(cancel) = cancel {
             cancel.release();
         }
@@ -151,15 +258,21 @@ impl HttpRequest {
             return Err(Error::HttpInvalid);
         }
         let cancel = self.cancel.clone();
-        let stream = self.exchange(route, options, |connection, method, _, limit| {
-            let mut stream = HttpStream::receive(connection, method, limit)?;
-            let location = stream.header("location").map(str::to_owned);
-            if matches!(stream.status, 301 | 302 | 303 | 307 | 308) && location.is_some() {
-                // Read the body before following, as `receive` does.
-                stream.drain()?;
-            }
-            Ok((stream.status, location, stream))
-        });
+        let stream = self.exchange(
+            route,
+            options,
+            None,
+            &|| Ok(()),
+            |connection, method, _, limit| {
+                let mut stream = HttpStream::receive(connection, method, limit)?;
+                let location = stream.header("location").map(str::to_owned);
+                if matches!(stream.status, 301 | 302 | 303 | 307 | 308) && location.is_some() {
+                    // Read the body before following, as `receive` does.
+                    stream.drain()?;
+                }
+                Ok((stream.status, location, stream, None))
+            },
+        );
         match stream {
             Ok(stream) => Ok(stream.attach(cancel)),
             Err(error) => {
@@ -175,7 +288,14 @@ impl HttpRequest {
         mut self,
         route: Route,
         options: HttpOptions,
-        receive: impl Fn(Connection, &str, bool, usize) -> Result<(u16, Option<String>, T), Error>,
+        pool: Option<&HttpPool>,
+        check: &dyn Fn() -> Result<(), Error>,
+        receive: impl Fn(
+            Connection,
+            &str,
+            bool,
+            usize,
+        ) -> Result<(u16, Option<String>, T, Option<Connection>), Error>,
     ) -> Result<T, Error> {
         route.check()?;
         self.bind(&route)?;
@@ -185,40 +305,101 @@ impl HttpRequest {
         let mut redirects = RedirectHistory::default();
         loop {
             route.check()?;
-            let mut wire = self.encode(&route)?;
+            let keep_alive = pool.is_some() && !self.upgrade;
+            let mut wire = self.encode_with(&route, keep_alive)?;
             let timeout = options
                 .deadline
                 .map(remaining)
                 .transpose()?
                 .map_or(options.timeout, |budget| budget.min(options.timeout));
-            // Keep the original route immutable across same-origin hops.
-            let next = Route {
-                gate: route.gate.clone(),
-                request: route.request.clone(),
-                consent: route.consent.clone(),
+            let mut try_pooled = pool.is_some() && self.safe_to_replay;
+            let (status, location, response, reusable) = loop {
+                if let Err(error) = check() {
+                    wire.fill(0);
+                    return Err(error);
+                }
+                // Keep the original route immutable across same-origin hops.
+                let next = Route {
+                    gate: route.gate.clone(),
+                    request: route.request.clone(),
+                    consent: route.consent.clone(),
+                };
+                if self.cancel.as_ref().is_some_and(Cancel::is_cancelled) {
+                    return Err(Error::Io(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "request cancelled",
+                    )));
+                }
+                let mut reused = false;
+                let mut connection = if try_pooled {
+                    try_pooled = false;
+                    if let Some(mut pooled) = pool.and_then(|p| p.take(&next.request)) {
+                        let rebound = Route {
+                            gate: next.gate.clone(),
+                            request: next.request.clone(),
+                            consent: next.consent.clone(),
+                        };
+                        if pooled
+                            .rebind_pooled(rebound, timeout, options.deadline)
+                            .is_ok()
+                        {
+                            reused = true;
+                            pooled
+                        } else {
+                            drop(pooled);
+                            next.connect_inner(timeout, true)?
+                        }
+                    } else {
+                        next.connect_inner(timeout, true)?
+                    }
+                } else {
+                    next.connect_inner(timeout, true)?
+                };
+                if let Err(error) = check() {
+                    wire.fill(0);
+                    return Err(error);
+                }
+                if let Some(cancel) = &self.cancel {
+                    cancel.register(&mut connection)?;
+                }
+                connection.set_deadline(options.deadline);
+                connection.transport().write_context =
+                    crate::WriteContext::Http(method_label(&self.method)?);
+                let write_result = connection
+                    .write_all(&wire)
+                    .and_then(|()| connection.flush());
+                if let Err(error) = write_result {
+                    if reused && self.safe_to_replay && is_stale_pooled_io(&error) {
+                        continue;
+                    }
+                    wire.fill(0);
+                    return Err(error.into());
+                }
+                match receive(
+                    connection,
+                    &self.method,
+                    self.upgrade,
+                    options.max_response_bytes.min(MAX_RESPONSE_BYTES),
+                ) {
+                    Ok(done) => {
+                        wire.fill(0);
+                        break done;
+                    }
+                    Err(error)
+                        if reused && self.safe_to_replay && is_stale_pooled_error(&error) =>
+                    {
+                        continue;
+                    }
+                    Err(error) => {
+                        wire.fill(0);
+                        return Err(error);
+                    }
+                }
             };
-            if self.cancel.as_ref().is_some_and(Cancel::is_cancelled) {
-                return Err(Error::Io(io::Error::new(
-                    io::ErrorKind::Interrupted,
-                    "request cancelled",
-                )));
+            if let (Some(pool), Some(mut conn)) = (pool, reusable) {
+                conn.set_deadline(None);
+                pool.put(route.request.clone(), conn);
             }
-            let mut connection = next.connect_inner(timeout, true)?;
-            if let Some(cancel) = &self.cancel {
-                cancel.register(&mut connection)?;
-            }
-            connection.set_deadline(options.deadline);
-            connection.transport().write_context =
-                crate::WriteContext::Http(method_label(&self.method)?);
-            connection.write_all(&wire)?;
-            connection.flush()?;
-            wire.fill(0);
-            let (status, location, response) = receive(
-                connection,
-                &self.method,
-                self.upgrade,
-                options.max_response_bytes.min(MAX_RESPONSE_BYTES),
-            )?;
             if !matches!(status, 301 | 302 | 303 | 307 | 308) {
                 return Ok(response);
             }
@@ -251,7 +432,7 @@ impl HttpRequest {
             redirects.visit(&target)?;
             self.url = target;
             self.bind(&route)?;
-            // receive has closed the previous stream; credentials remain origin-bound.
+            // receive has closed or returned the previous stream; credentials remain origin-bound.
         }
     }
 
@@ -273,7 +454,12 @@ impl HttpRequest {
         Ok(())
     }
 
+    #[cfg(test)]
     fn encode(&self, route: &Route) -> Result<Vec<u8>, Error> {
+        self.encode_with(route, false)
+    }
+
+    fn encode_with(&self, route: &Route, keep_alive: bool) -> Result<Vec<u8>, Error> {
         let forward = route.request.proxy.as_ref().filter(|proxy| {
             proxy.kind == ProxyKind::Http && route.request.tls == TlsTrust::Plaintext
         });
@@ -287,7 +473,13 @@ impl HttpRequest {
             self.method,
             path,
             host_header(&route.request.endpoint, self.url.scheme()),
-            if self.upgrade { "Upgrade" } else { "close" }
+            if self.upgrade {
+                "Upgrade"
+            } else if keep_alive {
+                "keep-alive"
+            } else {
+                "close"
+            }
         );
         if !self
             .headers
@@ -436,7 +628,7 @@ pub(crate) fn tunnel(transport: &mut Transport) -> Result<(), Error> {
     transport.flush()?;
     let (header, pending) = read_tunnel_head(transport)?;
     transport.pending = io::Cursor::new(pending);
-    let (status, _, _) = parse_head(&header)?;
+    let (_, status, _, _) = parse_head(&header)?;
     if status != 200 {
         return Err(Error::ProxyUnsupported);
     }
@@ -622,8 +814,8 @@ impl HttpStream {
         method: &str,
         limit: usize,
     ) -> Result<Self, Error> {
-        let mut reader = BufReader::new(reader);
-        let (status, reason, headers) = read_head(&mut reader)?;
+        let mut reader = BufReader::with_capacity(IO_BUFFER_BYTES, reader);
+        let (_, status, reason, headers) = read_head(&mut reader)?;
         check_content_encoding(&headers)?;
         if status == 101 {
             return Err(Error::HttpInvalid);
@@ -879,10 +1071,24 @@ fn framing(headers: &Headers) -> Result<Framing, Error> {
 }
 
 fn read_line(reader: &mut impl BufRead, limit: usize) -> Result<Vec<u8>, Error> {
+    read_line_eof(reader, limit, false)
+}
+
+fn read_line_eof(
+    reader: &mut impl BufRead,
+    limit: usize,
+    eof_on_first_byte_is_io: bool,
+) -> Result<Vec<u8>, Error> {
     let mut line = Vec::new();
     loop {
         let buffer = reader.fill_buf()?;
         if buffer.is_empty() {
+            if eof_on_first_byte_is_io && line.is_empty() {
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "connection closed before response status line",
+                )));
+            }
             return Err(Error::HttpInvalid);
         }
         let count = buffer
@@ -905,7 +1111,34 @@ fn read_line(reader: &mut impl BufRead, limit: usize) -> Result<Vec<u8>, Error> 
 
 type Headers = Vec<(String, String)>;
 
-fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), Error> {
+fn is_stale_pooled_io(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::UnexpectedEof
+            | io::ErrorKind::BrokenPipe
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::ConnectionAborted
+    )
+}
+
+fn is_stale_pooled_error(error: &Error) -> bool {
+    match error {
+        Error::Io(io_err) => is_stale_pooled_io(io_err),
+        Error::HttpInvalid => false,
+        _ => false,
+    }
+}
+
+fn header_requests_close(headers: &Headers) -> bool {
+    headers.iter().any(|(name, value)| {
+        name == "connection"
+            && value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("close"))
+    })
+}
+
+fn parse_head(head: &[u8]) -> Result<(u8, u16, String, Headers), Error> {
     let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
     let mut response = httparse::Response::new(&mut headers);
     if !response
@@ -915,6 +1148,7 @@ fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), Error> {
     {
         return Err(Error::HttpInvalid);
     }
+    let minor = response.version.unwrap_or(0);
     let status = response
         .code
         .filter(|status| (100..=599).contains(status))
@@ -931,7 +1165,12 @@ fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), Error> {
             ))
         })
         .collect::<Result<Headers, Error>>()?;
-    Ok((status, response.reason.unwrap_or("").to_owned(), headers))
+    Ok((
+        minor,
+        status,
+        response.reason.unwrap_or("").to_owned(),
+        headers,
+    ))
 }
 
 fn receive(
@@ -939,9 +1178,10 @@ fn receive(
     method: &str,
     upgrade: bool,
     limit: usize,
-) -> Result<HttpResponse, Error> {
-    let mut reader = BufReader::new(connection);
-    let (status, reason, headers) = read_head(&mut reader)?;
+    keep_alive: bool,
+) -> Result<(HttpResponse, Option<Connection>), Error> {
+    let mut reader = BufReader::with_capacity(IO_BUFFER_BYTES, connection);
+    let (minor, status, reason, headers) = read_head(&mut reader)?;
     let mut response = HttpResponse {
         status,
         reason,
@@ -956,30 +1196,49 @@ fn receive(
         }
         reader.get_mut().transport().write_context = crate::WriteContext::Raw;
         response.upgraded = Some(Upgrade(reader));
-        return Ok(response);
+        return Ok((response, None));
     }
-    if method == "HEAD" || matches!(status, 204 | 304) {
-        return Ok(response);
-    }
-    response.body = read_body(&mut reader, &response.headers, limit)?;
-    Ok(response)
+    let explicit_framing = if method == "HEAD" || matches!(status, 204 | 304) {
+        true
+    } else {
+        let (body, explicit) = read_body(&mut reader, &response.headers, limit)?;
+        response.body = body;
+        explicit
+    };
+    let reusable = if keep_alive
+        && minor == 1
+        && explicit_framing
+        && !header_requests_close(&response.headers)
+        && reader.buffer().is_empty()
+    {
+        Some(reader.into_inner())
+    } else {
+        None
+    };
+    Ok((response, reusable))
 }
 
-fn read_head(reader: &mut impl BufRead) -> Result<(u16, String, Headers), Error> {
+fn read_head(reader: &mut impl BufRead) -> Result<(u8, u16, String, Headers), Error> {
     let mut total = 0;
-    for _ in 0..=MAX_INFORMATIONAL {
+    for informational in 0..=MAX_INFORMATIONAL {
         let mut head = Vec::new();
+        let mut first_line = true;
         loop {
-            let line = read_line(reader, MAX_HEADER_BYTES.saturating_sub(total))?;
+            let line = read_line_eof(
+                reader,
+                MAX_HEADER_BYTES.saturating_sub(total),
+                informational == 0 && first_line,
+            )?;
+            first_line = false;
             total += line.len();
             head.extend_from_slice(&line);
             if line == b"\r\n" {
                 break;
             }
         }
-        let (status, reason, headers) = parse_head(&head)?;
+        let (minor, status, reason, headers) = parse_head(&head)?;
         if status >= 200 || status == 101 {
-            return Ok((status, reason, headers));
+            return Ok((minor, status, reason, headers));
         }
     }
     Err(Error::HttpInvalid)
@@ -995,7 +1254,11 @@ fn check_content_encoding(headers: &Headers) -> Result<(), Error> {
     Ok(())
 }
 
-fn read_body(reader: &mut impl BufRead, headers: &Headers, limit: usize) -> Result<Vec<u8>, Error> {
+fn read_body(
+    reader: &mut impl BufRead,
+    headers: &Headers,
+    limit: usize,
+) -> Result<(Vec<u8>, bool), Error> {
     check_content_encoding(headers)?;
     let lengths: Vec<_> = headers
         .iter()
@@ -1035,7 +1298,7 @@ fn read_body(reader: &mut impl BufRead, headers: &Headers, limit: usize) -> Resu
                     trailers += trailer.len();
                     charge(&mut consumed, trailer.len(), limit)?;
                     if trailer == b"\r\n" {
-                        return Ok(body);
+                        return Ok((body, true));
                     }
                 }
             }
@@ -1056,8 +1319,9 @@ fn read_body(reader: &mut impl BufRead, headers: &Headers, limit: usize) -> Resu
         }
         let length = length.parse().map_err(|_| Error::HttpInvalid)?;
         append_exact(reader, &mut body, length, limit)?;
+        return Ok((body, true));
     } else {
-        let mut buffer = [0; 8192];
+        let mut buffer = [0; IO_BUFFER_BYTES];
         loop {
             let count = match reader.read(&mut buffer) {
                 Ok(count) => count,
@@ -1075,7 +1339,7 @@ fn read_body(reader: &mut impl BufRead, headers: &Headers, limit: usize) -> Resu
             body.extend_from_slice(&buffer[..count]);
         }
     }
-    Ok(body)
+    Ok((body, false))
 }
 
 fn charge(consumed: &mut usize, count: usize, limit: usize) -> Result<(), Error> {
@@ -1097,7 +1361,7 @@ fn append_exact(
     }
     // Grow only with bytes actually received, never allocate an announced length.
     let mut remaining = count;
-    let mut buffer = [0; 8192];
+    let mut buffer = [0; IO_BUFFER_BYTES];
     while remaining != 0 {
         let count = remaining.min(buffer.len());
         reader.read_exact(&mut buffer[..count])?;
@@ -1165,10 +1429,10 @@ mod tests {
             ("Content-Length: 3\r\n", "ab", 3, None),
         ] {
             let head = format!("HTTP/1.1 500 Error\r\n{header}\r\n");
-            let (_, _, headers) = parse_head(head.as_bytes()).unwrap();
+            let (_, _, _, headers) = parse_head(head.as_bytes()).unwrap();
             let result = read_body(&mut Cursor::new(bytes), &headers, limit);
             match expected {
-                Some(body) => assert_eq!(result.unwrap(), body),
+                Some(body) => assert_eq!(result.unwrap().0, body),
                 None => assert!(result.is_err()),
             }
         }
@@ -1214,6 +1478,7 @@ mod tests {
         assert_eq!(
             read_body(&mut Cursor::new(wire), &headers, 16 * 1024 * 1024)
                 .unwrap()
+                .0
                 .len(),
             15 * 1024 * 1024
         );
@@ -1228,7 +1493,7 @@ mod tests {
 
     #[test]
     fn response_headers_decode_latin1_and_refuse_content_coding() {
-        let (_, _, headers) = parse_head(b"HTTP/1.1 200 OK\r\nX-Name: caf\xe9\r\n\r\n").unwrap();
+        let (_, _, _, headers) = parse_head(b"HTTP/1.1 200 OK\r\nX-Name: caf\xe9\r\n\r\n").unwrap();
         assert_eq!(headers[0].1, "caf\u{e9}");
         for coding in ["gzip", "br", "identity, gzip"] {
             let headers = vec![("content-encoding".into(), coding.into())];
@@ -1293,7 +1558,7 @@ mod tests {
             }
         }
         let reader = || BufReader::new(Ragged(Cursor::new(b"abc".to_vec())));
-        assert_eq!(read_body(&mut reader(), &vec![], 3).unwrap(), b"abc");
+        assert_eq!(read_body(&mut reader(), &vec![], 3).unwrap().0, b"abc");
         assert!(read_body(
             &mut reader(),
             &vec![("content-length".into(), "4".into())],
@@ -1519,5 +1784,177 @@ mod tests {
         assert_eq!(parsed, header.as_bytes());
         assert_eq!(pending, b"early-tunnel-bytes");
         assert!(reader.calls <= 2, "{} CONNECT reads", reader.calls);
+    }
+
+    #[test]
+    fn pooled_http_sends_post_on_a_fresh_connection_without_replaying_it() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = |stream: &mut std::net::TcpStream| {
+                let mut head = Vec::new();
+                while !head.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    head.push(byte[0]);
+                }
+                head
+            };
+            assert!(request(&mut stream).starts_with(b"GET "));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+            // Leave a stale keep-alive entry for the client to skip.
+            drop(stream);
+
+            let (mut stream, _) = listener.accept().unwrap();
+            assert!(request(&mut stream).starts_with(b"POST "));
+            drop(stream);
+
+            // The next connection belongs to the caller's explicit GET.
+            let (mut stream, _) = listener.accept().unwrap();
+            assert!(request(&mut stream).starts_with(b"GET "));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .unwrap();
+        });
+        let gate = crate::Gate::new(|| crate::Offline::Online, crate::Ledger::default());
+        let request = Request::new(
+            crate::Subsystem::Sync,
+            Endpoint::new("127.0.0.1", endpoint.port()).unwrap(),
+            TlsTrust::Plaintext,
+        );
+        let proof = crate::Consent::explicit_trigger(&request);
+        let pool = HttpPool::new();
+        let url = format!("http://{endpoint}/");
+        let send = |method| {
+            HttpRequest::new(method, &url).unwrap().send_pooled(
+                gate.authorize(request.clone(), Some(proof.clone()))
+                    .unwrap(),
+                HttpOptions {
+                    timeout: Duration::from_secs(2),
+                    ..Default::default()
+                },
+                &pool,
+            )
+        };
+        assert_eq!(send("GET").unwrap().status, 200);
+        assert!(send("POST").is_err());
+        assert_eq!(send("GET").unwrap().status, 200);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn http_pool_reuses_keep_alive_recovers_stale_eof_and_enforces_offline() {
+        use crate::{Consent, Gate, Ledger, Offline, Request, Subsystem};
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::thread;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let accepts = Arc::new(AtomicUsize::new(0));
+        let accepts_server = Arc::clone(&accepts);
+        let server = thread::spawn(move || {
+            // Connection 1: serve 3 keep-alive responses, then drop the socket so the 4th request sees stale EOF.
+            let (mut s1, _) = listener.accept().unwrap();
+            accepts_server.fetch_add(1, Ordering::SeqCst);
+            for i in 1..=3 {
+                let mut buf = [0u8; 4096];
+                let n = s1.read(&mut buf).unwrap();
+                assert!(n > 0);
+                let body = format!("ok-{i}");
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                s1.write_all(resp.as_bytes()).unwrap();
+            }
+            drop(s1);
+            // Connection 2: serve 1 response with Connection: close so pool discards it.
+            let (mut s2, _) = listener.accept().unwrap();
+            accepts_server.fetch_add(1, Ordering::SeqCst);
+            let mut buf = [0u8; 4096];
+            let _ = s2.read(&mut buf).unwrap();
+            s2.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nok-4!")
+                .unwrap();
+            drop(s2);
+            // Connection 3: fresh connection after Connection: close.
+            let (mut s3, _) = listener.accept().unwrap();
+            accepts_server.fetch_add(1, Ordering::SeqCst);
+            let mut buf = [0u8; 4096];
+            let _ = s3.read(&mut buf).unwrap();
+            s3.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: keep-alive\r\n\r\nok-5",
+            )
+            .unwrap();
+        });
+
+        let online = Arc::new(AtomicBool::new(true));
+        let online_check = Arc::clone(&online);
+        let gate = Gate::new(
+            move || {
+                if online_check.load(Ordering::SeqCst) {
+                    Offline::Online
+                } else {
+                    Offline::Offline
+                }
+            },
+            Ledger::default(),
+        );
+        let pool = HttpPool::new();
+        let request = Request::new(
+            Subsystem::Ai,
+            Endpoint::new("127.0.0.1", addr.port()).unwrap(),
+            TlsTrust::Plaintext,
+        );
+        let proof = Consent::explicit_trigger(&request);
+        let url = format!("http://127.0.0.1:{}/test", addr.port());
+
+        for i in 1..=3 {
+            let route = gate
+                .authorize(request.clone(), Some(proof.clone()))
+                .unwrap();
+            let resp = HttpRequest::new("GET", &url)
+                .unwrap()
+                .send_pooled(route, HttpOptions::default(), &pool)
+                .unwrap();
+            assert_eq!(resp.body, format!("ok-{i}").as_bytes());
+        }
+        assert_eq!(accepts.load(Ordering::SeqCst), 1);
+
+        // Request 4 hits stale EOF on pooled socket 1 and transparently retries on socket 2.
+        let route = gate
+            .authorize(request.clone(), Some(proof.clone()))
+            .unwrap();
+        let resp = HttpRequest::new("GET", &url)
+            .unwrap()
+            .send_pooled(route, HttpOptions::default(), &pool)
+            .unwrap();
+        assert_eq!(resp.body, b"ok-4!");
+        assert_eq!(accepts.load(Ordering::SeqCst), 2);
+
+        // Request 5 opens socket 3 because response 4 sent Connection: close.
+        let route = gate
+            .authorize(request.clone(), Some(proof.clone()))
+            .unwrap();
+        let resp = HttpRequest::new("GET", &url)
+            .unwrap()
+            .send_pooled(route, HttpOptions::default(), &pool)
+            .unwrap();
+        assert_eq!(resp.body, b"ok-5");
+        assert_eq!(accepts.load(Ordering::SeqCst), 3);
+
+        // Switching offline must refuse even with a live idle socket in the pool.
+        online.store(false, Ordering::SeqCst);
+        let route_err = gate.authorize(request.clone(), Some(proof));
+        assert!(matches!(route_err, Err(Error::Offline)));
+
+        drop(pool);
+        server.join().unwrap();
     }
 }

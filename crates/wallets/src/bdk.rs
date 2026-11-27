@@ -247,11 +247,12 @@ impl Execution {
                 "BDK execution consent was already used",
             ));
         }
-        let client = ElectrumClient::connect(
+        let client = ElectrumClient::connect_checked(
             self.backend.clone(),
             gate,
             Some(proof.transport.clone()),
             deadline,
+            &|| cancel.check(deadline),
         )?;
         let result = self.execute(
             &mut Wire {
@@ -285,9 +286,12 @@ impl Execution {
         let mut protocol = Protocol {
             rpc,
             txs: BTreeMap::new(),
+            txouts: BTreeMap::new(),
             headers: BTreeMap::new(),
             anchors: BTreeMap::new(),
+            verified_anchors: BTreeMap::new(),
         };
+        let replaying = kassiber_net::uses_legacy_tape();
         let mut rebuilt = false;
         if self.prior.is_some() {
             let prior = wallet.latest_checkpoint();
@@ -299,14 +303,30 @@ impl Execution {
                 wallet = self.fresh_wallet()?;
                 aggregate = ChangeSet::default();
                 rebuilt = true;
+            } else if !replaying {
+                // Transactions and previous outputs are content-addressed by txid;
+                // verified anchors are only reused when confirmed still on `chain`.
+                for tx_node in wallet.tx_graph().full_txs() {
+                    protocol.txs.insert(tx_node.txid, tx_node.tx);
+                }
+                for (op, txout) in wallet.tx_graph().all_txouts() {
+                    protocol.txouts.insert(op, txout.clone());
+                }
+                for (txid, anchors) in wallet.tx_graph().all_anchors() {
+                    for anchor in anchors {
+                        protocol
+                            .verified_anchors
+                            .entry((*txid, anchor.block_id.height))
+                            .or_default()
+                            .push(*anchor);
+                    }
+                }
             }
         } else if self.refresh.force_full {
             if let Some(height) = self.refresh.checkpoint_tip {
                 protocol.remote_block_hash(height)?;
             }
         }
-        // Python's binding creates a fresh BdkElectrumClient for each refresh;
-        // its transaction/header cache is request-local, not seeded from state.
         if self.prior.is_none() || rebuilt {
             let chain = protocol.chain_snapshot(wallet.latest_checkpoint())?;
             let mut request = wallet.start_full_scan_at(start_time).build();
@@ -319,6 +339,7 @@ impl Execution {
                     self.gap as usize,
                     self.backend.batch_size(),
                     start_time,
+                    None,
                     &mut update.tx_update,
                 )?;
                 if let Some(last) = last {
@@ -331,18 +352,31 @@ impl Execution {
         } else {
             reveal(&mut wallet, self.gap, self.internal.is_some())?;
             let mut finished = false;
+            let mut scanned_spks = BTreeSet::<bitcoin::ScriptBuf>::new();
+            let mut scanned_tip = None;
             for _ in 0..64 {
                 let chain = protocol.chain_snapshot(wallet.latest_checkpoint())?;
+                let tip = chain.block_id();
+                if scanned_tip.is_some_and(|previous| previous != tip) {
+                    scanned_spks.clear();
+                    protocol.headers.clear();
+                    protocol.anchors.clear();
+                }
+                scanned_tip = Some(tip);
                 let mut request = wallet.start_sync_with_revealed_spks_at(start_time).build();
                 let mut update = Update::default();
+                let mut to_scan = Vec::new();
+                for (i, s) in request.iter_spks_with_expected_txids().enumerate() {
+                    if replaying || scanned_spks.insert(s.spk.clone()) {
+                        to_scan.push((i as u32, s));
+                    }
+                }
                 protocol.scan(
-                    request
-                        .iter_spks_with_expected_txids()
-                        .enumerate()
-                        .map(|(i, s)| (i as u32, s)),
+                    to_scan.into_iter(),
                     usize::MAX,
                     self.backend.batch_size(),
                     start_time,
+                    Some(&chain),
                     &mut update.tx_update,
                 )?;
                 protocol.complete(&mut update, chain)?;
@@ -432,12 +466,13 @@ impl Rpc for Wire<'_> {
         for chunk in params.chunks(self.client.batch_size()) {
             self.cancel.check(self.deadline)?;
             result.extend(
-                self.client.batch_call(
+                self.client.batch_call_checked(
                     &chunk
                         .iter()
                         .map(|p| (method.into(), p.clone()))
                         .collect::<Vec<_>>(),
                     self.deadline,
+                    &|| self.cancel.check(self.deadline),
                 )?,
             );
         }
@@ -448,8 +483,26 @@ impl Rpc for Wire<'_> {
 struct Protocol<'a, R> {
     rpc: &'a mut R,
     txs: BTreeMap<Txid, Arc<Transaction>>,
+    txouts: BTreeMap<bitcoin::OutPoint, bitcoin::TxOut>,
     headers: BTreeMap<u32, Header>,
     anchors: BTreeMap<(Txid, bitcoin::BlockHash), ConfirmationBlockTime>,
+    verified_anchors: BTreeMap<(Txid, u32), Vec<ConfirmationBlockTime>>,
+}
+fn decode_verified_tx(id: Txid, raw: &Value) -> Result<Arc<Transaction>> {
+    let tx: Transaction = consensus::deserialize(
+        &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
+    )
+    .map_err(|_| invalid())?;
+    if tx.compute_txid() != id {
+        return Err(invalid());
+    }
+    Ok(Arc::new(tx))
+}
+fn decode_header(raw: &Value) -> Result<Header> {
+    consensus::deserialize(
+        &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
+    )
+    .map_err(|_| invalid())
 }
 impl<R: Rpc> Protocol<'_, R> {
     fn tx(&mut self, id: Txid) -> Result<Arc<Transaction>> {
@@ -459,16 +512,33 @@ impl<R: Rpc> Protocol<'_, R> {
         let raw = self
             .rpc
             .call("blockchain.transaction.get", json!([id.to_string()]))?;
-        let tx: Transaction = consensus::deserialize(
-            &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
-        )
-        .map_err(|_| invalid())?;
-        if tx.compute_txid() != id {
-            return Err(invalid());
-        }
-        let tx = Arc::new(tx);
+        let tx = decode_verified_tx(id, &raw)?;
         self.txs.insert(id, tx.clone());
         Ok(tx)
+    }
+    fn prefetch_txs(&mut self, ids: &[Txid]) -> Result<()> {
+        if kassiber_net::uses_legacy_tape() {
+            return Ok(());
+        }
+        let mut seen = BTreeSet::new();
+        let missing: Vec<Txid> = ids
+            .iter()
+            .copied()
+            .filter(|id| !self.txs.contains_key(id) && seen.insert(*id))
+            .collect();
+        if missing.len() <= 1 {
+            return Ok(());
+        }
+        let params: Vec<Value> = missing.iter().map(|id| json!([id.to_string()])).collect();
+        let raws = self.rpc.batch("blockchain.transaction.get", params)?;
+        if raws.len() != missing.len() {
+            return Err(invalid());
+        }
+        for (id, raw) in missing.into_iter().zip(raws) {
+            let tx = decode_verified_tx(id, &raw)?;
+            self.txs.insert(id, tx);
+        }
+        Ok(())
     }
     fn header(&mut self, height: u32) -> Result<Header> {
         if let Some(h) = self.headers.get(&height) {
@@ -478,22 +548,54 @@ impl<R: Rpc> Protocol<'_, R> {
         self.headers.insert(height, header);
         Ok(header)
     }
+    fn prefetch_headers(&mut self, heights: &[u32]) -> Result<()> {
+        if kassiber_net::uses_legacy_tape() {
+            return Ok(());
+        }
+        let mut seen = BTreeSet::new();
+        let missing: Vec<u32> = heights
+            .iter()
+            .copied()
+            .filter(|h| !self.headers.contains_key(h) && seen.insert(*h))
+            .collect();
+        if missing.len() <= 1 {
+            return Ok(());
+        }
+        let params: Vec<Value> = missing.iter().map(|h| json!([h])).collect();
+        let raws = self.rpc.batch("blockchain.block.header", params)?;
+        if raws.len() != missing.len() {
+            return Err(invalid());
+        }
+        for (height, raw) in missing.into_iter().zip(raws) {
+            self.headers.insert(height, decode_header(&raw)?);
+        }
+        Ok(())
+    }
     fn read_header(&mut self, height: u32) -> Result<Header> {
         let raw = self.rpc.call("blockchain.block.header", json!([height]))?;
-        consensus::deserialize(
-            &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
-        )
-        .map_err(|_| invalid())
+        decode_header(&raw)
     }
-    fn anchor(&mut self, id: Txid, height: u32) -> Result<Option<ConfirmationBlockTime>> {
-        let mut header = self.header(height)?;
-        if let Some(anchor) = self.anchors.get(&(id, header.block_hash())) {
-            return Ok(Some(*anchor));
-        }
-        let proof = self.rpc.call(
-            "blockchain.transaction.get_merkle",
-            json!([id.to_string(), height]),
-        )?;
+    fn verified_anchor(
+        &self,
+        id: Txid,
+        height: u32,
+        chain: Option<&CheckPoint>,
+    ) -> Option<ConfirmationBlockTime> {
+        let chain = chain?;
+        let block = chain.get(height)?;
+        self.verified_anchors
+            .get(&(id, height))?
+            .iter()
+            .copied()
+            .find(|a| a.block_id.hash == block.hash())
+    }
+    fn verify_and_cache_anchor(
+        &mut self,
+        id: Txid,
+        height: u32,
+        mut header: Header,
+        proof: Value,
+    ) -> Result<Option<ConfirmationBlockTime>> {
         if !merkle(id, header, &proof)? {
             self.headers.remove(&height);
             header = self.header(height)?;
@@ -511,12 +613,65 @@ impl<R: Rpc> Protocol<'_, R> {
         self.anchors.insert((id, header.block_hash()), anchor);
         Ok(Some(anchor))
     }
+    fn anchor(&mut self, id: Txid, height: u32) -> Result<Option<ConfirmationBlockTime>> {
+        let header = self.header(height)?;
+        if let Some(anchor) = self.anchors.get(&(id, header.block_hash())) {
+            return Ok(Some(*anchor));
+        }
+        let proof = self.rpc.call(
+            "blockchain.transaction.get_merkle",
+            json!([id.to_string(), height]),
+        )?;
+        self.verify_and_cache_anchor(id, height, header, proof)
+    }
+    fn prefetch_anchors(&mut self, pairs: &[(Txid, u32)]) -> Result<BTreeSet<(Txid, u32)>> {
+        if kassiber_net::uses_legacy_tape() {
+            return Ok(BTreeSet::new());
+        }
+        let heights: Vec<u32> = pairs.iter().map(|(_, h)| *h).collect();
+        self.prefetch_headers(&heights)?;
+        let mut seen = BTreeSet::new();
+        let mut missing = Vec::new();
+        for &(id, height) in pairs {
+            if !seen.insert((id, height)) {
+                continue;
+            }
+            let header = self.header(height)?;
+            if !self.anchors.contains_key(&(id, header.block_hash())) {
+                missing.push((id, height, header));
+            }
+        }
+        let mut rejected = BTreeSet::new();
+        if missing.len() <= 1 {
+            return Ok(rejected);
+        }
+        let params: Vec<Value> = missing
+            .iter()
+            .map(|(id, height, _)| json!([id.to_string(), height]))
+            .collect();
+        let proofs = self
+            .rpc
+            .batch("blockchain.transaction.get_merkle", params)?;
+        if proofs.len() != missing.len() {
+            return Err(invalid());
+        }
+        for ((id, height, header), proof) in missing.into_iter().zip(proofs) {
+            if self
+                .verify_and_cache_anchor(id, height, header, proof)?
+                .is_none()
+            {
+                rejected.insert((id, height));
+            }
+        }
+        Ok(rejected)
+    }
     fn scan(
         &mut self,
         mut spks: impl Iterator<Item = (u32, SpkWithExpectedTxids)>,
         gap: usize,
         batch: usize,
         time: u64,
+        chain: Option<&CheckPoint>,
         update: &mut TxUpdate<ConfirmationBlockTime>,
     ) -> Result<Option<u32>> {
         let mut unused = 0usize;
@@ -530,37 +685,70 @@ impl<R: Rpc> Protocol<'_, R> {
                 "blockchain.scripthash.get_history",
                 chunk
                     .iter()
-                    .map(|(_, s)| {
-                        crate::scan::script_hash(&s.spk.to_hex_string()).map(|h| json!([h]))
-                    })
-                    .collect::<Result<_>>()?,
+                    .map(|(_, s)| json!([crate::scan::script_hash_bytes(s.spk.as_bytes())]))
+                    .collect(),
             )?;
             if histories.len() != chunk.len() {
                 return Err(invalid());
             }
+            // Parse histories up to the gap stop boundary so we never prefetch
+            // transactions past the stop gap, then batch-fetch missing txs/anchors.
+            let mut active = Vec::with_capacity(chunk.len());
+            let mut stopped = false;
+            let mut tx_ids_to_fetch = Vec::new();
+            let mut anchors_to_fetch = Vec::new();
             for ((i, script), history) in chunk.into_iter().zip(histories) {
                 let history = history.as_array().ok_or_else(invalid)?;
                 if history.is_empty() {
                     unused = unused.saturating_add(1);
                     if unused >= gap {
-                        return Ok(last);
+                        stopped = true;
+                        break;
                     }
                 } else {
                     unused = 0;
                     last = Some(i);
                 }
-                let mut present = BTreeSet::new();
+                let mut entries = Vec::with_capacity(history.len());
                 for item in history {
                     let id = Txid::from_str(item["tx_hash"].as_str().ok_or_else(invalid)?)
                         .map_err(|_| invalid())?;
-                    present.insert(id);
-                    update.txs.push(self.tx(id)?);
                     let height = crate::scan::integer(&item["height"])
                         .and_then(|n| i64::try_from(n).ok())
                         .ok_or_else(invalid)?;
-                    if height > 0 {
-                        let height = u32::try_from(height).map_err(|_| invalid())?;
-                        if let Some(anchor) = self.anchor(id, height)? {
+                    let confirmed = if height > 0 {
+                        Some(u32::try_from(height).map_err(|_| invalid())?)
+                    } else {
+                        None
+                    };
+                    if !self.txs.contains_key(&id) {
+                        tx_ids_to_fetch.push(id);
+                    }
+                    if let Some(h) = confirmed {
+                        if self.verified_anchor(id, h, chain).is_none() {
+                            anchors_to_fetch.push((id, h));
+                        }
+                    }
+                    entries.push((id, confirmed));
+                }
+                active.push((script, entries));
+            }
+            self.prefetch_txs(&tx_ids_to_fetch)?;
+            let rejected_anchors = self.prefetch_anchors(&anchors_to_fetch)?;
+            for (script, entries) in active {
+                let mut present = BTreeSet::new();
+                for (id, confirmed) in entries {
+                    present.insert(id);
+                    update.txs.push(self.tx(id)?);
+                    if let Some(height) = confirmed {
+                        let resolved = match self.verified_anchor(id, height, chain) {
+                            Some(anchor) => Some(anchor),
+                            None if !rejected_anchors.contains(&(id, height)) => {
+                                self.anchor(id, height)?
+                            }
+                            None => None,
+                        };
+                        if let Some(anchor) = resolved {
                             update.anchors.insert((anchor, id));
                         }
                     } else {
@@ -575,20 +763,41 @@ impl<R: Rpc> Protocol<'_, R> {
                         .map(|id| (id, time)),
                 );
             }
+            if stopped {
+                return Ok(last);
+            }
         }
         Ok(last)
     }
     fn complete(&mut self, update: &mut Update, mut chain: CheckPoint) -> Result<()> {
         // Same floating previous-output model as bdk_electrum. Whole parent
         // transactions do not enter the wallet graph unless independently seen.
+        let mut missing_parents = Vec::new();
+        for tx in update.tx_update.txs.iter().filter(|tx| !tx.is_coinbase()) {
+            for input in &tx.input {
+                let op = input.previous_output;
+                if !self.txouts.contains_key(&op) && !self.txs.contains_key(&op.txid) {
+                    missing_parents.push(op.txid);
+                }
+            }
+        }
+        self.prefetch_txs(&missing_parents)?;
         for tx in update.tx_update.txs.clone() {
             if tx.is_coinbase() {
                 continue;
             }
             for input in &tx.input {
                 let op = input.previous_output;
-                let parent = self.tx(op.txid)?;
-                let output = parent.output.get(op.vout as usize).ok_or_else(invalid)?;
+                let output = if let Some(cached) = self.txouts.get(&op) {
+                    cached.clone()
+                } else {
+                    let parent = self.tx(op.txid)?;
+                    parent
+                        .output
+                        .get(op.vout as usize)
+                        .ok_or_else(invalid)?
+                        .clone()
+                };
                 update.tx_update.txouts.insert(op, output.clone());
             }
         }
@@ -644,7 +853,28 @@ impl<R: Rpc> Protocol<'_, R> {
         let response = self
             .rpc
             .call("blockchain.block.headers", json!([start, 8]))?;
-        let raws = response["headers"].as_array().ok_or_else(invalid)?;
+        let raws: Vec<String> = if let Some(arr) = response["headers"].as_array() {
+            arr.iter()
+                .map(|raw| raw.as_str().map(str::to_owned).ok_or_else(invalid))
+                .collect::<Result<_>>()?
+        } else if let Some(hex) = response["hex"].as_str() {
+            // Electrum 1.4 returns concatenated 80-byte headers (160 hex chars each).
+            if !hex.len().is_multiple_of(160) {
+                return Err(invalid());
+            }
+            hex.as_bytes()
+                .as_chunks::<160>()
+                .0
+                .iter()
+                .map(|chunk| {
+                    std::str::from_utf8(chunk)
+                        .map(str::to_owned)
+                        .map_err(|_| invalid())
+                })
+                .collect::<Result<_>>()?
+        } else {
+            return Err(invalid());
+        };
         if raws.len() != (height - start + 1) as usize
             || response["count"].as_u64() != Some(raws.len() as u64)
         {
@@ -654,10 +884,9 @@ impl<R: Rpc> Protocol<'_, R> {
             .iter()
             .enumerate()
             .map(|(i, raw)| {
-                let header: Header = consensus::deserialize(
-                    &Vec::from_hex(raw.as_str().ok_or_else(invalid)?).map_err(|_| invalid())?,
-                )
-                .map_err(|_| invalid())?;
+                let header: Header =
+                    consensus::deserialize(&Vec::from_hex(raw).map_err(|_| invalid())?)
+                        .map_err(|_| invalid())?;
                 Ok((start + i as u32, header.block_hash()))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;

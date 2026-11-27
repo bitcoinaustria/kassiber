@@ -175,7 +175,7 @@ pub fn current(conn: &Connection, dependency: &Value) -> Result<Value> {
     }
     let found = rows(
         conn,
-        &format!("{OBSERVATION_SELECT} WHERE t.profile_id=? AND t.wallet_id=? AND LOWER(t.external_id)=? AND t.excluded=0"),
+        &format!("{OBSERVATION_SELECT} WHERE t.profile_id=? AND t.wallet_id=? AND t.external_id IS NOT NULL AND LOWER(t.external_id)=? AND t.excluded=0"),
         params_from_iter([
             sql(field(dependency, "profile_id")),
             sql(field(dependency, "wallet_id")),
@@ -264,7 +264,7 @@ pub fn record_wallet_changes(
     now: &mut dyn FnMut() -> String,
 ) -> Result<i64> {
     super::row::require_transaction(conn)?;
-    let retracted: Vec<String> = retracted
+    let retracted: std::collections::HashSet<String> = retracted
         .iter()
         .map(|v| kassiber_pytext::lower(v))
         .collect();

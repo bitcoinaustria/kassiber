@@ -519,7 +519,7 @@ pub fn update(
         }
     }
     let mut statement = conn
-        .prepare(
+        .prepare_cached(
             "INSERT INTO wallet_utxos(
             id, workspace_id, profile_id, wallet_id, backend_name, backend_kind,
             chain, network, asset, amount, txid, vout, outpoint,
@@ -564,37 +564,48 @@ pub fn update(
             .execute(params_from_iter(row.values.iter()))
             .map_err(database_error)?;
     }
-    let scope = [
-        Sql::Text(seen_at.into()),
-        Sql::Text(source.wallet_id.into()),
-        Sql::Text(source.backend_name.into()),
-        Sql::Text(source.backend_kind.into()),
-        Sql::Text(source.chain.into()),
-        Sql::Text(source.network.into()),
-    ];
-    let filter = if active.is_empty() {
-        String::new()
-    } else {
-        format!(
-            " AND outpoint NOT IN ({})",
-            vec!["?"; active.len()].join(", ")
-        )
-    };
-    let spent = conn
-        .execute(
-            &format!(
-                "UPDATE wallet_utxos SET spent_at = ? WHERE wallet_id = ?
+    let active_set: std::collections::HashSet<&str> = active.iter().map(String::as_str).collect();
+    let mut stale_ids: Vec<String> = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare_cached(
+                "SELECT id, outpoint FROM wallet_utxos WHERE wallet_id = ?
                  AND COALESCE(backend_name, '') = ? AND COALESCE(backend_kind, '') = ?
-                 AND chain = ? AND network = ? AND spent_at IS NULL{filter}"
-            ),
-            params_from_iter(
-                scope
-                    .into_iter()
-                    .chain(active.iter().cloned().map(Sql::Text)),
-            ),
-        )
-        .map_err(database_error)?;
-    conn.execute(
+                 AND chain = ? AND network = ? AND spent_at IS NULL",
+            )
+            .map_err(database_error)?;
+        let mut existing = stmt
+            .query(params_from_iter([
+                Sql::Text(source.wallet_id.into()),
+                Sql::Text(source.backend_name.into()),
+                Sql::Text(source.backend_kind.into()),
+                Sql::Text(source.chain.into()),
+                Sql::Text(source.network.into()),
+            ]))
+            .map_err(database_error)?;
+        while let Some(row) = existing.next().map_err(database_error)? {
+            let id: String = row.get(0).map_err(database_error)?;
+            let outpoint: String = row.get(1).map_err(database_error)?;
+            if !active_set.contains(outpoint.as_str()) {
+                stale_ids.push(id);
+            }
+        }
+    }
+    let mut spent = 0usize;
+    for chunk in stale_ids.chunks(500) {
+        let placeholders = vec!["?"; chunk.len()].join(", ");
+        spent += conn
+            .prepare_cached(&format!(
+                "UPDATE wallet_utxos SET spent_at = ? WHERE id IN ({placeholders}) AND spent_at IS NULL"
+            ))
+            .map_err(database_error)?
+            .execute(params_from_iter(
+                std::iter::once(Sql::Text(seen_at.into()))
+                    .chain(chunk.iter().cloned().map(Sql::Text)),
+            ))
+            .map_err(database_error)?;
+    }
+    conn.prepare_cached(
         "INSERT INTO wallet_utxo_refreshes(
             wallet_id, workspace_id, profile_id, backend_name, backend_kind,
             chain, network, observed_count, active_count, last_seen_at
@@ -609,19 +620,20 @@ pub fn update(
             observed_count = excluded.observed_count,
             active_count = excluded.active_count,
             last_seen_at = excluded.last_seen_at",
-        params_from_iter([
-            Sql::Text(source.wallet_id.into()),
-            Sql::Text(source.workspace_id.into()),
-            Sql::Text(source.profile_id.into()),
-            Sql::Text(source.backend_name.into()),
-            Sql::Text(source.backend_kind.into()),
-            Sql::Text(source.chain.into()),
-            Sql::Text(source.network.into()),
-            Sql::Integer(rows.len() as i64),
-            Sql::Integer(active.len() as i64),
-            Sql::Text(seen_at.into()),
-        ]),
     )
+    .map_err(database_error)?
+    .execute(params_from_iter([
+        Sql::Text(source.wallet_id.into()),
+        Sql::Text(source.workspace_id.into()),
+        Sql::Text(source.profile_id.into()),
+        Sql::Text(source.backend_name.into()),
+        Sql::Text(source.backend_kind.into()),
+        Sql::Text(source.chain.into()),
+        Sql::Text(source.network.into()),
+        Sql::Integer(rows.len() as i64),
+        Sql::Integer(active.len() as i64),
+        Sql::Text(seen_at.into()),
+    ]))
     .map_err(database_error)?;
     Ok(dict([
         ("observed", Value::Int(rows.len().into())),

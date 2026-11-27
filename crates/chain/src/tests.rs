@@ -113,6 +113,45 @@ fn electrum_batches_reorder_ignore_notifications_and_split_at_configured_size() 
     assert_eq!(serde_json::from_str::<Value>(&lines[3]).unwrap()["id"], 4);
 }
 #[test]
+fn electrum_splits_oversized_responses_on_a_fresh_session() {
+    let payload = "a".repeat(RESPONSE_LIMIT / 2);
+    let hello = "{\"id\":1,\"result\":[\"fixture\",\"1.6\"]}\n";
+    let large = format!("{{\"id\":2,\"result\":\"{payload}\"}}\n");
+    let server = FakeElectrum::sessions(vec![
+        vec![
+            (1, hello.into()),
+            (2, format!("{large}{{\"id\":3,\"result\":\"{payload}\"}}\n")),
+        ],
+        vec![
+            (1, hello.into()),
+            (1, large),
+            (1, "{\"id\":3,\"result\":\"second\"}\n".into()),
+        ],
+    ])
+    .unwrap();
+    let config = backend(server.url(), true);
+    let proof = Consent::explicit_trigger(config.request());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut client =
+        ElectrumClient::connect(config, &gate(Offline::Online), Some(proof), deadline).unwrap();
+    let requests = [
+        ("blockchain.transaction.get".into(), json!(["first"])),
+        ("blockchain.transaction.get".into(), json!(["second"])),
+    ];
+    let responses = client.batch_call(&requests, deadline).unwrap();
+    assert_eq!(responses, [json!(payload), json!("second")]);
+    let sent: Vec<Value> = server
+        .requests()
+        .iter()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(sent.len(), 6);
+    assert_eq!(sent[3]["method"], "server.version");
+    assert_eq!(sent[4]["params"], json!(["first"]));
+    assert_eq!(sent[5]["params"], json!(["second"]));
+}
+
+#[test]
 fn electrum_policy_change_stops_existing_session_and_write() {
     use std::sync::{
         atomic::{AtomicBool, Ordering},

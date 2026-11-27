@@ -252,8 +252,8 @@
   {
     "id": "service-prefetch-backend",
     "file": "crates/wallets/src/sync.rs",
-    "find": "            self.validate(conn, backend, None)?;\n            let result = match &wallet.fetch {",
-    "replace": "            let result = match &wallet.fetch {",
+    "find": "                self.validate(conn, backend, None)?;\n                let result = match &wallet.fetch {",
+    "replace": "                let result = match &wallet.fetch {",
     "expect_failing": [
       "sync_service_rechecks_backend_at_prefetch_and_publication"
     ],

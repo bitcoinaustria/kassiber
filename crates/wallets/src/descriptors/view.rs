@@ -187,10 +187,10 @@ impl Material {
             } else {
                 &[0x04, 0x88, 0xb2, 0x1e]
             });
-            let secp = Secp256k1::new();
+            let secp = &*VIEW_SECP;
             let (xprv, xpub) = if private {
                 let xprv = Xpriv::decode(&normalized).map_err(|_| invalid_descriptor())?;
-                (Some(xprv), Xpub::from_priv(&secp, &xprv))
+                (Some(xprv), Xpub::from_priv(secp, &xprv))
             } else {
                 (
                     None,
@@ -222,7 +222,7 @@ impl Material {
 
     fn public(&self) -> PublicKey {
         match self {
-            Self::Secret { key, .. } => key.public_key(&Secp256k1::new()),
+            Self::Secret { key, .. } => key.public_key(&*VIEW_SECP),
             Self::Public { key, .. } => *key,
             Self::Extended { xpub, .. } => xpub.public_key,
         }
@@ -236,6 +236,9 @@ impl Material {
         }
     }
 }
+
+static VIEW_SECP: std::sync::LazyLock<Secp256k1<bitcoin::secp256k1::All>> =
+    std::sync::LazyLock::new(Secp256k1::new);
 
 /// `tagged_hash("elements/blindingkey", script_pubkey)`.
 fn tweak(script: &[u8]) -> Result<Scalar> {
@@ -330,17 +333,17 @@ impl ViewKey {
                 Step::Wildcard => ChildNumber::from(index),
             })
             .collect();
-        let secp = Secp256k1::new();
+        let secp = &*VIEW_SECP;
         match xprv {
             Some(xprv) => {
                 let child = xprv
-                    .derive_priv(&secp, &path)
+                    .derive_priv(secp, &path)
                     .map_err(|_| invalid_descriptor())?;
-                Ok((Some(child.private_key), child.private_key.public_key(&secp)))
+                Ok((Some(child.private_key), child.private_key.public_key(secp)))
             }
             None => {
                 let child = xpub
-                    .derive_pub(&secp, &path)
+                    .derive_pub(secp, &path)
                     .map_err(|_| invalid_descriptor())?;
                 Ok((None, child.public_key))
             }
@@ -352,7 +355,7 @@ impl ViewKey {
     pub(super) fn blinding_public(&self, index: u32, script: &[u8]) -> Result<PublicKey> {
         let (_, public) = self.derived(index)?;
         public
-            .add_exp_tweak(&Secp256k1::new(), &tweak(script)?)
+            .add_exp_tweak(&*VIEW_SECP, &tweak(script)?)
             .map_err(|_| Error::Value("Failed to tweak the secret".into()))
     }
 

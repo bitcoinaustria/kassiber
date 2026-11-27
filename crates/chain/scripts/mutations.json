@@ -2,8 +2,8 @@
   {
     "id": "electrum-wire-version",
     "file": "crates/chain/src/electrum.rs",
-    "find": "\"jsonrpc\":\"2.0\"",
-    "replace": "\"jsonrpc\":\"1.0\"",
+    "find": "\\\"jsonrpc\\\":\\\"2.0\\\"",
+    "replace": "\\\"jsonrpc\\\":\\\"1.0\\\"",
     "expect_failing": [
       "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
     ],
@@ -22,8 +22,8 @@
   {
     "id": "electrum-order",
     "file": "crates/chain/src/electrum.rs",
-    "find": "results[index] = message.get(\"result\")",
-    "replace": "results[requests.len() - 1 - index] = message.get(\"result\")",
+    "find": "results[index] = message",
+    "replace": "results[requests.len() - 1 - index] = message",
     "expect_failing": [
       "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
     ],

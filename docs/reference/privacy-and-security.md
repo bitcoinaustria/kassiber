@@ -146,6 +146,8 @@ An already transmitted request cannot be recalled.
 Saved freshness cancellation is rechecked before each subsequent compatibility
 HTTP request or Electrum batch, including active-book prefetch. Network workers
 wait for that check on the thread owning the book's SQLite connection.
+During a multi-wallet sync, requests can overlap. The transport reads the live
+offline preference before sending a request, including on pooled HTTP sockets.
 HTTP retry backoff with an active cancellation check sleeps in at most 100 ms
 slices and rechecks between slices; it keeps the same retry and total-wait caps.
 Native BDK/LWK Electrum observers check before opening connections, between
@@ -402,10 +404,10 @@ with an unknown evidence label and a limitation; it cannot claim an exact zero.
 **Online** in the title-bar connection panel (off means offline), **Settings →
 Privacy → Work offline**, and `kassiber offline on|off|status` set one machine-wide switch,
 in the manner of Sparrow Wallet's offline mode. It is stored in an owner-only
-`config/offline-mode.json` under the state root, so the desktop daemon and
-every CLI process read it before connecting. A file that exists but is
-unreadable, symlinked, or of an unknown schema counts as offline. Reading or
-changing the switch contacts nothing and needs no unlocked book.
+`config/offline-mode.json` under the state root. The desktop daemon and every
+CLI process resolve the same path and read it before connecting. A file that
+exists but is unreadable, symlinked, or of an unknown schema counts as offline.
+Reading or changing the switch contacts nothing and needs no unlocked book.
 
 While it is on, every boundary `KASSIBER_NO_EGRESS` covers refuses with
 `network_egress_disabled`, loopback nodes included. So do the paths that

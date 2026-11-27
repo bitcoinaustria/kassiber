@@ -550,7 +550,7 @@ fn list(conn: &Connection, wallet: &str, filter: &[(&str, Vec<String>); 4]) -> R
     params.push(Sql::Integer(ROW_LIMIT));
     let sql = format!(
         "SELECT u.*, (SELECT t.id FROM transactions t WHERE t.profile_id = u.profile_id \
-         AND t.wallet_id = u.wallet_id AND lower(t.external_id) = lower(u.txid) \
+         AND t.wallet_id = u.wallet_id AND t.external_id IS NOT NULL AND lower(t.external_id) = lower(u.txid) \
          ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC LIMIT 1) AS transaction_id \
          FROM wallet_utxos u WHERE u.wallet_id = ? AND spent_at IS NULL{source_where} \
          ORDER BY asset ASC, CASE WHEN block_height IS NULL OR block_height <= 0 THEN 1 ELSE 0 END ASC, \

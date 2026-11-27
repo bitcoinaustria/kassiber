@@ -112,8 +112,8 @@
   {
     "id": "freshness-control-esplora-batches",
     "file": "crates/wallets/src/fetch.rs",
-    "find": "discovery.run(gate, scope, Some(&grant), deadline, cancel, |_| {})?;",
-    "replace": "discovery.run(gate, scope, Some(&grant), deadline, cancel.cancellation(), |_| {})?;",
+    "find": "discovery.run_with_pool(\n                    gate,\n                    scope,\n                    Some(&grant),\n                    deadline,\n                    cancel,",
+    "replace": "discovery.run_with_pool(\n                    gate,\n                    scope,\n                    Some(&grant),\n                    deadline,\n                    cancel.cancellation(),",
     "expect_failing": [
       "test_native_freshness_controls_between_fetch_batches"
     ],
@@ -152,8 +152,8 @@
   {
     "id": "freshness-control-wallet-inputs",
     "file": "crates/wallets/src/freshness/native.rs",
-    "find": "[\"kind\", \"config_json\"]\n                    .iter()",
-    "replace": "[\"kind\"]\n                    .iter()",
+    "find": "[\"kind\", \"config_json\"]\n            .iter()",
+    "replace": "[\"kind\"]\n            .iter()",
     "expect_failing": [
       "test_native_freshness_controls_between_fetch_batches"
     ],

@@ -1136,21 +1136,15 @@ impl kassiber_wallets::analysis_ops::Runtime for AnalysisRuntime {
         kassiber_wallets::analysis_ops::SystemRuntime { offline: true }.epoch()
     }
     fn offline(&self) -> bool {
-        Context::from_env()
-            .ok()
-            .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            .is_none_or(|path| kassiber_setup::offline::enabled(&path))
+        kassiber_setup::offline::state_from_env().unwrap_or(true)
     }
     /// Re-reads the preference on every route check, failing closed.
     fn gate(&self) -> kassiber_net::Gate {
         use kassiber_net::{Gate, Ledger, Offline};
         Gate::new(
-            || match Context::from_env()
-                .ok()
-                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            {
-                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                Some(_) => Offline::Online,
+            || match kassiber_setup::offline::state_from_env() {
+                Some(true) => Offline::Offline,
+                Some(false) => Offline::Online,
                 None => Offline::Unavailable,
             },
             Ledger::default(),
@@ -1619,12 +1613,9 @@ impl Book for RealBook {
                 .map(|name| self.backends.resolve(self.conn()?, name))
                 .transpose()?;
             let gate = Gate::new(
-                || match Context::from_env()
-                    .ok()
-                    .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-                {
-                    Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                    Some(_) => Offline::Online,
+                || match kassiber_setup::offline::state_from_env() {
+                    Some(true) => Offline::Offline,
+                    Some(false) => Offline::Online,
                     None => Offline::Unavailable,
                 },
                 Ledger::process(),
@@ -2061,14 +2052,9 @@ impl Book for RealBook {
                 kassiber_wallets::freshness::native::Consent::report_read(&plan)
             };
             let gate = kassiber_net::Gate::new(
-                || match Context::from_env()
-                    .ok()
-                    .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-                {
-                    Some(path) if kassiber_setup::offline::enabled(&path) => {
-                        kassiber_net::Offline::Offline
-                    }
-                    Some(_) => kassiber_net::Offline::Online,
+                || match kassiber_setup::offline::state_from_env() {
+                    Some(true) => kassiber_net::Offline::Offline,
+                    Some(false) => kassiber_net::Offline::Online,
                     None => kassiber_net::Offline::Unavailable,
                 },
                 kassiber_net::Ledger::default(),
@@ -3178,12 +3164,9 @@ impl Book for RealBook {
     ) -> Result<Option<Value>, AppError> {
         use kassiber_net::{Gate, Ledger, Offline};
         let gate = Gate::new(
-            || match Context::from_env()
-                .ok()
-                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            {
-                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                Some(_) => Offline::Online,
+            || match kassiber_setup::offline::state_from_env() {
+                Some(true) => Offline::Offline,
+                Some(false) => Offline::Online,
                 None => Offline::Unavailable,
             },
             Ledger::process(),
@@ -3659,12 +3642,9 @@ impl RealBook {
         backends.merge(self.conn()?)?;
         let config = backends.resolve_configured(self.conn()?, Some(backend))?;
         let gate = Gate::new(
-            || match Context::from_env()
-                .ok()
-                .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
-            {
-                Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
-                Some(_) => Offline::Online,
+            || match kassiber_setup::offline::state_from_env() {
+                Some(true) => Offline::Offline,
+                Some(false) => Offline::Online,
                 None => Offline::Unavailable,
             },
             Ledger::process(),
