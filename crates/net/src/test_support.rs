@@ -2,7 +2,7 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
@@ -510,18 +510,19 @@ fn serve(mut stream: std::net::TcpStream, script: &Mutex<Script>, stop: &AtomicB
         Some(build) => build(&body),
         None => reply,
     };
-    write_reply(&mut stream, &reply, stop);
+    write_reply(&mut stream, &reply, stop, false);
 }
 
 /// Writes `reply` with its framing, then keeps a held connection open until
 /// `stop`; shared by the scripted and the handled fakes.
-fn write_reply(stream: &mut std::net::TcpStream, reply: &Reply, stop: &AtomicBool) {
+fn write_reply(stream: &mut std::net::TcpStream, reply: &Reply, stop: &AtomicBool, reuse: bool) {
     let framing = match reply.chunk_size {
         Some(_) => "transfer-encoding: chunked".to_owned(),
         None => format!("content-length: {}", reply.body.len()),
     };
+    let connection = if reuse { "keep-alive" } else { "close" };
     let head = format!(
-        "HTTP/1.1 {} Scripted\r\ncontent-type: {}\r\n{framing}\r\nconnection: close\r\n\r\n",
+        "HTTP/1.1 {} Scripted\r\ncontent-type: {}\r\n{framing}\r\nconnection: {connection}\r\n\r\n",
         reply.status, reply.content_type
     );
     if stream.write_all(head.as_bytes()).is_err() {
@@ -716,7 +717,9 @@ pub type ServiceHandler = Arc<dyn Fn(&HandledRequest) -> Reply + Send + Sync>;
 /// and came back. Test builds only; loopback only.
 pub struct FakeService {
     port: u16,
+    keep_alive: bool,
     requests: Arc<Mutex<Vec<HandledRequest>>>,
+    connections: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -727,15 +730,29 @@ impl FakeService {
         handler: impl Fn(&HandledRequest) -> Reply + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
-        Self::serve(listener, Arc::new(handler))
+        Self::serve(listener, Arc::new(handler), false)
     }
 
-    fn serve(listener: TcpListener, handler: ServiceHandler) -> std::io::Result<Self> {
+    /// Permit HTTP/1.1 connection reuse when the client leaves it open.
+    pub fn start_keep_alive(
+        handler: impl Fn(&HandledRequest) -> Reply + Send + Sync + 'static,
+    ) -> std::io::Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        Self::serve(listener, Arc::new(handler), true)
+    }
+
+    fn serve(
+        listener: TcpListener,
+        handler: ServiceHandler,
+        keep_alive: bool,
+    ) -> std::io::Result<Self> {
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
         let requests = Arc::new(Mutex::new(Vec::new()));
+        let connections = Arc::new(AtomicUsize::new(0));
         let stop = Arc::new(AtomicBool::new(false));
         let (log, stopped) = (requests.clone(), stop.clone());
+        let accepts = connections.clone();
         let thread = thread::spawn(move || {
             let mut workers = Vec::new();
             while !stopped.load(Ordering::SeqCst) {
@@ -747,17 +764,25 @@ impl FakeService {
                     }
                     Err(_) => break,
                 };
+                accepts.fetch_add(1, Ordering::SeqCst);
                 let (log, stopped, handler) = (log.clone(), stopped.clone(), handler.clone());
                 workers.push(thread::spawn(move || {
                     let _ = stream.set_nonblocking(false);
                     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-                    let Some(request) = read_request(&mut stream) else {
-                        return;
-                    };
-                    let reply = handler(&request);
-                    log.lock().unwrap().push(request);
-                    write_reply(&mut stream, &reply, &stopped);
+                    while let Some(request) = read_request(&mut stream) {
+                        let reply = handler(&request);
+                        let reuse = keep_alive
+                            && !reply.hold
+                            && request
+                                .header("connection")
+                                .is_none_or(|value| !value.eq_ignore_ascii_case("close"));
+                        log.lock().unwrap().push(request);
+                        write_reply(&mut stream, &reply, &stopped, reuse);
+                        if !reuse || stopped.load(Ordering::SeqCst) {
+                            break;
+                        }
+                    }
                 }));
             }
             // The listener closes here, before the workers finish.
@@ -768,7 +793,9 @@ impl FakeService {
         });
         Ok(Self {
             port,
+            keep_alive,
             requests,
+            connections,
             stop,
             thread: Some(thread),
         })
@@ -791,6 +818,10 @@ impl FakeService {
     /// Every request served since the last start, in arrival order.
     pub fn requests(&self) -> Vec<HandledRequest> {
         self.requests.lock().unwrap().clone()
+    }
+
+    pub fn connection_count(&self) -> usize {
+        self.connections.load(Ordering::SeqCst)
     }
 
     /// `METHOD target` of every request, for asserting what was contacted.
@@ -828,7 +859,7 @@ impl FakeService {
                 Err(error) => return Err(error),
             }
         };
-        *self = Self::serve(listener, Arc::new(handler))?;
+        *self = Self::serve(listener, Arc::new(handler), self.keep_alive)?;
         Ok(())
     }
 }

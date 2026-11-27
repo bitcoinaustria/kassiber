@@ -1220,9 +1220,8 @@ fn sync_service_sourceless_selections_answer_python_skipped_rows() {
 #[test]
 fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_preserves_order() {
     use bitcoin::hex::FromHex;
+    use kassiber_net::test_support::{FakeService, Reply};
     use sha2::{Digest, Sha256};
-    use std::io::{BufRead, BufReader, Write};
-    use std::net::TcpListener;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
@@ -1286,166 +1285,85 @@ fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_
         tx_by_hash.insert(sh, tx);
     }
 
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    listener.set_nonblocking(true).unwrap();
-
-    let stop = Arc::new(AtomicBool::new(false));
-    let in_flight = Arc::new(AtomicUsize::new(0));
+    let in_flight = AtomicUsize::new(0);
     let peak_in_flight = Arc::new(AtomicUsize::new(0));
-    let total_requests = Arc::new(AtomicUsize::new(0));
-    let total_connections = Arc::new(AtomicUsize::new(0));
-    let tx_by_hash = Arc::new(tx_by_hash);
     let first_hash = tx_by_hash
         .iter()
         .find(|(_, tx)| tx["vout"][0]["scriptpubkey"] == targets[0]["script_pubkey"])
         .unwrap()
-        .0
-        .clone();
+        .0;
+    let first_script = format!("/scripthash/{first_hash}");
     let cancel_book = Arc::new(Mutex::new(None::<std::path::PathBuf>));
     let cancelled = Arc::new(AtomicBool::new(false));
     let requests_after_cancel = Arc::new(AtomicUsize::new(0));
 
-    let stop_srv = stop.clone();
-    let in_flight_srv = in_flight.clone();
-    let peak_srv = peak_in_flight.clone();
-    let reqs_srv = total_requests.clone();
-    let conns_srv = total_connections.clone();
-    let tx_map_srv = tx_by_hash.clone();
-    let cancel_book_srv = cancel_book.clone();
-    let cancelled_srv = cancelled.clone();
-    let after_cancel_srv = requests_after_cancel.clone();
-    let server = std::thread::spawn(move || {
-        let mut workers = Vec::new();
-        while !stop_srv.load(Ordering::Relaxed) {
-            match listener.accept() {
-                Ok((stream, _)) => {
-                    conns_srv.fetch_add(1, Ordering::SeqCst);
-                    let _ = stream.set_nonblocking(false);
-                    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-                    let in_flight = in_flight_srv.clone();
-                    let peak = peak_srv.clone();
-                    let reqs = reqs_srv.clone();
-                    let tx_map = tx_map_srv.clone();
-                    let cancel_book = cancel_book_srv.clone();
-                    let cancelled = cancelled_srv.clone();
-                    let after_cancel = after_cancel_srv.clone();
-                    let first_script = format!("/scripthash/{first_hash}");
-                    workers.push(std::thread::spawn(move || {
-                        let Ok(writer_stream) = stream.try_clone() else {
-                            return;
-                        };
-                        let mut reader = BufReader::new(stream);
-                        let mut writer = writer_stream;
-                        loop {
-                            let mut req_line = String::new();
-                            match reader.read_line(&mut req_line) {
-                                Ok(0) | Err(_) => break,
-                                Ok(_) => {}
-                            }
-                            let path = req_line
-                                .split_whitespace()
-                                .nth(1)
-                                .unwrap_or("/")
-                                .to_owned();
-                            loop {
-                                let mut hdr = String::new();
-                                match reader.read_line(&mut hdr) {
-                                    Ok(0) | Err(_) => return,
-                                    Ok(_) if hdr == "\r\n" || hdr == "\n" => break,
-                                    Ok(_) => {}
-                                }
-                            }
-                            reqs.fetch_add(1, Ordering::SeqCst);
-                            let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
-                            peak.fetch_max(now, Ordering::SeqCst);
-                            std::thread::sleep(Duration::from_millis(15));
-                            if let Some(suffix) = path.strip_prefix(&first_script) {
-                                if cancelled.load(Ordering::SeqCst) {
-                                    after_cancel.fetch_add(1, Ordering::SeqCst);
-                                } else if suffix == "/txs/chain" {
-                                    if let Some(book) = cancel_book.lock().unwrap().as_ref() {
-                                        let control = Connection::open(book).unwrap();
-                                        assert_eq!(control.execute(
-                                            "UPDATE freshness_jobs SET cancel_requested=1 WHERE source_key='onchain_wallet:w1'",
-                                            [],
-                                        ).unwrap(), 1);
-                                        cancelled.store(true, Ordering::SeqCst);
-                                    }
-                                }
-                            }
-                            let (content_type, body) = if path == "/blocks/tip/hash" {
-                                ("text/plain", tip_hash.to_owned())
-                            } else if path == "/blocks/tip/height" {
-                                ("text/plain", "105".to_owned())
-                            } else if let Some(rest) = path.strip_prefix("/scripthash/") {
-                                if let Some(sh) = rest.strip_suffix("/txs/chain") {
-                                    let txs = tx_map
-                                        .get(sh)
-                                        .map(|tx| vec![tx.clone()])
-                                        .unwrap_or_default();
-                                    ("application/json", serde_json::to_string(&txs).unwrap())
-                                } else if rest.ends_with("/txs/mempool") {
-                                    ("application/json", "[]".to_owned())
-                                } else if let Some(sh) = rest.strip_suffix("/utxo") {
-                                    let utxos = tx_map
-                                        .get(sh)
-                                        .map(|tx| {
-                                            vec![json!({
-                                                "txid": tx["txid"],
-                                                "vout": 0,
-                                                "value": tx["vout"][0]["value"],
-                                                "status": tx["status"],
-                                            })]
-                                        })
-                                        .unwrap_or_default();
-                                    ("application/json", serde_json::to_string(&utxos).unwrap())
-                                } else {
-                                    let count = usize::from(tx_map.contains_key(rest));
-                                    let stats = json!({
-                                        "chain_stats": {
-                                            "funded_txo_count": count,
-                                            "funded_txo_sum": count * 100_000,
-                                            "spent_txo_count": 0,
-                                            "spent_txo_sum": 0,
-                                            "tx_count": count,
-                                        },
-                                        "mempool_stats": {
-                                            "funded_txo_count": 0,
-                                            "funded_txo_sum": 0,
-                                            "spent_txo_count": 0,
-                                            "spent_txo_sum": 0,
-                                            "tx_count": 0,
-                                        },
-                                    });
-                                    ("application/json", serde_json::to_string(&stats).unwrap())
-                                }
-                            } else {
-                                ("application/json", "{}".to_owned())
-                            };
-                            in_flight.fetch_sub(1, Ordering::SeqCst);
-                            let resp = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{body}",
-                                body.len()
-                            );
-                            if writer.write_all(resp.as_bytes()).is_err()
-                                || writer.flush().is_err()
-                            {
-                                break;
-                            }
-                        }
-                    }));
+    let peak = peak_in_flight.clone();
+    let cancel_path = cancel_book.clone();
+    let did_cancel = cancelled.clone();
+    let after_cancel = requests_after_cancel.clone();
+    let server = FakeService::start_keep_alive(move |request| {
+        let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        peak.fetch_max(now, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(15));
+        let path = request.target.as_str();
+        if let Some(suffix) = path.strip_prefix(&first_script) {
+            if did_cancel.load(Ordering::SeqCst) {
+                after_cancel.fetch_add(1, Ordering::SeqCst);
+            } else if suffix == "/txs/chain" {
+                if let Some(book) = cancel_path.lock().unwrap().as_ref() {
+                    let control = Connection::open(book).unwrap();
+                    assert_eq!(control.execute(
+                        "UPDATE freshness_jobs SET cancel_requested=1 WHERE source_key='onchain_wallet:w1'",
+                        [],
+                    ).unwrap(), 1);
+                    did_cancel.store(true, Ordering::SeqCst);
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(2));
-                }
-                Err(_) => break,
             }
         }
-        for w in workers {
-            let _ = w.join();
-        }
-    });
+        let reply = if path == "/blocks/tip/hash" {
+            Reply::raw(200, "text/plain", tip_hash.as_bytes())
+        } else if path == "/blocks/tip/height" {
+            Reply::raw(200, "text/plain", b"105")
+        } else if let Some(rest) = path.strip_prefix("/scripthash/") {
+            let response = if let Some(hash) = rest.strip_suffix("/txs/chain") {
+                json!(tx_by_hash.get(hash).into_iter().collect::<Vec<_>>())
+            } else if rest.ends_with("/txs/mempool") {
+                json!([])
+            } else if let Some(hash) = rest.strip_suffix("/utxo") {
+                let outputs: Vec<_> = tx_by_hash.get(hash).into_iter().map(|tx| json!({
+                    "txid": tx["txid"],
+                    "vout": 0,
+                    "value": tx["vout"][0]["value"],
+                    "status": tx["status"],
+                })).collect();
+                json!(outputs)
+            } else {
+                let count = usize::from(tx_by_hash.contains_key(rest));
+                json!({
+                    "chain_stats": {
+                        "funded_txo_count": count,
+                        "funded_txo_sum": count * 100_000,
+                        "spent_txo_count": 0,
+                        "spent_txo_sum": 0,
+                        "tx_count": count,
+                    },
+                    "mempool_stats": {
+                        "funded_txo_count": 0,
+                        "funded_txo_sum": 0,
+                        "spent_txo_count": 0,
+                        "spent_txo_sum": 0,
+                        "tx_count": 0,
+                    },
+                })
+            };
+            Reply::json(200, &response.to_string())
+        } else {
+            Reply::json(200, "{}")
+        };
+        in_flight.fetch_sub(1, Ordering::SeqCst);
+        reply
+    }).unwrap();
+    let port = server.port();
 
     let case = sample();
     let mut conn = book(&case);
@@ -1533,15 +1451,15 @@ fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_
         "multi-wallet Sync::run must fetch concurrently (peak={})",
         peak_in_flight.load(Ordering::SeqCst)
     );
-    let initial_requests = total_requests.load(Ordering::SeqCst);
-    let initial_conns = total_connections.load(Ordering::SeqCst);
+    let initial_requests = server.requests().len();
+    let initial_conns = server.connection_count();
     assert!(
         initial_conns < initial_requests,
         "HTTP keep-alive pool must reuse sockets ({initial_conns} conns for {initial_requests} reqs)"
     );
 
     // 2. Incremental sync reuses complete membership checkpoints (far fewer requests).
-    let reqs_before_inc = total_requests.load(Ordering::SeqCst);
+    let reqs_before_inc = server.requests().len();
     let action2 = Sync::new(&conn, &req, |_, _| Ok(backend_cfg.clone())).unwrap();
     let consent2 = SyncConsent::explicit_trigger(&action2);
     let results2 = action2
@@ -1558,14 +1476,14 @@ fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_
         )
         .unwrap();
     assert_eq!(results2.len(), 6);
-    let inc_requests = total_requests.load(Ordering::SeqCst) - reqs_before_inc;
+    let inc_requests = server.requests().len() - reqs_before_inc;
     assert!(
         inc_requests < initial_requests,
         "incremental sync ({inc_requests} reqs) must reuse checkpoints vs initial ({initial_requests} reqs)"
     );
 
     // 3. Offline gate enforces zero egress across all parallel wallet slots.
-    let reqs_before_offline = total_requests.load(Ordering::SeqCst);
+    let reqs_before_offline = server.requests().len();
     let action3 = Sync::new(&conn, &req, |_, _| Ok(backend_cfg.clone())).unwrap();
     let consent3 = SyncConsent::explicit_trigger(&action3);
     let offline_gate = Gate::new(|| Offline::Offline, Ledger::default());
@@ -1587,7 +1505,7 @@ fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_
         assert_eq!(get(row, "status"), Some(&s("error")));
     }
     assert_eq!(
-        total_requests.load(Ordering::SeqCst),
+        server.requests().len(),
         reqs_before_offline,
         "offline mode must make zero network requests"
     );
@@ -1661,8 +1579,7 @@ fn sync_service_parallel_multi_wallet_fetches_concurrently_without_skipping_and_
         (2..=6).map(|id| format!("{id:064x}")).collect::<Vec<_>>()
     );
 
-    stop.store(true, Ordering::SeqCst);
-    server.join().unwrap();
+    drop(server);
     drop(query);
     drop(conn);
     std::fs::remove_file(&path).unwrap();
