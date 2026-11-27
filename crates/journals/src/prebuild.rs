@@ -1,8 +1,6 @@
 use crate::Refusal;
 use kassiber_pydecimal::{Context, Decimal};
-use kassiber_store::rusqlite::{
-    self, functions::FunctionFlags, params, types::Value as Sql, Connection,
-};
+use kassiber_store::rusqlite::{self, params, types::Value as Sql, Connection};
 
 mod legacy;
 mod overlap;

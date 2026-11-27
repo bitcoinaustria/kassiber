@@ -504,6 +504,7 @@ pub fn forget_derivations() {
     *DERIVATIONS
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    descriptors::clear_derivation_cache();
 }
 
 fn derive(plan: &descriptors::Plan, ceiling: u32) -> Batch {
@@ -556,32 +557,50 @@ fn derive(plan: &descriptors::Plan, ceiling: u32) -> Batch {
 
 fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, Vec<Value>)> {
     let wallets=query(conn,"SELECT w.id,w.label,w.kind,w.config_json,a.code AS account_code,a.label AS account_label FROM wallets w LEFT JOIN accounts a ON a.id=w.account_id WHERE w.profile_id=? ORDER BY w.label ASC",[profile_id])?;
-    let summary_rows = query(
+    let mut summary_rows = query(
         conn,
         "SELECT id,label,kind,config_json FROM wallets WHERE profile_id=?",
         [profile_id],
     )?;
-    let summaries = summary_rows
+    let mut summary_configs = Vec::with_capacity(summary_rows.len());
+    for wallet in &mut summary_rows {
+        let wallet_id = text(get(wallet, "id"));
+        let parsed_config = config(wallet)?;
+        if matches!(get(wallet, "label"), Value::Str(label) if label.is("")) {
+            set(wallet, "label", Value::from(wallet_id));
+        }
+        summary_configs.push(parsed_config);
+    }
+    let summaries: HashMap<String, (&Value, &Value)> = summary_rows
         .iter()
-        .map(|wallet| Ok((text(get(wallet, "id")), (wallet, config(wallet)?))))
-        .collect::<Result<HashMap<_, _>>>()?;
+        .zip(&summary_configs)
+        .map(|(wallet, cfg)| (text(get(wallet, "id")), (wallet, cfg)))
+        .collect();
     let mut index = Index::default();
     let mut warnings = vec![];
     let mut highest = HashMap::<String, BTreeMap<String, BigInt>>::new();
     // One batch per canonical descriptor and horizon, shared by current and
     // retired policies and wallets. Keep wallet-specific facts out of the memo.
     let mut derived = HashMap::<(String, u32), Batch>::new();
+    let empty_config = dict([]);
     for row in query(conn,"SELECT wallet_id,txid,vout,address,script_pubkey,branch_label,branch_index,address_index,chain,network FROM wallet_utxos WHERE profile_id=?",[profile_id])? {
         let wallet_id=text(get(&row,"wallet_id"));
         if !wallets.is_empty() && !summaries.contains_key(&wallet_id) { continue; }
-        let (mut wallet,config)=summaries.get(&wallet_id).map(|(wallet,config)|((*wallet).clone(),config.clone())).unwrap_or((dict([("id",Value::from(wallet_id.clone())),("label",Value::from(wallet_id.clone()))]),dict([])));
-        if matches!(get(&wallet,"label"), Value::Str(label) if label.is("")) {
-            set(&mut wallet,"label",Value::from(wallet_id.clone()));
-        }
-        let chain=if truth(get(&row,"chain")) { get(&row,"chain") } else { get(&config,"chain") };
-        let network=if truth(get(&row,"network")) { get(&row,"network") } else { get(&config,"network") };
+        let fallback_wallet;
+        let (wallet, config) = match summaries.get(&wallet_id) {
+            Some(&(wallet, cfg)) => (wallet, cfg),
+            None => {
+                fallback_wallet = dict([
+                    ("id", Value::from(wallet_id.clone())),
+                    ("label", Value::from(wallet_id.clone())),
+                ]);
+                (&fallback_wallet, &empty_config)
+            }
+        };
+        let chain=if truth(get(&row,"chain")) { get(&row,"chain") } else { get(config,"chain") };
+        let network=if truth(get(&row,"network")) { get(&row,"network") } else { get(config,"network") };
         let (chain,network)=chain_network(chain,network);
-        let item=with_branch(branches,&match_facts(&wallet,"",&chain,&network,"inventory"),if truth(get(&row,"branch_label")) { text(get(&row,"branch_label")) } else { String::new() });
+        let item=with_branch(branches,&match_facts(wallet,"",&chain,&network,"inventory"),if truth(get(&row,"branch_label")) { text(get(&row,"branch_label")) } else { String::new() });
         index.address(get(&row,"address"),&item);
         let script=if truth(get(&row,"address")) { bitcoin_address_script(&text(get(&row,"address"))) } else { None };
         index.script(script.or_else(||normalized_script(get(&row,"script_pubkey"))),&item);
@@ -594,7 +613,10 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
     }
     for wallet in &wallets {
         let wallet_id = text(get(wallet, "id"));
-        let config = config(wallet)?;
+        let config = match summaries.get(&wallet_id) {
+            Some(&(_, cfg)) => cfg.clone(),
+            None => config(wallet)?,
+        };
         let account = ["account_code", "account_label"]
             .into_iter()
             .map(|key| get(wallet, key))
@@ -617,7 +639,7 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
             .max(500.into())
             .min(20_000.into());
         let mut configs = vec![(config, false)];
-        for row in query(conn,"SELECT private_material_json FROM wallet_policy_epochs WHERE wallet_id=? AND status='retired' ORDER BY created_at ASC,id ASC",[&wallet_id])? {
+        for row in query(conn,"SELECT private_material_json FROM wallet_policy_epochs WHERE profile_id=? AND wallet_id=? AND status='retired' ORDER BY created_at ASC,id ASC",[profile_id, wallet_id.as_str()])? {
             let historic=parsed(get(&row,"private_material_json"));
             if matches!(&historic,Value::Dict(values) if !values.is_empty()) { configs.push((historic,true)); }
         }
@@ -711,7 +733,7 @@ fn build(conn: &Connection, profile_id: &str, branches: bool) -> Result<(Index, 
             }
         }
     }
-    for row in query(conn,"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id=? AND external_id IS NOT NULL AND raw_json IS NOT NULL",[profile_id])? {
+    for row in query(conn,"SELECT external_id,wallet_id,raw_json FROM transactions WHERE profile_id=? AND external_id IS NOT NULL AND raw_json IS NOT NULL AND substr(ltrim(raw_json, ' ' || char(9) || char(10) || char(13)), 1, 1)='['",[profile_id])? {
         let txid=text(get(&row,"external_id")); let txid=kassiber_pytext::strip(&txid).to_lowercase();
         if txid.len()!=64 || !txid.bytes().all(|b|b.is_ascii_hexdigit()) { continue; }
         let Value::List(observations)=parsed(get(&row,"raw_json")) else { continue; };

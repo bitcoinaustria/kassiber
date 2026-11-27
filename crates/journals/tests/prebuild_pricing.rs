@@ -116,6 +116,50 @@ fn prebuild_pricing_timestamp_selection() {
 }
 
 #[test]
+fn prebuild_pricing_ignores_malformed_rates_outside_the_lookup() {
+    let vectors: Value = serde_json::from_str(include_str!("data/prebuild-pricing.json")).unwrap();
+    let case = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "confirmed-price")
+        .unwrap();
+    let mut dump = vectors["base"].clone();
+    for (table, rows) in case["before"].as_object().unwrap() {
+        dump[table]["rows"] = rows.clone();
+    }
+    let conn = Connection::open_in_memory().unwrap();
+    support::load(&conn, &dump);
+    conn.execute_batch(
+        "BEGIN IMMEDIATE;
+         INSERT INTO rates_cache(pair,timestamp,rate,source,fetched_at) VALUES
+           ('BTC-EUR',x'ff',1,'invalid-timestamp','2026-01-01T00:00:00Z'),
+           ('BTC-EUR','2027-01-01T00:00:00Z',1,'future-rate',x'ff');",
+    )
+    .unwrap();
+    assert_eq!(
+        auto_price_transactions_from_rates_cache(
+            &conn,
+            &PricingScope {
+                profile_id: "p",
+                fiat_currency: "EUR",
+                decimal_context: Context::new(32, Rounding::HalfEven),
+            },
+        )
+        .unwrap(),
+        1
+    );
+    let selected: String = conn
+        .query_row(
+            "SELECT fiat_rate_exact FROM transactions WHERE id='t'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(selected, "90000");
+}
+
+#[test]
 fn prebuild_pricing_precedence_and_precision() {
     check(&[
         "legacy-exact-rate",
