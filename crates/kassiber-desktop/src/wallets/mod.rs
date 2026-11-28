@@ -27,6 +27,7 @@ pub mod common;
 pub mod conn;
 pub mod coverage;
 pub mod detail;
+pub mod groups;
 pub mod imports;
 pub mod list;
 pub mod node;

@@ -11,6 +11,7 @@ use serde_json::Value;
 use super::common::asset_badge;
 use super::conn::{Conn, all, kind_category_label, snapshot};
 use super::coverage;
+use super::groups;
 use crate::app::{App, Currency, Reply};
 use crate::i18n::{t, tc, tr};
 use crate::icons as I;
@@ -55,6 +56,12 @@ pub struct State {
     pub period_coverage: Option<(String, PeriodCoverage)>,
     /// The book refresh cycle that read follows (`App::book_generation`).
     pub period_generation: u64,
+    /// BTCPay store groups (`ui.sources.groups`); the list stays flat until they answer.
+    pub groups: Option<Value>,
+    /// The book refresh cycle the groups read follows.
+    pub groups_generation: Option<u64>,
+    /// Store groups the user folded (`Group::key`).
+    pub collapsed: std::collections::BTreeSet<String>,
 }
 
 /// A chosen period's coverage read. Until it answers (or when it fails) rows show no coverage:
@@ -76,6 +83,9 @@ impl Default for State {
             popup: None,
             period_coverage: None,
             period_generation: 0,
+            groups: None,
+            groups_generation: None,
+            collapsed: Default::default(),
         }
     }
 }
@@ -1477,8 +1487,87 @@ fn table(
         .and_then(Value::as_f64)
         .unwrap_or(0.0)
         > 0.0;
-    let n = rows.len();
-    for (idx, c) in rows.iter().enumerate() {
+    // BTCPay stores first, each over the wallets it pays into (in the chosen sort), then the
+    // wallets no store pays into. A filter hides a store none of whose wallets match.
+    let store_groups = app
+        .wallets
+        .list
+        .groups
+        .as_ref()
+        .map(groups::parse)
+        .unwrap_or_default();
+    let show_server = app
+        .wallets
+        .list
+        .groups
+        .as_ref()
+        .map_or(0, groups::backend_count)
+        > 1;
+    let filtering = rows.len() != total_count;
+    let lead_w: f32 = w[..w.len() - 1].iter().sum();
+    let bal_w = w[w.len() - 1];
+    let mut grouped: std::collections::BTreeSet<&str> = Default::default();
+    let mut any_group = false;
+    for g in &store_groups {
+        let members: Vec<(&Conn, &groups::Member)> = rows
+            .iter()
+            .filter_map(|c| {
+                g.wallets
+                    .iter()
+                    .find(|m| m.wallet_id == c.id)
+                    .map(|m| (c, m))
+            })
+            .collect();
+        if members.is_empty() && (filtering || g.records_only.is_empty()) {
+            continue;
+        }
+        any_group = true;
+        grouped.extend(members.iter().map(|(c, _)| c.id.as_str()));
+        let collapsed = app.wallets.list.collapsed.contains(&g.key);
+        let sum: f64 = members.iter().map(|(c, _)| c.balance).sum();
+        body = body.child(groups::header(
+            app,
+            cx,
+            tk,
+            g,
+            show_server,
+            collapsed,
+            lead_w,
+            bal_w,
+            group_balance(app, tk, &g.key, sum),
+        ));
+        if collapsed {
+            continue;
+        }
+        for (c, m) in members {
+            body = body.child(wallet_row(
+                app,
+                cx,
+                tk,
+                c,
+                &w,
+                lg,
+                tax_col,
+                tax_ids.contains(&c.id),
+                total,
+                overlap,
+                Some((&g.key, m)),
+                false,
+            ));
+        }
+        if !g.records_only.is_empty() && !filtering {
+            body = body.child(groups::records_line(tk, g, table_w, tk.r(2.25), false));
+        }
+    }
+    let rest: Vec<&Conn> = rows
+        .iter()
+        .filter(|c| !grouped.contains(c.id.as_str()))
+        .collect();
+    if any_group && !rest.is_empty() {
+        body = body.child(groups::others_header(tk, table_w));
+    }
+    let n = rest.len();
+    for (idx, c) in rest.into_iter().enumerate() {
         body = body.child(wallet_row(
             app,
             cx,
@@ -1490,6 +1579,7 @@ fn table(
             tax_ids.contains(&c.id),
             total,
             overlap,
+            None,
             idx + 1 == n,
         ));
     }
@@ -1529,6 +1619,7 @@ fn wallet_row(
     has_tax_free: bool,
     total: f64,
     overlap: bool,
+    member: Option<(&str, &groups::Member)>,
     last: bool,
 ) -> El {
     let hidden = app.prefs.hide_sensitive();
@@ -1609,6 +1700,9 @@ fn wallet_row(
                 .mt(tk.r(0.25)),
         );
     }
+    if let Some((_, m)) = member {
+        name_col = name_col.child(groups::member_line(tk, m));
+    }
     let name_row = row()
         .w_full()
         .min_w(0.0)
@@ -1618,8 +1712,13 @@ fn wallet_row(
         .child(name_col);
     // `<td class="p-2 align-middle">`: the cell's own vertical-align beats the row's `align-top`.
     let cell = |w: f32, pl: f32, pr: f32| row().w(w).pl(pl).pr(pr).py(tk.r(0.5)).center_y();
+    // A wallet two stores share shows under both: the store keeps its rows' keys apart.
+    let row_key = match member {
+        Some((group, _)) => format!("wallets-row-{group}-{}", c.id),
+        None => format!("wallets-row-{}", c.id),
+    };
     let mut r = row()
-        .key(format!("wallets-row-{}", c.id))
+        .key(row_key)
         .w_full()
         .items_stretch()
         .hover(tk.muted.alpha(0.35))
@@ -1633,7 +1732,12 @@ fn wallet_row(
     }
     let id = c.id.clone();
     r = r.on_press(move |a: &mut App| a.navigate(&format!("/connections/{id}")));
-    r = r.child(cell(next(), tk.r(0.5), tk.r(1.5)).child(name_row));
+    let lead = if member.is_some() {
+        tk.r(2.25)
+    } else {
+        tk.r(0.5)
+    };
+    r = r.child(cell(next(), lead, tk.r(1.5)).child(name_row));
     // Kind: a muted label.
     r = r.child(cell(next(), tk.r(0.5), tk.r(0.5)).child(crate::ui::tag(
         tk,
@@ -1757,6 +1861,39 @@ fn wallet_row(
     r.child(cell(next(), tk.r(0.5), tk.r(0.5)).justify_end().child(bal))
 }
 
+/// A store's summed balance, in the rows' two-line form (the user's currency on top).
+fn group_balance(app: &App, tk: &Tk, key: &str, btc: f64) -> El {
+    let fiat = if rate_missing(app) {
+        "—".to_owned()
+    } else {
+        fiat_value(app, btc)
+    };
+    let bitcoin = format!("₿ {}", format_btc8(btc));
+    let (top, bottom) = if app.prefs.currency == Currency::Fiat {
+        (fiat, bitcoin)
+    } else {
+        (bitcoin, fiat)
+    };
+    col()
+        .items_end()
+        .child(currency_toggle(
+            app,
+            tk,
+            &format!("wallets-group-bal-{key}"),
+            top,
+            tk.tsm(600.0).features("'tnum' 1"),
+            tk.fg,
+        ))
+        .child(currency_toggle(
+            app,
+            tk,
+            &format!("wallets-group-bal2-{key}"),
+            bottom,
+            tk.txs(400.0).features("'tnum' 1"),
+            tk.muted_fg,
+        ))
+}
+
 /// `ScreenSkeleton titleWidth="w-32" metricCount={3}`.
 pub fn skeleton(tk: &Tk) -> El {
     let bar = |w: f32, h: f32| {
@@ -1796,8 +1933,14 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
     if app.route.path() != "/connections" {
         return false;
     }
+    let mut sent = false;
+    if app.wallets.list.groups_generation != Some(app.book_generation) {
+        app.wallets.list.groups_generation = Some(app.book_generation);
+        app.send("ui.sources.groups", Value::Null, "wallets.list.groups");
+        sent = true;
+    }
     let Some(period) = search(app).period else {
-        return false;
+        return sent;
     };
     let st = &app.wallets.list;
     let same = st
@@ -1805,7 +1948,7 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
         .as_ref()
         .is_some_and(|(p, _)| *p == period);
     if same && st.period_generation == app.book_generation {
-        return false;
+        return sent;
     }
     let keep = match st.period_coverage.as_ref() {
         Some((_, PeriodCoverage::Ready(report) | PeriodCoverage::Loading(Some(report))))
@@ -1826,6 +1969,13 @@ pub fn poll(app: &mut App, _tx: &mut Tx) -> bool {
 }
 
 pub fn on_reply(app: &mut App, tag: &str, r: &Reply) {
+    if tag == "wallets.list.groups" {
+        // A failed read keeps the last groups (or the flat list): grouping is display only.
+        if r.error.is_none() {
+            app.wallets.list.groups = Some(r.data.clone());
+        }
+        return;
+    }
     if tag != "wallets.list.coverage" {
         return;
     }
@@ -1883,7 +2033,109 @@ fn scene_attention(a: &mut App) {
     super::scene_route(a, "/connections");
 }
 
+/// SYNTHETIC: many BTCPay stores on two servers (the read and the snapshot rows are made up, the
+/// book is untouched): every rail, a wallet two stores share, invoice-only methods, a store
+/// setup could not name, one folded store, and wallets no store pays into.
+fn scene_stores(a: &mut App) {
+    super::scene_route(a, "/connections");
+    super::common::settle(a);
+    let Some(snap) = a.reads.get_mut("ui.overview.snapshot") else {
+        return;
+    };
+    let template = snap.data["connections"]
+        .as_array()
+        .and_then(|c| c.first())
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let conn = |id: &str, label: &str, kind: &str, chain: &str, btc: f64, txs: u32| {
+        let mut c = template.clone();
+        c["id"] = id.into();
+        c["label"] = label.into();
+        c["kind"] = kind.into();
+        c["chain"] = chain.into();
+        c["balance"] = btc.into();
+        c["transactionCount"] = txs.into();
+        c["status"] = "synced".into();
+        for k in [
+            "asset",
+            "paymentMethodId",
+            "sourceFormat",
+            "syncMode",
+            "syncSource",
+            "addresses",
+            "gap",
+            "coverage",
+        ] {
+            c[k] = Value::Null;
+        }
+        c
+    };
+    snap.data["connections"] = serde_json::json!([
+        conn("ms", "Cafe multisig", "descriptor", "bitcoin", 1.284, 312),
+        conn("lnd", "Cafe LND node", "lnd", "bitcoin", 0.0412, 1840),
+        conn("liq", "Cafe Liquid", "custom", "liquid", 0.0675, 96),
+        conn("ark", "Webshop Ark", "custom", "bitcoin", 0.0158, 233),
+        conn(
+            "ln-web",
+            "Webshop Lightning",
+            "custom",
+            "bitcoin",
+            0.0094,
+            410
+        ),
+        conn(
+            "ln-ev",
+            "Tickets Lightning",
+            "custom",
+            "bitcoin",
+            0.0221,
+            1288
+        ),
+        conn("don", "Donations wallet", "custom", "bitcoin", 0.0315, 57),
+        conn("cold", "Cold storage", "descriptor", "bitcoin", 2.5, 14),
+        conn("krk", "Kraken", "kraken", "bitcoin", 0.12, 88),
+    ]);
+    snap.data["balanceSummary"]["totalBtc"] = 4.0915.into();
+    snap.data["balanceSummary"]["duplicateOutpointAdjustmentBtc"] = 0.0.into();
+    let m = |id: &str, s: &str| serde_json::json!({"id": id, "settlement": s});
+    let w = |id: &str, role: &str, methods: Value, stores: u32| serde_json::json!({"wallet_id": id, "role": role, "payment_methods": methods, "store_count": stores});
+    a.wallets.list.groups = Some(serde_json::json!({
+        "summary": {"groups": 4, "backends": 2, "wallets": 7},
+        "groups": [
+            {"key": "btcpay:shop:cafe", "backend": "shop-btcpay", "store_id": "cafe", "label": "Cafe Wien",
+             "wallets": [
+                 w("ms", "mapped", serde_json::json!([m("BTC-CHAIN", "btc_onchain")]), 2),
+                 w("liq", "wallet_source", serde_json::json!([m("LBTC-CHAIN", "liquid_onchain")]), 1),
+                 w("lnd", "mapped", serde_json::json!([m("BTC-LN", "lightning"), m("BTC-LNURL", "lnurl")]), 1)],
+             "records_only": [m("BTC-BOLTZ", "plugin")]},
+            {"key": "btcpay:events:tix", "backend": "events-btcpay", "store_id": "tix", "label": "Event tickets",
+             "wallets": [w("ln-ev", "payment_ledger", serde_json::json!([m("BTC-LN", "lightning"), m("BTC-LNURL", "lnurl")]), 1)],
+             "records_only": []},
+            {"key": "btcpay:shop:web", "backend": "shop-btcpay", "store_id": "web", "label": "Webshop",
+             "wallets": [
+                 w("ms", "mapped", serde_json::json!([m("BTC-CHAIN", "btc_onchain")]), 2),
+                 w("ln-web", "payment_ledger", serde_json::json!([m("BTC-LN", "lightning")]), 1),
+                 w("ark", "wallet_source", serde_json::json!([m("BTC-ARK", "bark")]), 1)],
+             "records_only": []},
+            {"key": "btcpay:shop:7wKQ8Dhnyq", "backend": "shop-btcpay", "store_id": "7wKQ8DhnyqvfPHdY", "label": null,
+             "wallets": [w("don", "wallet_source", serde_json::json!([m("BTC-CHAIN", "btc_onchain")]), 1)],
+             "records_only": []}
+        ]
+    }));
+    a.wallets.list.groups_generation = Some(a.book_generation);
+    a.wallets.list.collapsed.insert("btcpay:events:tix".into());
+}
+
 pub const SCENES: &[crate::app::Scene] = &[
+    ("wallets-list-stores", scene_stores),
+    ("wallets-list-stores-de", |a| {
+        a.prefs.lang = crate::i18n::Lang::De;
+        scene_stores(a);
+    }),
+    ("wallets-list-stores-light", |a| {
+        a.prefs.theme = crate::app::ThemeMode::Light;
+        scene_stores(a);
+    }),
     ("wallets-list", |a| super::scene_route(a, "/connections")),
     ("wallets-list-attention", scene_attention),
     // The needs-action filter for a period (the `sources.behind` row's target).
