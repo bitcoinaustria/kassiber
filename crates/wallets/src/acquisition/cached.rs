@@ -220,7 +220,7 @@ impl Acquisition {
         let mut observations = vec![];
         for (index, target) in self.targets.iter().enumerate() {
             cancel.check(deadline)?;
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+            let hash = esplora_script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
             let before = client.get_json(&format!("scripthash/{hash}"), Some(consent), deadline)?;
             observations.push((target, hash, before));
             fetched(index + 1, total)?;
@@ -257,7 +257,7 @@ impl Acquisition {
         for script in scripts.iter().filter(|s| s["reused"] != true) {
             cancel.check(deadline)?;
             let target = &script["target"];
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+            let hash = esplora_script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
             let path = format!("scripthash/{hash}");
             let history =
                 esplora_history(&client, &path, self.max_pages, consent, deadline, cancel)?;
@@ -386,7 +386,7 @@ impl Acquisition {
             let mut utxos_seen = 0;
             for (index, script) in scripts.iter_mut().enumerate() {
                 cancel.check(deadline)?;
-                let h = script_hash(
+                let h = esplora_script_hash(
                     script["target"]["script_pubkey"]
                         .as_str()
                         .ok_or_else(invalid)?,
@@ -905,7 +905,7 @@ mod tests {
         )
         .unwrap();
         let first = run(&a).unwrap();
-        let hash = script_hash("51").unwrap();
+        let hash = esplora_script_hash("51").unwrap();
         let checkpoint = &first["freshness_checkpoint"];
         assert_eq!(
             checkpoint["esplora_history_memberships"]["scripts"][&hash]["complete"],
@@ -918,6 +918,14 @@ mod tests {
         assert!(server.requests()[2].starts_with("GET /block-height/12 "));
         assert!(server.requests()[7].starts_with("GET /blocks/tip/height "));
         assert!(server.requests()[8].contains("/utxo "));
+        // Esplora's script hash is the digest itself, not Electrum's reversal.
+        let reversed = script_hash("51").unwrap();
+        assert!(server
+            .requests()
+            .iter()
+            .any(|r| r.starts_with(&format!("GET /scripthash/{hash} "))));
+        assert!(server.requests()[8].starts_with(&format!("GET /scripthash/{hash}/utxo ")));
+        assert!(!server.requests().iter().any(|r| r.contains(&reversed)));
         assert_eq!(checkpoint["esplora_tip_height"], 12);
         let a = Acquisition::new_cached(
             scope(),

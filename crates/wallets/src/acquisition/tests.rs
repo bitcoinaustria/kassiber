@@ -264,6 +264,9 @@ fn acquisition_esplora_paginates_deduplicates_and_retains_both_statistics() {
     assert_eq!(result["positions"][0]["confirmations"], 3);
     assert_eq!(result["positions"][26]["block_height"], Value::Null);
     assert_eq!(result["positions"][26]["confirmations"], Value::Null);
+    // Esplora takes the script's SHA-256 in digest order, not Electrum's.
+    let hash = crate::scan::esplora_script_hash("51").unwrap();
+    assert!(server.requests()[0].starts_with(&format!("GET /scripthash/{hash} ")));
     assert!(server.requests()[2].contains(&format!("/txs/chain/{} ", txid(25))));
     assert!(server.requests()[3].contains("/txs/mempool "));
     assert!(server

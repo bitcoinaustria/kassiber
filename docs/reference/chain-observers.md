@@ -486,6 +486,13 @@ those adapters or retries through one after a BDK error.
   `electrum_scripthash_statuses` checkpoint map.
 - `core.freshness` stores those backend-specific maps in
   `freshness_source_states.checkpoint_json`.
+- Esplora's `/scripthash/:hash` takes the SHA-256 of the script in digest
+  order; Electrum takes the same digest byte-reversed. Each checkpoint map is
+  keyed in its protocol's form. Kassiber up to November 2026 (and the Python
+  reference) sent Esplora the reversed form, which Esplora and mempool servers
+  answer as an unused script, so descriptor wallets on those servers synced
+  empty. Their old checkpoint entries match no current key, so the next sync
+  scans again from the start.
 
 The dependency observer blob becomes the authoritative supported-route chain
 state. The freshness checkpoint may retain scheduling metadata, but not a

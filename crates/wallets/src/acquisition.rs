@@ -5,7 +5,7 @@
 //! prepares absence candidates only after a complete source-bound round.
 #[cfg(test)]
 use crate::scan::Cancellation;
-use crate::scan::{script_hash, Control, Scope};
+use crate::scan::{esplora_script_hash, script_hash, Control, Scope};
 use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
 use kassiber_envelope::AppError;
@@ -286,7 +286,7 @@ impl Acquisition {
         let mut transactions = Map::new();
         for target in &self.targets {
             cancel.check(deadline)?;
-            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+            let hash = esplora_script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
             let path = format!("scripthash/{hash}");
             // Keep the pre/post statistics for the future membership authority.
             let before = client.get_json(&path, Some(consent), deadline)?;

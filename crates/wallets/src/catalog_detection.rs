@@ -5,7 +5,10 @@
 //! once-only consent bound to that action, like Python's
 //! `detect_active_script_types`. Every backend or probe failure falls back to
 //! a manual `p2wpkh` choice with the failure as the reason.
-use crate::{descriptors as d, material, scan::script_hash};
+use crate::{
+    descriptors as d, material,
+    scan::{esplora_script_hash, script_hash},
+};
 use kassiber_chain::{Backend, ElectrumClient, HttpClient};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_net::{Consent, Gate};
@@ -181,7 +184,13 @@ impl Detection {
         let hashes = self
             .scripts
             .iter()
-            .map(|(_, script)| script_hash(script))
+            .map(|(_, script)| {
+                if self.electrum {
+                    script_hash(script)
+                } else {
+                    esplora_script_hash(script)
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         let histories = if self.electrum {
             let mut client = ElectrumClient::connect(

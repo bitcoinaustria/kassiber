@@ -271,7 +271,7 @@ impl CompatibilityDiscovery {
                                     let transport = &proof.transport;
                                     threads.spawn(move || {
                                         cancel.check(deadline)?;
-                                        let hash = script_hash(
+                                        let hash = esplora_script_hash(
                                             target["script_pubkey"]
                                                 .as_str()
                                                 .expect("derived script"),
@@ -465,14 +465,28 @@ pub(crate) fn integer(value: &Value) -> Option<BigInt> {
     }
 }
 
-/// Electrum and Esplora both use reversed SHA-256 of the script bytes.
+/// Electrum's script hash: the SHA-256 of the script bytes, byte-reversed.
 pub fn script_hash(script: &str) -> Result<String> {
+    let mut digest = script_digest(script)?;
+    digest.reverse();
+    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// Esplora's `/scripthash/:hash`: the SHA-256 of the script bytes in digest
+/// order. The Python reference and Kassiber up to this fix sent Electrum's
+/// reversed form, which Esplora and mempool servers answer as an unused script.
+pub fn esplora_script_hash(script: &str) -> Result<String> {
+    Ok(script_digest(script)?
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+fn script_digest(script: &str) -> Result<[u8; 32]> {
     use bitcoin::hex::FromHex;
     let bytes = Vec::<u8>::from_hex(script)
         .map_err(|_| AppError::new("validation", "Invalid script encoding"))?;
-    let mut digest = Sha256::digest(bytes);
-    digest.reverse();
-    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+    Ok(Sha256::digest(bytes).into())
 }
 
 fn scan_plan(

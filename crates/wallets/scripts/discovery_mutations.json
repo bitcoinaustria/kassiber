@@ -137,7 +137,18 @@
     "expect_failing": [
       "script_hash_and_python_checkpoint_integer_coercions_are_exact"
     ],
-    "rule": "Script hashes reverse SHA-256 bytes."
+    "rule": "Electrum script hashes reverse SHA-256 bytes."
+  },
+  {
+    "id": "discovery-esplora-script-hash",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "Ok(script_digest(script)?",
+    "replace": "Ok(script_digest(script).map(|mut d| {\n        d.reverse();\n        d\n    })?",
+    "expect_failing": [
+      "script_hash_and_python_checkpoint_integer_coercions_are_exact",
+      "compatibility_cached_esplora_fetches_once_then_reuses_only_complete_membership"
+    ],
+    "rule": "Esplora script hashes keep SHA-256 digest order."
   },
   {
     "id": "discovery-scope-binding",
