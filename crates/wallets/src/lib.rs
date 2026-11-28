@@ -8,6 +8,7 @@ pub mod config;
 pub mod connections;
 pub mod coverage;
 pub mod file_import;
+pub mod groups;
 mod progress;
 mod silent_payments;
 mod snapshot;

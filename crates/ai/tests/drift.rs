@@ -127,15 +127,15 @@ fn constants_match_python() {
 #[test]
 fn embedded_catalog_has_every_definition() {
     // Python's 176, ui.journals.verify, the three bank-line tools, the two
-    // source coverage tools, and ui.reports.wealth_preview.
-    assert_eq!(tools().len(), 183);
+    // source coverage tools, ui.reports.wealth_preview, and ui.sources.groups.
+    assert_eq!(tools().len(), 184);
     let reads = tools()
         .iter()
         .filter(|tool| tool.kind_class == KindClass::ReadOnly)
         .count();
     // Python's 110, ui.journals.verify, the bank-line suggestions,
-    // ui.sources.coverage, and ui.reports.wealth_preview.
-    assert_eq!(reads, 114);
+    // ui.sources.coverage, ui.reports.wealth_preview, and ui.sources.groups.
+    assert_eq!(reads, 115);
     let egressing: Vec<&str> = tools()
         .iter()
         .filter(|tool| tool.egresses)

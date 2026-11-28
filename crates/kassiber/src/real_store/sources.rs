@@ -5,6 +5,7 @@
 //! remembers importing). `ui.sources.attest_coverage` /
 //! `wallets attest-coverage` store or clear the user's "no activity after"
 //! statement, which clears coverage warnings and nothing else.
+//! `ui.sources.groups` reads which wallets each BTCPay store pays into.
 use super::*;
 use kassiber_envelope::get;
 use kassiber_wallets::coverage;
@@ -12,6 +13,7 @@ use kassiber_wallets::coverage;
 pub(super) const COMMANDS: &[&str] = &[
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
+    "ui.sources.groups",
     "wallets.coverage",
     "wallets.attest-coverage",
 ];
@@ -20,6 +22,7 @@ fn allowed(operation: &str) -> &'static [&'static str] {
     match operation {
         "ui.sources.coverage" => &["period_end", "wallet", "check_file"],
         "ui.sources.attest_coverage" => &["wallet", "kind", "date", "note", "clear"],
+        "ui.sources.groups" => &[],
         "wallets.coverage" => &["workspace", "profile", "wallet", "period_end", "check_file"],
         _ => &[
             "workspace",
@@ -117,6 +120,9 @@ impl RealBook {
         let profile = self.sources_profile(args, cli)?;
         let conn = self.conn()?;
         let now = kassiber_setup::Sources::now(&SetupSources, conn)?;
+        if operation == "ui.sources.groups" {
+            return kassiber_wallets::groups::report(conn, &profile);
+        }
         if matches!(operation, "ui.sources.coverage" | "wallets.coverage") {
             let period_end = text(args, "period_end")?;
             let wallet = text(args, "wallet")?;

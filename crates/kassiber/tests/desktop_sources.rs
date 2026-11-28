@@ -63,6 +63,25 @@ fn coverage_reads_are_period_relative_and_refuse_unknown_arguments() {
 }
 
 #[test]
+fn store_groups_read_through_the_daemon_and_refuse_arguments() {
+    let desk = Desk::new("desktop_sources_unrecorded");
+    // The seeded book has no BTCPay store.
+    let groups = desk.ask("ui.sources.groups", "{}");
+    let report = data(&groups);
+    assert_eq!(get(report, "groups"), Some(&Value::List(vec![])));
+    assert_eq!(
+        path(report, &["summary", "groups"]),
+        Some(&Value::from(0_i64))
+    );
+    let refused = desk.ask("ui.sources.groups", r#"{"wallet": "cold"}"#);
+    assert_eq!(kind_of(&refused), "error");
+    assert_eq!(
+        path(&refused, &["error", "code"]).and_then(text),
+        Some("validation")
+    );
+}
+
+#[test]
 fn an_attestation_clears_the_warning_and_nothing_else() {
     let desk = Desk::new("desktop_sources_unrecorded");
     // A CSV run covered the exchange wallet through 30 June 2024; the user

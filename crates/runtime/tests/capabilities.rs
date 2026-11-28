@@ -121,6 +121,7 @@ fn tables_match_python() {
         ),
         ("ui.connections.exchange.sync", "ui.connections.btcpay.test"),
         ("ui.sources.coverage", "ui.wallets.list"),
+        ("ui.sources.groups", "ui.wallets.list"),
         ("ui.sources.attest_coverage", "ui.loans.mark"),
         ("ui.journals.verify", "ui.journals.snapshot"),
         // Backend certificate trust (docs/reference/backends.md#self-signed-certificates):
