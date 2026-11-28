@@ -687,11 +687,60 @@ fn import_ranges(
     }
     node.require_coverage(birthday)?;
     let count = requests.len();
-    let results = node.import_into("importdescriptors", json!([requests]), wallet)?;
+    let mut results = node.import_into("importdescriptors", json!([requests]), wallet)?;
+    if let Some(retry) = widened_to_core_ranges(&requests, &results) {
+        // Core already watches more of these descriptors than Kassiber asked
+        // for; import them again over the range Core holds.
+        results = node.import_into("importdescriptors", json!([retry]), wallet)?;
+    }
     if let Some(failure) = first_failure(&results) {
         return Err(node.import_failure(birthday, "ranged descriptor import", &failure));
     }
     Ok((count, next))
+}
+
+/// Core tops an imported ranged descriptor up to its keypool beyond the last
+/// used index (Core 31: 1000), then refuses a later import over a smaller
+/// range with "new range must include current range = [start,end]". Returns
+/// the requests that failed only that way, widened to cover Core's range, or
+/// `None` when any request failed for another reason or none needs widening.
+fn widened_to_core_ranges(requests: &[Value], results: &Value) -> Option<Vec<Value>> {
+    let results = results.as_array()?;
+    if results.len() != requests.len() {
+        return None;
+    }
+    let mut retry = vec![];
+    for (request, result) in requests.iter().zip(results) {
+        if descriptors::truthy(&result["success"]) {
+            continue;
+        }
+        let message = result["error"]["message"].as_str()?;
+        let (start, end) = core_current_range(message)?;
+        let asked = request["range"].as_array()?;
+        let (Some(asked_start), Some(asked_end)) =
+            (asked.first()?.as_i64(), asked.get(1)?.as_i64())
+        else {
+            return None;
+        };
+        if asked_start <= start && asked_end >= end {
+            // Already covered: the failure is not about the range.
+            return None;
+        }
+        let mut widened = request.clone();
+        widened["range"] = json!([asked_start.min(start), asked_end.max(end)]);
+        retry.push(widened);
+    }
+    (!retry.is_empty()).then_some(retry)
+}
+
+/// `[start,end]` from Core's refusal, which ends "new range must include
+/// current range = [a,b]" (Core 31 prefixes "Could not add descriptor '…': ").
+fn core_current_range(message: &str) -> Option<(i64, i64)> {
+    let (_, rest) = message.rsplit_once("new range must include current range = [")?;
+    let rest = rest.strip_suffix(']')?;
+    let (start, end) = rest.split_once(',')?;
+    let (start, end) = (start.trim().parse().ok()?, end.trim().parse().ok()?);
+    (0 <= start && start <= end).then_some((start, end))
 }
 
 /// `bitcoinrpc_import_addresses`.
@@ -1518,4 +1567,68 @@ fn transaction_metadata(
         }
     }
     Ok(json!({"block_height": height, "block_time": block_time}))
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    fn request(end: i64) -> Value {
+        json!({"desc": "wsh(sortedmulti(2,a,b,c))#x", "timestamp": 0, "internal": false,
+            "active": false, "range": [0, end]})
+    }
+    fn refused(start: i64, end: i64) -> Value {
+        json!({"success": false, "error": {"code": -4, "message": format!(
+            "Could not add descriptor 'wsh(x)#y': new range must include current range = [{start},{end}]"
+        )}})
+    }
+
+    #[test]
+    fn a_core_topped_up_range_is_imported_again_over_cores_range() {
+        let requests = [request(30), request(20)];
+        let results = json!([refused(0, 1030), {"success": true}]);
+        let retry = widened_to_core_ranges(&requests, &results).unwrap();
+        assert_eq!(retry.len(), 1);
+        assert_eq!(retry[0]["range"], json!([0, 1030]));
+        assert_eq!(retry[0]["desc"], requests[0]["desc"]);
+        assert_eq!(retry[0]["timestamp"], 0);
+    }
+
+    #[test]
+    fn other_failures_are_never_retried() {
+        let other = json!({"success": false, "error": {"code": -5, "message": "Rescan failed"}});
+        assert!(widened_to_core_ranges(&[request(30)], &json!([other])).is_none());
+        // A range failure next to another failure reports the other one.
+        let mixed = json!([refused(0, 1030), other]);
+        assert!(widened_to_core_ranges(&[request(30), request(20)], &mixed).is_none());
+        // Core's range already inside the request: not a range problem.
+        assert!(widened_to_core_ranges(&[request(1030)], &json!([refused(0, 1030)])).is_none());
+        assert!(widened_to_core_ranges(&[request(30)], &json!([{"success": true}])).is_none());
+        assert!(widened_to_core_ranges(&[request(30)], &json!([])).is_none());
+    }
+
+    #[test]
+    fn only_cores_exact_range_message_is_parsed() {
+        assert_eq!(
+            core_current_range("new range must include current range = [0,1000]"),
+            Some((0, 1000))
+        );
+        // Bitcoin Core 31.0's text, from a regtest node.
+        assert_eq!(
+            core_current_range(
+                "Could not add descriptor 'wsh(sortedmulti(2,[a3bbd92b/84h/1h/0h]tpub/0/*))#khakmn2v': \
+                 new range must include current range = [0,1025]"
+            ),
+            Some((0, 1025))
+        );
+        for text in [
+            "new range must include current range = [5,1]",
+            "new range must include current range = [-1,4]",
+            "new range must include current range = [0,x]",
+            "new range must include current range = [0,1000] later",
+            "range = [0,1000]",
+        ] {
+            assert_eq!(core_current_range(text), None, "{text}");
+        }
+    }
 }
