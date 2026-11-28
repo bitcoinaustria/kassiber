@@ -713,6 +713,11 @@ Use this when you run your own node.
 - descriptor imports are ranged per receive/change branch; repeated refreshes
   widen the range from observed transaction history / UTXOs and otherwise use
   `listsinceblock`
+- Core extends an imported range on its own once an address in it is used
+  (Core 31: up to 1000 beyond the last used index) and refuses a later import
+  over a smaller range. Kassiber then imports that descriptor again over the
+  range Core reports and keeps scanning its own range; any other import
+  failure still stops the sync
 - local desktop detection understands default cookie files plus `bitcoin.conf`
   RPC auth/ports, and the health probe reports peers, sync state, wallet RPC
   support, pruning, IBD, and BIP158 filter-index availability

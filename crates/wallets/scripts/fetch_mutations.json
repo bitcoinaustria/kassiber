@@ -683,5 +683,25 @@
       "btcpay_provenance_routes_enrich_inside_the_savepoint"
     ],
     "rule": "A descriptor wallet's BTCPay provenance routes are read inside its publication savepoint."
+  },
+  {
+    "id": "fetch-core-range-widened",
+    "file": "crates/wallets/src/fetch/core.rs",
+    "find": "widened[\"range\"] = json!([asked_start.min(start), asked_end.max(end)]);",
+    "replace": "widened[\"range\"] = json!([asked_start, asked_end]);",
+    "expect_failing": [
+      "a_core_topped_up_range_is_imported_again_over_cores_range"
+    ],
+    "rule": "A refused Core import is retried over the range Core already holds."
+  },
+  {
+    "id": "fetch-core-range-other-failure",
+    "file": "crates/wallets/src/fetch/core.rs",
+    "find": "        if asked_start <= start && asked_end >= end {\n            // Already covered: the failure is not about the range.\n            return None;\n        }\n",
+    "replace": "",
+    "expect_failing": [
+      "other_failures_are_never_retried"
+    ],
+    "rule": "Only Core's range refusal over a smaller range is retried."
   }
 ]
