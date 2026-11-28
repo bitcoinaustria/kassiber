@@ -578,5 +578,15 @@
       "electrum_history_anchors_match_python_requests_and_checkpoints"
     ],
     "rule": "Unconfirmed UTXOs read no header."
+  },
+  {
+    "id": "acquisition-esplora-script-hash",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "let hash = esplora_script_hash(target[\"script_pubkey\"].as_str().ok_or_else(invalid)?)?;",
+    "replace": "let hash = script_hash(target[\"script_pubkey\"].as_str().ok_or_else(invalid)?)?;",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "Esplora acquisition asks for the digest-order script hash."
   }
 ]

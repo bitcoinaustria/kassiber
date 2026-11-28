@@ -385,7 +385,7 @@ fn esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded
         .map_err(descriptors::Error::into_app)
         .unwrap()
         .unwrap();
-    let hash = script_hash(
+    let hash = esplora_script_hash(
         plan.derive(Some(0), 0, 1)
             .map_err(descriptors::Error::into_app)
             .unwrap()[0]["script_pubkey"]
@@ -629,6 +629,16 @@ fn script_hash_and_python_checkpoint_integer_coercions_are_exact() {
     assert_eq!(
         script_hash("0014ac").unwrap(),
         "d86b488b4a2a804029c1dd339e903f96ebd5bdb18cbb228ee7591c8f5042242f"
+    );
+    // Esplora and mempool want the digest in its own order; checked against
+    // a mempool/electrs regtest server, which answers the reversed form empty.
+    assert_eq!(
+        esplora_script_hash("0014ac").unwrap(),
+        "2f2442508f1c59e78e22bb8cb1bdd5eb963f909e33ddc12940802a4a8b486bd8"
+    );
+    assert_eq!(
+        esplora_script_hash("invalid").unwrap_err().code,
+        "validation"
     );
     assert_eq!(script_hash("00ff").unwrap(), script_hash("00FF").unwrap());
     assert_eq!(script_hash("invalid").unwrap_err().code, "validation");

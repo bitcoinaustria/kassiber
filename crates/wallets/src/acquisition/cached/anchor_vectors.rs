@@ -33,6 +33,22 @@ fn targets() -> Vec<Value> {
     result
 }
 
+/// Python asked Esplora for Electrum's reversed script hash, which real
+/// Esplora servers answer as an unused script. Rust sends the digest-order
+/// hash; this one deliberate difference is mapped here, so every other request
+/// and checkpoint byte still has to match the frozen Python run.
+fn with_esplora_hashes(case: &Value) -> Value {
+    let mut text = case.to_string();
+    for target in targets() {
+        let script = target["script_pubkey"].as_str().unwrap();
+        text = text.replace(
+            &crate::scan::script_hash(script).unwrap(),
+            &crate::scan::esplora_script_hash(script).unwrap(),
+        );
+    }
+    serde_json::from_str(&text).unwrap()
+}
+
 const PYTHON_URL: &str = "https://example.invalid/";
 
 /// Esplora absence memberships bind the whole transport, including the URL.
@@ -139,8 +155,15 @@ fn compare(case: &Value, actual: &Value, url: &str) {
 
 #[test]
 fn esplora_history_anchors_match_python_requests_and_checkpoints() {
-    let cases = cases("esplora");
+    let cases: Vec<Value> = cases("esplora").iter().map(with_esplora_hashes).collect();
     assert!(cases.len() >= 20);
+    assert!(
+        cases.iter().any(|c| c.to_string().contains(
+            &crate::scan::esplora_script_hash(targets()[0]["script_pubkey"].as_str().unwrap())
+                .unwrap()
+        )),
+        "the vectors name the targets' Esplora hashes"
+    );
     for case in &cases {
         let name = case["name"].as_str().unwrap();
         let requests = case["requests"].as_array().unwrap();
