@@ -98,6 +98,32 @@
     "wallets_one": "{{count}} Wallet",
     "wallets_other": "{{count}} Wallets"
   },
+  "groups": {
+    "kind": "BTCPay-Store",
+    "unnamed": "Store {{id}}",
+    "expand": "Wallets von {{store}} anzeigen",
+    "collapse": "Wallets von {{store}} ausblenden",
+    "method": {
+      "btc_onchain": "On-chain",
+      "liquid_onchain": "Liquid",
+      "lightning": "Lightning",
+      "lnurl": "LNURL",
+      "bark": "Ark"
+    },
+    "role": {
+      "wallet_source": "Aus BTCPay importiert",
+      "payment_ledger": "Zahlungsbuch"
+    },
+    "roleHelp": {
+      "wallet_source": "Kassiber importiert den Verlauf dieser Wallet aus BTCPay.",
+      "payment_ledger": "Verbucht nur die abgeschlossenen Zahlungen und Auszahlungen aus BTCPay. Was auf anderem Weg abfließt, bleibt in diesem Guthaben."
+    },
+    "shared_one": "Auch in {{count}} weiteren Store",
+    "shared_other": "Auch in {{count}} weiteren Stores",
+    "recordsOnly": "{{methods}}: nur Rechnungsdaten",
+    "recordsOnlyHelp": "Keine Wallet in diesem Store verbucht diese Zahlungen. Füge den Node oder die Wallet hinzu, in der sie ankommen.",
+    "other": "Weitere Wallets"
+  },
   "detail": {
     "notFound": "Keine Verbindung für {{id}} gefunden.",
     "backToWallets": "Zurück zu den Wallets",

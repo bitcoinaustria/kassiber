@@ -2029,6 +2029,10 @@ source's covered end (`attestation_gap` names what a later date leaves open)
 and creates no transactions, balances or tax facts. Exports of a period whose
 sources lag carry the same provisional note. Both are local; see
 [source coverage](desktop.md#sources-live-sync-and-file-snapshots).
+`ui_sources_groups` reads which wallets each BTCPay store pays into, with each
+member's role and payment methods; a payment ledger books BTCPay's payments
+and cannot see money leave. A group is display structure, never ownership
+(see [BTCPay store groups](daemon.md#btcpay-store-groups)).
 
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,

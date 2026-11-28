@@ -166,6 +166,7 @@ const DAEMON_READ_KINDS: &str = "
     ui.transactions.search ui.transactions.ledger_template
     ui.transactions.history ui.activity.history ui.activity.stale
     ui.attachments.list ui.attachments.open ui.wallets.list ui.wallets.utxos ui.sources.coverage
+    ui.sources.groups
     ui.privacy_hygiene.snapshot ui.wallets.identify ui.loans.list
     ui.backends.list ui.backends.options ui.backends.public_defaults
     ui.backends.settings.list

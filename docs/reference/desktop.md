@@ -1074,6 +1074,31 @@ With a period the list reads that period's coverage; until the read answers its
 rows show none, and a failed read shows an alert with Retry instead of
 letting today's coverage stand in for the period.
 
+BTCPay stores ([`ui.sources.groups`](daemon.md#btcpay-store-groups), read
+when the list mounts and after each book refresh) come first, one foldable
+section per store over the wallets it pays into, then "Other wallets":
+
+```
+ ▾ [BTCPay] Cafe Wien                 On-chain Liquid Lightning LNURL   1.39270
+            BTCPay store · 3 wallets
+     Cafe multisig   [On-chain] Also in 1 other store                   1.28400
+     Cafe Liquid     [Liquid] Imported from BTCPay                      0.06750
+     Cafe LND node   [Lightning] [LNURL]                                0.04120
+     ▤ BTC-BOLTZ: invoice records only
+ ▸ [BTCPay] Event tickets             Lightning LNURL                   0.02210
+   Other wallets
+ Cold storage    On-chain    ● Live · synced 2 h ago                    2.50000
+```
+
+The header sums its wallets' balances; a wallet two stores share counts in
+both sums and is still one wallet in the total. Each member names the methods
+that pay into it, "Imported from BTCPay" for a wallet source, and an amber
+"Payment ledger" (it books BTCPay's payments and cannot see money leave). The
+server shows only when stores come from two or more BTCPay servers; a store
+setup could not name shows its shortened id. Sort and filters apply inside each
+store, and a filter hides a store none of whose wallets match. Until the read
+answers, or when it fails, the list stays flat.
+
 ### Connection detail: Coverage card
 
 The card sits under the balance panel, above an exchange's sync card, in its own

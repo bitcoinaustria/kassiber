@@ -87,13 +87,15 @@ const RUST_ONLY_TOOLS: &[&str] = &[
     "ui.sources.coverage",
     "ui.sources.attest_coverage",
     "ui.reports.wealth_preview",
+    "ui.sources.groups",
 ];
 
 /// Rust-only tools and their capabilities, checked here since Python's vectors lack them.
-const RUST_ONLY: [(&str, &[&str]); 3] = [
+const RUST_ONLY: [(&str, &[&str]); 4] = [
     ("ui.sources.coverage", &["operations", "wallets"]),
     ("ui.sources.attest_coverage", &["operations", "wallets"]),
     ("ui.reports.wealth_preview", &["reports"]),
+    ("ui.sources.groups", &["operations", "wallets"]),
 ];
 
 fn python_tools() -> impl Iterator<Item = &'static kassiber_ai::ToolEntry> {

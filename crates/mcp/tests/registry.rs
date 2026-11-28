@@ -35,10 +35,11 @@ fn list(value: &Value) -> &[Value] {
 /// Rust-only tools (docs/reference/desktop.md#sources-live-sync-and-file-snapshots):
 /// Python's registry lacks them, so they are compared to their own
 /// classification here and left out of the Python comparison.
-const RUST_ONLY: [(&str, &str); 3] = [
+const RUST_ONLY: [(&str, &str); 4] = [
     ("ui.sources.coverage", "read"),
     ("ui.sources.attest_coverage", "accounting_decisions"),
     ("ui.reports.wealth_preview", "operator"),
+    ("ui.sources.groups", "read"),
 ];
 
 /// The reproducibility check, also Rust only (`docs/reference/rust-shell.md#rust-only-commands`),

@@ -1326,6 +1326,34 @@ attest-coverage` likewise). `ui.overview.snapshot` embeds each connection's
 coverage for today and derives its `status` from it. Neither kind contacts a
 network.
 
+## BTCPay store groups
+
+`ui.sources.groups` (no arguments; Rust only, desktop-invokable, an AI and MCP
+`read` tool) groups wallets by the BTCPay store that pays into them, for the
+Wallets list. It reads the routes setup stored and writes nothing:
+
+- a BTCPay wallet source (`wallet_source`) or payment ledger
+  (`payment_ledger`): a `custom` wallet whose config names the store;
+- a wallet the user tracks (`mapped`): its `btcpay_provenance` routes;
+- invoice-only methods (`records_only`): `provenance_only` account routes
+  whose method no wallet in the group books.
+
+The answer is `summary` (`groups`, `backends`, distinct `wallets`) and
+`groups`, named stores first by name, then unnamed ones. Each group has `key`
+(`btcpay:<backend>:<store_id>`), `kind` (`btcpay_store`), `backend`,
+`store_id`, `label`, `label_source`, `wallets` and `records_only`; each member
+has `wallet_id`, `label`, `kind`, `role`, `payment_methods` and `store_count`
+(2+ when stores share the wallet, which then appears in each group). Payment
+methods carry `id`, `rail`, `settlement` and an English `label`, in rail order
+(on-chain, Liquid, Lightning, LNURL, Bark, other plugins).
+
+BTCPay's store name is not stored on its own. `label` comes from the
+invoice-only route's label (`label_source: "route"`) or from the name setup
+generated for its wallets, `<connection> - <store> - <method>`
+(`"wallet_label"`); it is `null` once the user renamed those wallets. A group
+is display structure: it never grants ownership, moves a balance or decides a
+tax fact, and each wallet keeps its own sync and pairing rules.
+
 ## Backend certificate kinds
 
 `ui.backends.certificate.fetch` (`{name}`) and `ui.backends.certificate.trust`

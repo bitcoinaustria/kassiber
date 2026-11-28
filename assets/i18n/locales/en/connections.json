@@ -98,6 +98,32 @@
     "wallets_one": "{{count}} wallet",
     "wallets_other": "{{count}} wallets"
   },
+  "groups": {
+    "kind": "BTCPay store",
+    "unnamed": "Store {{id}}",
+    "expand": "Show the wallets of {{store}}",
+    "collapse": "Hide the wallets of {{store}}",
+    "method": {
+      "btc_onchain": "On-chain",
+      "liquid_onchain": "Liquid",
+      "lightning": "Lightning",
+      "lnurl": "LNURL",
+      "bark": "Ark"
+    },
+    "role": {
+      "wallet_source": "Imported from BTCPay",
+      "payment_ledger": "Payment ledger"
+    },
+    "roleHelp": {
+      "wallet_source": "Kassiber imports this wallet's history from BTCPay.",
+      "payment_ledger": "Books BTCPay's settled payments and payouts only. Money moved out another way stays in this balance."
+    },
+    "shared_one": "Also in {{count}} other store",
+    "shared_other": "Also in {{count}} other stores",
+    "recordsOnly": "{{methods}}: invoice records only",
+    "recordsOnlyHelp": "No wallet in this store books these payments. Add the node or wallet they settle in.",
+    "other": "Other wallets"
+  },
   "detail": {
     "notFound": "No connection found for {{id}}.",
     "backToWallets": "Back to wallets",

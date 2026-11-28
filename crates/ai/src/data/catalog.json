@@ -8472,6 +8472,21 @@
    "summary_template": "Preview point-in-time wealth statement",
    "egresses": false,
    "reversible": false
+  },
+  {
+   "name": "ui.sources.groups",
+   "wire_name": "ui_sources_groups",
+   "description": "Read which wallets each BTCPay store pays into, grouped per store: the store's name (when setup recorded it) and server, each member wallet with its role (mapped: the user's own wallet with its own sync; wallet_source: history imported from BTCPay; payment_ledger: BTCPay's settled payments and payouts, which cannot see funds leave), the payment methods (id, rail, settlement) that pay into it, store_count when stores share a wallet, and records_only methods kept as invoice records with no wallet booking them. A group is display structure: it never grants ownership, moves a balance, or decides a tax fact. Local read; never syncs.",
+   "parameters": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+   },
+   "kind_class": "read_only",
+   "daemon_kind": "ui.sources.groups",
+   "summary_template": "Read BTCPay store groups",
+   "egresses": false,
+   "reversible": false
   }
  ],
  "aliases": {
